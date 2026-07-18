@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, Languages, Lightbulb, Loader2, Mic, RotateCcw, Send, Square, Volume2 } from "lucide-react";
 import { toast } from "sonner";
 import confetti from "canvas-confetti";
@@ -14,6 +14,7 @@ import { useDayCompletions } from "@/lib/progress";
 import { speakFr } from "@/lib/speak";
 import { blobToBase64, useRecorder } from "@/lib/audio";
 import { transcribeStage } from "@/lib/defi.functions";
+import { getCompletedDays } from "@/lib/week.functions";
 import { TUTOR_DAY_TOPICS, TUTOR_SCENARIOS } from "@/lib/tutorContext";
 import {
   getTutorState,
@@ -49,8 +50,9 @@ function openerBubble(dayId: number): Bubble {
 }
 
 function ConversationPage() {
-  const { loading: authLoading, user } = useAuth();
+  const { loading: authLoading, user, isAdmin } = useAuth();
   const { days } = useDayCompletions();
+  const [defiDays, setDefiDays] = useState<number[]>([]);
   const [dayId, setDayId] = useState<number | null>(null);
   const [bubbles, setBubbles] = useState<Bubble[] | null>(null);
   const [input, setInput] = useState("");
@@ -66,11 +68,35 @@ function ConversationPage() {
   const recorder = useRecorder();
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Default day: one past the latest completed day (capped at 10).
-  const suggestedDay = Math.min(10, (days.length ? Math.max(...days) : 0) + 1);
-  const activeDay = dayId ?? suggestedDay;
+  // Scenes unlock progressively: day N opens once day N-1 is finished
+  // (day marked complete OR its défi submitted). Mirrors the lesson locks.
+  const doneDays = useMemo(() => new Set([...days, ...defiDays]), [days, defiDays]);
+  const isDayUnlocked = (d: number) => isAdmin || d <= 1 || doneDays.has(d - 1);
+  // Default to the furthest scene the student has actually reached.
+  const furthestDay = useMemo(() => {
+    let d = 1;
+    while (d < 10 && doneDays.has(d)) d += 1;
+    return d;
+  }, [doneDays]);
+
+  const activeDay = dayId ?? furthestDay;
   const scenario = TUTOR_SCENARIOS[activeDay];
   const shownBubbles = bubbles ?? [openerBubble(activeDay)];
+
+  useEffect(() => {
+    if (!user) return;
+    let alive = true;
+    getCompletedDays()
+      .then((d) => {
+        if (alive) setDefiDays(d);
+      })
+      .catch(() => {
+        /* fall back to day_completions only */
+      });
+    return () => {
+      alive = false;
+    };
+  }, [user]);
 
   useEffect(() => {
     if (authLoading || !user) return;
@@ -370,12 +396,20 @@ function ConversationPage() {
                 onChange={(e) => void handleReset(Number(e.target.value))}
                 className="mt-2 w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-navy"
               >
-                {Array.from({ length: 10 }, (_, i) => i + 1).map((d) => (
-                  <option key={d} value={d}>
-                    Día {d} — {TUTOR_DAY_TOPICS[d]}
-                  </option>
-                ))}
+                {Array.from({ length: 10 }, (_, i) => i + 1).map((d) => {
+                  const locked = !isDayUnlocked(d);
+                  return (
+                    <option key={d} value={d} disabled={locked}>
+                      {locked ? "🔒 " : ""}Día {d} — {TUTOR_DAY_TOPICS[d]}
+                    </option>
+                  );
+                })}
               </select>
+              {activeDay < 10 && !isDayUnlocked(activeDay + 1) && (
+                <p className="mt-2 text-[11px] text-navy/55">
+                  🔒 Termina el Día {activeDay} para desbloquear la siguiente escena.
+                </p>
+              )}
               <p className="mt-3 text-xs text-navy/75">
                 🎭 Lib es <span className="font-semibold">{scenario.role.split(";")[0]}</span>.
               </p>

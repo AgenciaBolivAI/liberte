@@ -22,6 +22,37 @@ function todayKey(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+// Scenes follow the same progressive unlock as the lessons: day N opens once
+// day N-1 is finished (défi submitted or day marked complete). Enforced here
+// too, not just in the picker, so the server fn can't be called for a locked
+// day. Admins bypass.
+async function assertDayUnlocked(context: Ctx, dayId: number): Promise<void> {
+  if (dayId <= 1) return;
+  const { data: isAdmin } = await context.supabase.rpc("has_role", {
+    _user_id: context.userId,
+    _role: "admin",
+  });
+  if (isAdmin) return;
+  const prev = dayId - 1;
+  const [completions, defis] = await Promise.all([
+    context.supabase
+      .from("day_completions")
+      .select("day_id")
+      .eq("user_id", context.userId)
+      .eq("day_id", prev)
+      .maybeSingle(),
+    context.supabase
+      .from("defi_results")
+      .select("day_id")
+      .eq("user_id", context.userId)
+      .eq("day_id", prev)
+      .maybeSingle(),
+  ]);
+  if (!completions.data && !defis.data) {
+    throw new Error(`Termina el Día ${prev} para desbloquear esta escena. 🔒`);
+  }
+}
+
 // The paid-AI gate: unapproved accounts can't spend tokens. Fails open if the
 // approval migration hasn't been applied yet (column missing → query error).
 async function requireApprovedStudent(context: Ctx): Promise<void> {
@@ -144,6 +175,7 @@ export const sendTutorMessage = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const c = context as unknown as Ctx;
     await requireApprovedStudent(c);
+    await assertDayUnlocked(c, data.dayId);
 
     // Daily cap, increment-first so parallel requests can't sneak past it.
     const today = todayKey();
