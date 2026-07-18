@@ -76,8 +76,14 @@ export function getWeeks(
     }
   }
 
-  // Mark the single "current" week = highest-index unlocked, non-completed.
-  const current = [...weeks].reverse().find((w) => w.status === "active");
+  // The "current" week is the FIRST unlocked week the student hasn't finished
+  // — i.e. where they should be working now. Taking the highest-index one
+  // instead pointed at week 24 for anyone with more weeks unlocked than
+  // completed (a student who fell behind, or a coach/admin with everything
+  // unlocked), showing "Mois 6 · EN COURS" to someone on week 1.
+  const current =
+    weeks.find((w) => w.status === "active") ??
+    [...weeks].reverse().find((w) => w.status === "completed");
   if (current) current.isCurrent = true;
 
   const vacations: RestWeek[] = [];

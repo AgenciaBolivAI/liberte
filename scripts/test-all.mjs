@@ -99,6 +99,50 @@ eq("furthest day, fresh student", mod.furthestUnlockedDay(S()), 1);
 eq("furthest day, days 1-4 done", mod.furthestUnlockedDay(S(1, 2, 3, 4)), 5);
 eq("furthest day caps at 10", mod.furthestUnlockedDay(S(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)), 10);
 
+/* ---------------- program / current week ---------------- */
+g("2b. Program weeks & 'current week'");
+{
+  const progSrc = ts.transpileModule(readFileSync("src/data/program.ts", "utf8"), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  const pm = {};
+  new Function("exports", "module", progSrc)(pm, { exports: pm });
+  const DAY = 86_400_000;
+  const enrolled = (daysAgo) => new Date(Date.now() - daysAgo * DAY).toISOString();
+  const currentOf = (r) => r.weeks.find((w) => w.isCurrent);
+
+  // Brand-new student: only week 1 open, and it is the current one.
+  let r = pm.getWeeks(enrolled(0), [], []);
+  eq("new student's current week is 1", currentOf(r)?.globalIndex, 1);
+  eq("new student is in month 1", currentOf(r)?.monthIndex, 1);
+  ok("week 24 locked for a new student", r.weeks[23].status === "locked-time");
+
+  // THE BUG: every week unlocked (coach/admin or long enrolment) but nothing
+  // completed used to report week 24 ("Mois 6 · JE SUIS LIBRE") as current.
+  const allWeeks = Array.from({ length: 24 }, (_, i) => i + 1);
+  r = pm.getWeeks(enrolled(0), allWeeks, []);
+  eq("all-unlocked + none done => current is week 1, NOT 24", currentOf(r)?.globalIndex, 1);
+  eq("...and shows month 1", currentOf(r)?.monthIndex, 1);
+
+  // Student who fell behind: enrolled 6 months ago, only week 1 finished.
+  r = pm.getWeeks(enrolled(200), [], [1]);
+  eq("behind student resumes at week 2", currentOf(r)?.globalIndex, 2);
+
+  // Steady progress: weeks 1-3 done => current is 4.
+  r = pm.getWeeks(enrolled(30), [], [1, 2, 3]);
+  eq("on-track student's current week is 4", currentOf(r)?.globalIndex, 4);
+
+  // Everything finished => still highlights something (last completed).
+  r = pm.getWeeks(enrolled(300), allWeeks, allWeeks);
+  ok("fully finished course still marks a current week", Boolean(currentOf(r)));
+  eq("exactly one week is ever current", r.weeks.filter((w) => w.isCurrent).length, 1);
+
+  // Unlock cadence sanity.
+  r = pm.getWeeks(enrolled(0), [], []);
+  eq("week 2 unlocks on day 7", r.weeks[1].unlockDay, 7);
+  eq("week 5 (month 2) unlocks on day 35", r.weeks[4].unlockDay, 35);
+}
+
 /* ---------------- schema ---------------- */
 g("3. Database schema");
 const required = [

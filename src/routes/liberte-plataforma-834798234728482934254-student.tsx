@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 import { Lock, Palmtree, Check, Sparkles, ArrowRight, Star } from "lucide-react";
 import { TopNav } from "@/components/TopNav";
 import { getWeeks } from "@/data/program";
+import { useAdminPreview } from "@/lib/admin-preview";
+import { AdminPreviewBanner } from "@/components/AdminPreviewBanner";
 import { AuthPage } from "@/components/AuthPage";
 import eiffelBg from "@/assets/paris-eiffel-bg.jpg";
 import mois1 from "@/assets/mois1-jose.png.asset.json";
@@ -34,7 +36,8 @@ export const Route = createFileRoute("/liberte-plataforma-834798234728482934254-
 });
 
 function Home() {
-  const { loading, user, fullName, isAdmin } = useAuth();
+  const { loading, user, fullName } = useAuth();
+  const { bypassLocks } = useAdminPreview();
   const [overrides, setOverrides] = useState<number[]>([]);
   const { stars: totalStars } = useStars();
   const { days: completedDayIds, weeksCompleted, percent: daysPercent } = useDayCompletions();
@@ -47,13 +50,14 @@ function Home() {
       .eq("user_id", user.id)
       .then(({ data }) => {
         const fromDb = (data ?? []).map((r) => r.week_number);
-        // Admins: unlock all 24 weeks. Others: keep DB overrides + preview Semana 2.
-        const extras = isAdmin
+        // Teacher mode unlocks all 24 weeks for content review. In "Ver como
+        // alumno" the dashboard must behave exactly like a student's.
+        const extras = bypassLocks
           ? Array.from({ length: TOTAL_WEEKS }, (_, i) => i + 1)
           : [2];
         setOverrides(Array.from(new Set([...fromDb, ...extras])));
       });
-  }, [user, isAdmin]);
+  }, [user, bypassLocks]);
 
   if (loading) {
     return (
@@ -88,6 +92,7 @@ function Home() {
 
 
       <main className="mx-auto max-w-7xl px-4 pb-24 pt-8 sm:px-6 sm:pt-12">
+        <AdminPreviewBanner />
         {/* Greeting with mascot */}
         <div className="mb-6 flex items-center gap-4 text-white sm:mb-8 sm:gap-8">
           <img
