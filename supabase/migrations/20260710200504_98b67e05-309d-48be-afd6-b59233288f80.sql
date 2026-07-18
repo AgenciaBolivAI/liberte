@@ -1,0 +1,1 @@
+ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS nationality TEXT; ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS phone TEXT;

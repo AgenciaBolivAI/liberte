@@ -1,0 +1,177 @@
+@import "tailwindcss" source(none);
+@source "../src";
+@import "tw-animate-css";
+
+@import "@fontsource/plus-jakarta-sans/400.css";
+@import "@fontsource/plus-jakarta-sans/600.css";
+@import "@fontsource/plus-jakarta-sans/700.css";
+@import "@fontsource/plus-jakarta-sans/800.css";
+@import "@fontsource/dm-sans/400.css";
+@import "@fontsource/dm-sans/500.css";
+@import "@fontsource/dm-sans/600.css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* Liberté Instituto de Francés — Design System
+ * Brand palette (HEX → OKLCH):
+ *   NAVY #3D5589, BLUE #4BB1EC, SKY #9BCBEF, ICE #EDF8FC, RED #C44536
+ */
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 12px);
+
+  --font-display: "Plus Jakarta Sans", system-ui, sans-serif;
+  --font-sans: "DM Sans", system-ui, sans-serif;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-navy: var(--navy);
+  --color-navy-soft: var(--navy-soft);
+  --color-blue: var(--blue);
+  --color-blue-deep: var(--blue-deep);
+  --color-sky: var(--sky);
+  --color-ice: var(--ice);
+  --color-red: var(--red);
+  --color-gold: var(--gold);
+  --color-success: var(--success);
+
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+:root {
+  --radius: 1rem;
+
+  /* Brand */
+  --navy: oklch(0.42 0.075 265);          /* #3D5589 */
+  --navy-soft: oklch(0.52 0.065 265);
+  --blue: oklch(0.72 0.145 232);          /* #4BB1EC */
+  --blue-deep: oklch(0.62 0.16 240);
+  --sky: oklch(0.84 0.075 232);           /* #9BCBEF */
+  --ice: oklch(0.975 0.012 232);          /* #EDF8FC */
+  --red: oklch(0.585 0.165 28);           /* #C44536 */
+  --gold: oklch(0.82 0.13 85);
+  --success: oklch(0.7 0.15 150);
+
+  /* Semantic */
+  --background: oklch(0.985 0.008 232);
+  --foreground: var(--navy);
+  --card: oklch(1 0 0);
+  --card-foreground: var(--navy);
+  --popover: oklch(1 0 0);
+  --popover-foreground: var(--navy);
+  --primary: var(--blue);
+  --primary-foreground: oklch(1 0 0);
+  --secondary: var(--ice);
+  --secondary-foreground: var(--navy);
+  --muted: oklch(0.95 0.012 232);
+  --muted-foreground: oklch(0.5 0.04 252);
+  --accent: var(--sky);
+  --accent-foreground: var(--navy);
+  --destructive: var(--red);
+  --destructive-foreground: oklch(1 0 0);
+  --border: oklch(0.9 0.025 232);
+  --input: oklch(0.92 0.02 232);
+  --ring: var(--blue);
+
+  /* Sidebar (navy in our brand) */
+  --sidebar: var(--navy);
+  --sidebar-foreground: oklch(0.97 0.012 232);
+  --sidebar-primary: var(--blue);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent: oklch(0.36 0.07 265);
+  --sidebar-accent-foreground: oklch(0.97 0.012 232);
+  --sidebar-border: oklch(0.34 0.06 265);
+  --sidebar-ring: var(--blue);
+
+  /* Gradients & shadows */
+  --gradient-navy: linear-gradient(135deg, oklch(0.38 0.08 265) 0%, oklch(0.5 0.085 252) 100%);
+  --gradient-blue: linear-gradient(135deg, var(--blue) 0%, var(--blue-deep) 100%);
+  --overlay-navy: linear-gradient(180deg, oklch(0.42 0.075 265 / 0.78) 0%, oklch(0.42 0.075 265 / 0.62) 100%);
+  --shadow-card: 0 8px 30px -12px oklch(0.42 0.075 265 / 0.25);
+  --shadow-soft: 0 4px 14px -4px oklch(0.42 0.075 265 / 0.15);
+  --shadow-glow: 0 0 0 4px oklch(0.72 0.145 232 / 0.18);
+}
+
+.dark {
+  --background: oklch(0.18 0.04 265);
+  --foreground: oklch(0.97 0.012 232);
+  --card: oklch(0.24 0.05 265);
+  --card-foreground: oklch(0.97 0.012 232);
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+  html, body {
+    font-family: var(--font-sans);
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    -webkit-font-smoothing: antialiased;
+  }
+  h1, h2, h3, h4, h5 {
+    font-family: var(--font-display);
+    letter-spacing: -0.01em;
+  }
+  /* Tailwind v4's preflight resets buttons to cursor:default — restore the
+     hand cursor on every interactive element so clickability is obvious. */
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  select:not(:disabled),
+  summary,
+  label[for] {
+    cursor: pointer;
+  }
+}
+
+@utility bg-overlay-navy {
+  background-image: var(--overlay-navy);
+}
+@utility bg-gradient-navy {
+  background-image: var(--gradient-navy);
+}
+@utility bg-gradient-blue {
+  background-image: var(--gradient-blue);
+}
+@utility shadow-card {
+  box-shadow: var(--shadow-card);
+}
+@utility shadow-soft {
+  box-shadow: var(--shadow-soft);
+}
+@utility shadow-glow {
+  box-shadow: var(--shadow-glow);
+}
+@utility font-display {
+  font-family: var(--font-display);
+}

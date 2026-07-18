@@ -1,0 +1,1 @@
+ALTER TABLE public.defi_results ADD CONSTRAINT defi_results_user_day_uk UNIQUE (user_id, day_id);
