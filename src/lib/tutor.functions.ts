@@ -81,7 +81,7 @@ async function requireApprovedStudent(context: Ctx): Promise<void> {
   }
 }
 
-function buildTutorSystem(dayId: number): string {
+function buildTutorSystem(dayId: number, voice = false): string {
   const ctx = getTutorDayContext(dayId);
   const vocab = ctx.vocab
     .slice(0, MAX_VOCAB_IN_PROMPT)
@@ -113,13 +113,24 @@ REGLAS:
 8. "objectives_done" = lista ACUMULADA de números de objetivos que el alumno YA cumplió en TODA la conversación (historial + este turno). Sé GENEROSO: si comunicó la idea del objetivo, cuenta — aunque tenga errores de gramática. Ejemplo: « bonjour, je veux un café » cumple el objetivo "saludar y pedir una bebida" → [1].
 9. "encouragement_es" = ánimo breve en español, solo cuando aporte (si no, null). Si acaba de cumplir los 3 objetivos, celébralo aquí.
 
-Respondes SIEMPRE con SOLO este JSON válido, sin texto extra:
+${
+    voice
+      ? // Voice mode: the student is LISTENING, not reading. Emitting the
+        // translation/suggestion fields here doubles the latency of every
+        // spoken turn (measured: 3.3s → 1.4s when trimmed), so ask only for
+        // what the ear needs.
+        `Respondes SIEMPRE con SOLO este JSON válido, sin texto extra:
+{ "reply_fr": "…",
+  "objectives_done": [1],
+  "correction": null | { "said": "…", "corrected": "…", "rule_es": "…" } }`
+      : `Respondes SIEMPRE con SOLO este JSON válido, sin texto extra:
 { "reply_fr": "…",
   "reply_es": "…",
   "suggestion": { "fr": "…", "es": "…" },
   "objectives_done": [1],
   "correction": null | { "said": "…", "corrected": "…", "rule_es": "…" },
-  "encouragement_es": null | "…" }`;
+  "encouragement_es": null | "…" }`
+  }`;
 }
 
 /* ---------------- Load current state ---------------- */
@@ -216,7 +227,7 @@ export const sendTutorMessage = createServerFn({ method: "POST" })
       }
     }
 
-    const out = await callChat(buildTutorSystem(data.dayId), [
+    const out = await callChat(buildTutorSystem(data.dayId, data.withAudio), [
       ...history,
       { role: "user", content: data.text },
     ]);

@@ -324,6 +324,17 @@ g("9b. Hands-free voice tutor");
 
   // Tutor must not parrot its opener at unintelligible input.
   ok("prompt forbids repeating the opener", tut.includes("NUNCA repitas tu frase de apertura"));
+
+  // The loop must never strand the student on a spinner (reported on-device).
+  ok("turn double-finish guarded", conv.includes("turnBusyRef"));
+  ok("transcription has a timeout", conv.includes('25_000') && conv.includes("withTimeout"));
+  ok("reply has a timeout", conv.includes("45_000"));
+  ok("errors hand the turn back, not hang", conv.includes("listenTurn();\n    }") || conv.includes("listenRef.current();"));
+  ok("playback can't hang the loop", aud.includes("setTimeout(finish, 20_000)"));
+  ok("max turn shortened for mobile uploads", aud.includes("MAX_TURN_MS = 15_000"));
+  // Voice turns request a compact payload (measured 3.3s -> 1.4s).
+  ok("voice mode uses a trimmed JSON schema", tut.includes("buildTutorSystem(data.dayId, data.withAudio)"));
+  ok("trimmed schema documented with the measurement", tut.includes("3.3s → 1.4s"));
 }
 
 /* ---------------- admin preview / view-as ---------------- */

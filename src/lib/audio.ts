@@ -66,8 +66,9 @@ export function playBase64Mp3(b64: string): Promise<void> {
       audio.onerror = done;
       audio.src = url;
       void audio.play().catch(done);
-      // Safety net: never leave the conversation loop hanging on a stuck element.
-      setTimeout(finish, 60_000);
+      // Safety net: never leave the conversation loop hanging on a stuck
+      // element (WebKit can silently refuse without firing error).
+      setTimeout(finish, 20_000);
     } catch {
       finish();
     }
@@ -117,7 +118,10 @@ export function useRecorder() {
       const SILENCE = 0.015; // RMS below this counts as quiet
       const HANG_MS = 1400; // quiet this long => the student has finished
       const MIN_SPEECH_MS = 400; // ignore a stray click at the very start
-      const MAX_TURN_MS = 30_000; // hard stop so a failed VAD can't hang forever
+      // Hard stop so a failed VAD can't hang forever. Kept short: a 30s clip
+      // is a multi-hundred-KB upload on mobile data, which is slow enough to
+      // look like a freeze.
+      const MAX_TURN_MS = 15_000;
       let spokeAt = 0;
       let quietSince = 0;
       const startedAt = performance.now();

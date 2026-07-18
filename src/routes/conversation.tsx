@@ -81,6 +81,8 @@ function ConversationPage() {
   const voiceOnRef = useRef(false);
   voiceOnRef.current = voiceOn;
   const listenRef = useRef<() => void>(() => {});
+  // Guards a turn against being finished twice (VAD + timer + manual tap).
+  const turnBusyRef = useRef(false);
 
   // Scenes unlock progressively: day N opens once day N-1 is finished
   // (day marked complete OR its défi submitted). Mirrors the lesson locks.
@@ -159,9 +161,11 @@ function ConversationPage() {
     if (useVoice) setVoicePhase("thinking");
     setBubbles((b) => [...(b ?? [openerBubble(activeDay)]), { role: "user", content: text }]);
     try {
-      const out = await sendTutorMessage({
-        data: { dayId: activeDay, text, withAudio: useVoice },
-      });
+      const out = await withTimeout(
+        sendTutorMessage({ data: { dayId: activeDay, text, withAudio: useVoice } }),
+        45_000,
+        "La respuesta de Lib",
+      );
       setRemaining(out.remaining);
       setSuggestion(out.suggestion);
       setObjectivesDone(out.objectivesDone);
@@ -192,16 +196,29 @@ function ConversationPage() {
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "No se pudo enviar el mensaje");
       setBubbles((b) => (b ?? []).slice(0, -1));
-      setInput(text);
-      if (voiceOnRef.current) setVoicePhase("off");
+      // In voice mode keep the conversation alive: hand the turn back rather
+      // than dropping the student on a dead spinner.
+      if (voiceOnRef.current) listenRef.current();
+      else setInput(text);
     } finally {
       setSending(false);
     }
   }
 
+  /** Rejects if a step takes too long, so the loop can never hang silently. */
+  function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+    return Promise.race([
+      p,
+      new Promise<T>((_, rej) =>
+        setTimeout(() => rej(new Error(`${label} tardó demasiado. Inténtalo otra vez.`)), ms),
+      ),
+    ]);
+  }
+
   /** One hands-free turn: listen → auto-stop on silence → transcribe → send. */
   async function listenTurn() {
     if (!voiceOnRef.current) return;
+    turnBusyRef.current = false;
     setVoicePhase("listening");
     const ok = await recorder.start({
       onSilence: () => {
@@ -211,29 +228,31 @@ function ConversationPage() {
     if (!ok) {
       toast.error(recorder.error || "No pudimos acceder al micrófono");
       setVoicePhase("off");
+      voiceOnRef.current = false;
     }
   }
   listenRef.current = listenTurn;
 
   async function finishListening() {
+    // The VAD, the max-turn timer and a manual tap can all land here; only the
+    // first one may proceed, otherwise turns overlap and the loop deadlocks.
+    if (turnBusyRef.current) return;
+    turnBusyRef.current = true;
+
     const blob = await recorder.stop();
     if (!voiceOnRef.current) return;
-    if (!blob) {
-      listenTurn(); // nothing captured — keep listening
-      return;
-    }
-    // Nothing audible captured — don't pay for a transcription that would
-    // hallucinate; just listen again.
-    if (!recorder.heardSpeech() || blob.size < 4000) {
-      listenTurn();
+    if (!blob || !recorder.heardSpeech() || blob.size < 4000) {
+      listenTurn(); // nothing audible — don't pay to transcribe noise
       return;
     }
     setVoicePhase("thinking");
     try {
       const b64 = await blobToBase64(blob);
-      const r = await transcribeStage({
-        data: { audioBase64: b64, mimeType: blob.type || "audio/webm" },
-      });
+      const r = await withTimeout(
+        transcribeStage({ data: { audioBase64: b64, mimeType: blob.type || "audio/webm" } }),
+        25_000,
+        "La transcripción",
+      );
       const said = r.text.trim();
       if (!said) {
         listenTurn(); // silence or noise — listen again
@@ -241,8 +260,9 @@ function ConversationPage() {
       }
       await handleSend(said, { voice: true });
     } catch (e) {
+      // Never strand the student on a spinner: report and hand the turn back.
       toast.error(e instanceof Error ? e.message : "No se pudo transcribir el audio");
-      setVoicePhase("off");
+      listenTurn();
     }
   }
 
