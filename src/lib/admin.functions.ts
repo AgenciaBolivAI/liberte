@@ -75,6 +75,65 @@ export const approveStudent = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+/* ---------------- View-as-student (read-only impersonation) ---------------- */
+
+export type StudentSnapshot = {
+  profile: { id: string; full_name: string; email: string | null } | null;
+  dayStates: { day_id: number; done_lessons: string[]; current_lesson: string | null; stars: number }[];
+  completedDays: number[];
+  defiDays: number[];
+  stars: number;
+};
+
+/** Roster for the "view as" picker. */
+export const getStudentRoster = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    await requireAdmin(context as Ctx);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data } = await supabaseAdmin
+      .from("profiles")
+      .select("id, full_name, email")
+      .order("full_name");
+    return (data ?? []) as { id: string; full_name: string; email: string | null }[];
+  });
+
+/** Everything needed to render the app exactly as one student sees it.
+ *  Read-only: the UI never writes while impersonating. */
+export const getStudentSnapshot = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => {
+    const d = input as { userId?: string };
+    if (!d?.userId) throw new Error("userId required");
+    return { userId: String(d.userId) };
+  })
+  .handler(async ({ data, context }): Promise<StudentSnapshot> => {
+    await requireAdmin(context as Ctx);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const [profile, dayStates, completions, defis, stars] = await Promise.all([
+      supabaseAdmin.from("profiles").select("id, full_name, email").eq("id", data.userId).maybeSingle(),
+      supabaseAdmin.from("day_state").select("day_id, done_lessons, current_lesson, stars").eq("user_id", data.userId),
+      supabaseAdmin.from("day_completions").select("day_id").eq("user_id", data.userId),
+      supabaseAdmin.from("defi_results").select("day_id").eq("user_id", data.userId),
+      supabaseAdmin.from("star_awards").select("amount").eq("user_id", data.userId),
+    ]);
+    return {
+      profile: (profile.data ?? null) as StudentSnapshot["profile"],
+      dayStates: ((dayStates.data ?? []) as unknown[]).map((r) => {
+        const row = r as { day_id: number; done_lessons: unknown; current_lesson: string | null; stars: number };
+        return {
+          day_id: Number(row.day_id),
+          done_lessons: Array.isArray(row.done_lessons) ? (row.done_lessons as string[]) : [],
+          current_lesson: row.current_lesson,
+          stars: Number(row.stars ?? 0),
+        };
+      }),
+      completedDays: (completions.data ?? []).map((r) => Number(r.day_id)),
+      defiDays: (defis.data ?? []).map((r) => Number(r.day_id)),
+      stars: (stars.data ?? []).reduce((s, r) => s + Number(r.amount ?? 0), 0),
+    };
+  });
+
 /* ---------------- Live analytics ---------------- */
 
 export type Range = "today" | "7d" | "30d" | "all";
@@ -130,15 +189,31 @@ export const getAdminAnalytics = createServerFn({ method: "POST" })
     const prevSince = windowMs ? now - 2 * windowMs : null;
     const prevSinceIso = prevSince ? new Date(prevSince).toISOString() : null;
 
-    const filtered = <T extends { gte: (col: string, v: string) => T }>(q: T, col: string): T =>
-      prevSinceIso ? q.gte(col, prevSinceIso) : q;
+    // PostgREST caps responses at 1000 rows by default; star_awards and
+    // activity_results outgrow that quickly. Order newest-first and raise the
+    // ceiling so the windows we actually chart stay complete.
+    const MAX_ROWS = 100_000;
+    const filtered = <
+      T extends {
+        gte: (col: string, v: string) => T;
+        order: (col: string, opts: { ascending: boolean }) => T;
+        limit: (n: number) => T;
+      },
+    >(
+      q: T,
+      col: string,
+    ): T => {
+      const scoped = prevSinceIso ? q.gte(col, prevSinceIso) : q;
+      return scoped.order(col, { ascending: false }).limit(MAX_ROWS);
+    };
 
     const [profiles, leads, completions, activities, defis, weeklies, stars, tutor] =
       await Promise.all([
         supabaseAdmin
           .from("profiles")
-          .select("id, full_name, email, created_at, approved_at"),
-        supabaseAdmin.from("leads").select("email, status, created_at"),
+          .select("id, full_name, email, created_at, approved_at")
+          .limit(100_000),
+        supabaseAdmin.from("leads").select("email, status, created_at").limit(100_000),
         filtered(
           supabaseAdmin.from("day_completions").select("user_id, day_id, completed_at"),
           "completed_at",

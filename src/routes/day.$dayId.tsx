@@ -27,6 +27,13 @@ import { LiberteSpeak } from "@/components/LiberteSpeak";
 import { StagedDefi } from "@/components/StagedDefi";
 import { getCompletedDays } from "@/lib/week.functions";
 import { markDayCompleted, useDayCompletions } from "@/lib/progress";
+import {
+  isDayUnlocked as isDayUnlockedRule,
+  isLessonUnlocked as isLessonUnlockedRule,
+} from "@/lib/unlock";
+import { useAdminPreview } from "@/lib/admin-preview";
+import { AdminPreviewBanner } from "@/components/AdminPreviewBanner";
+import { getStudentSnapshot, type StudentSnapshot } from "@/lib/admin.functions";
 import { useAuth } from "@/lib/auth-context";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -381,23 +388,47 @@ function DayPage() {
   const progress = Math.round((completed / order.length) * 100);
 
   const activeWeek = WEEK_OF_DAY[activeDay] ?? 1;
-  const { user, isAdmin } = useAuth();
+  const { user } = useAuth();
+  // Admins bypass locks in teacher mode; "view as" modes behave like a student.
+  const { bypassLocks: isAdmin, viewAsUserId, readOnly } = useAdminPreview();
+  const [snapshot, setSnapshot] = useState<StudentSnapshot | null>(null);
+
+  // While impersonating, load that student's real progress (read-only).
+  useEffect(() => {
+    if (!viewAsUserId) {
+      setSnapshot(null);
+      return;
+    }
+    let alive = true;
+    getStudentSnapshot({ data: { userId: viewAsUserId } })
+      .then((s) => {
+        if (alive) setSnapshot(s);
+      })
+      .catch(() => {
+        if (alive) setSnapshot(null);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [viewAsUserId]);
   const { days: persistedDays, loading: daysLoading, refresh: refreshDays } = useDayCompletions();
 
   // Progressive unlock: a day opens once the previous day is completed
   // (défi sent or day marked done). The first day of the week is always open;
   // the week itself is time-gated on the dashboard. Admins see everything.
   const doneDays = useMemo(
-    () => new Set([...persistedDays, ...completedDays]),
-    [persistedDays, completedDays],
+    () =>
+      snapshot
+        ? new Set([...snapshot.completedDays, ...snapshot.defiDays])
+        : new Set([...persistedDays, ...completedDays]),
+    [snapshot, persistedDays, completedDays],
   );
   const firstDayOfWeek = useMemo(
     () => Math.min(...DAYS_META.filter((d) => d.week === activeWeek).map((d) => d.id)),
     [activeWeek],
   );
   const isDayUnlocked = useCallback(
-    (id: number) =>
-      isAdmin || id === firstDayOfWeek || doneDays.has(id) || doneDays.has(id - 1),
+    (id: number) => isDayUnlockedRule(id, doneDays, { isAdmin, firstDayOfWeek }),
     [isAdmin, firstDayOfWeek, doneDays],
   );
   const DAYS = useMemo(
@@ -410,32 +441,50 @@ function DayPage() {
   );
 
   const currentDayUnlocked = isDayUnlocked(Number(activeDay));
-  const week1Done = completedDays.includes(5) || persistedDays.includes(5);
+  const week1Done = doneDays.has(5);
 
   // Within the day, lessons unlock one at a time as the previous is completed.
   const isLessonUnlocked = useCallback(
-    (idx: number) => isAdmin || idx === 0 || Boolean(done[order[idx - 1]]),
+    (idx: number) => isLessonUnlockedRule(idx, done, order, { isAdmin }),
     [isAdmin, done, order],
   );
 
   useEffect(() => {
+    if (!user?.id) return;
     let alive = true;
     getCompletedDays()
       .then((days) => { if (alive) setCompletedDays(days); })
       .catch(() => { /* ignore */ });
     return () => { alive = false; };
-  }, []);
+  }, [user?.id]);
 
   // Hydrate per-day state (done lessons, current lesson, stars) from DB
   // so that progress survives refresh and syncs across devices.
   const hydratedKeyRef = useRef<string>("");
   useEffect(() => {
-    const key = `${user?.id ?? "anon"}:${activeDay}`;
+    const key = `${viewAsUserId ?? user?.id ?? "anon"}:${activeDay}`;
     hydratedKeyRef.current = "";
     setOpenDay(Number(activeDay));
     setLesson(order[0]);
     setDone({});
     setStars(0);
+    // Impersonating: use the snapshot instead of our own row, and never mark
+    // as hydrated so the autosave effect can't fire for someone else's data.
+    if (viewAsUserId) {
+      if (snapshot) {
+        const st = snapshot.dayStates.find((d) => d.day_id === Number(activeDay));
+        if (st) {
+          const doneMap: Record<string, boolean> = {};
+          st.done_lessons.forEach((k) => { doneMap[k] = true; });
+          setDone(doneMap);
+          setStars(st.stars);
+          if (st.current_lesson && order.includes(st.current_lesson as LessonKey)) {
+            setLesson(st.current_lesson as LessonKey);
+          }
+        }
+      }
+      return;
+    }
     if (!user) {
       hydratedKeyRef.current = key;
       return;
@@ -462,22 +511,27 @@ function DayPage() {
       hydratedKeyRef.current = key;
     })();
     return () => { alive = false; };
-  }, [activeDay, order, user]);
+    // Keyed on user?.id, NOT the user object: onAuthStateChange hands us a new
+    // object on every token refresh, which would otherwise reset the lesson
+    // state and cancel a pending save mid-session.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeDay, order, user?.id, viewAsUserId, snapshot]);
 
   // Autosave: whenever done/stars/lesson changes after hydration, upsert.
   // A pending (debounced) save is flushed on unmount so leaving the page
   // right after clicking "Suivant" can't lose progress.
   const pendingSaveRef = useRef<(() => void) | null>(null);
+  const userId = user?.id;
   useEffect(() => {
-    if (!user) return;
-    const key = `${user.id}:${activeDay}`;
+    if (!userId || readOnly) return; // never write while impersonating
+    const key = `${userId}:${activeDay}`;
     if (hydratedKeyRef.current !== key) return;
     const doneArr = Object.keys(done).filter((k) => done[k]);
     const save = () => {
       pendingSaveRef.current = null;
       void supabase.from("day_state").upsert(
         {
-          user_id: user.id,
+          user_id: userId,
           day_id: Number(activeDay),
           done_lessons: doneArr,
           current_lesson: lesson,
@@ -489,7 +543,7 @@ function DayPage() {
     pendingSaveRef.current = save;
     const t = setTimeout(save, 300);
     return () => clearTimeout(t);
-  }, [done, stars, lesson, user, activeDay]);
+  }, [done, stars, lesson, userId, activeDay, readOnly]);
   useEffect(() => {
     return () => {
       pendingSaveRef.current?.();
@@ -504,6 +558,7 @@ function DayPage() {
 
   const award = (n = 1) => setStars((s) => s + n);
   const complete = (k: LessonKey) => {
+    if (readOnly) return; // impersonating: never alter a student's progress
     setDone((d) => ({ ...d, [k]: true }));
     if (k === "defi") {
       // Refresh unlocked days when a défi is completed
@@ -757,6 +812,7 @@ function DayPage() {
 
         <main className="min-w-0 flex-1 px-4 py-6 sm:px-8 sm:py-10">
           <div className="mx-auto max-w-4xl">
+            <AdminPreviewBanner />
             {plusItem ? (
               <PlusInlineView
                 item={plusItem}
@@ -791,7 +847,7 @@ function DayPage() {
               isLast={lesson === order[order.length - 1]}
             />
             )}
-            {week1Done && activeDay === "5" && (
+            {week1Done && activeDay === "5" && !readOnly && (
               <div className="mt-6 rounded-3xl border-2 border-gold/50 bg-gradient-to-br from-white to-gold/10 p-6 text-center shadow-card">
                 <p className="text-xs font-bold tracking-widest text-gold uppercase">Fin de la Semaine 1</p>
                 <h3 className="mt-1 font-display text-2xl font-extrabold text-navy">🎉 Le défi de la semaine t'attend</h3>
@@ -904,7 +960,8 @@ function LessonView({
   onGoNextDay: () => void;
 }) {
   const meta = lessons.find((l) => l.key === lesson)!;
-  const { isAdmin } = useAuth();
+  // Use the preview-aware flag so "Ver como alumno" actually exercises the gate.
+  const { bypassLocks, readOnly } = useAdminPreview();
 
   // Video gate: every native video in this lesson must be watched to the end
   // before "Suivant" unlocks. Already-completed lessons aren't re-gated.
@@ -923,21 +980,27 @@ function LessonView({
     }),
     [],
   );
-  useEffect(() => {
-    setPendingVideos(new Set());
-  }, [dayId, lesson]);
-
-  const nextLocked = pendingVideos.size > 0 && !isLessonDone && !isAdmin;
+  // NOTE: no reset effect here. React flushes child effects before the
+  // parent's, so a parent-level reset would wipe the registrations the
+  // VideoBlocks just made. Each VideoBlock unregisters itself on unmount
+  // instead, which handles lesson/day changes correctly.
+  const nextLocked = pendingVideos.size > 0 && !isLessonDone && !bypassLocks;
   const advance = () => {
     if (nextLocked) return;
     onComplete();
     if (!isLast) onNext();
   };
 
-  // Fire confetti once the final lesson of the day is completed.
+  // Fire confetti once the final lesson of the day is completed — only on the
+  // transition, not when revisiting a day that was already finished.
   const firedRef = useRef<string | null>(null);
+  const wasDoneAtMount = useRef<Record<string, boolean>>({});
+  const lessonKey = `${dayId}-${lesson}`;
+  if (!(lessonKey in wasDoneAtMount.current)) {
+    wasDoneAtMount.current[lessonKey] = isLessonDone;
+  }
   useEffect(() => {
-    if (isLast && isLessonDone) {
+    if (isLast && isLessonDone && !wasDoneAtMount.current[`${dayId}-${lesson}`]) {
       const key = `${dayId}-${lesson}`;
       if (firedRef.current !== key) {
         firedRef.current = key;
@@ -1015,7 +1078,7 @@ function LessonView({
       </div>
 
       {isLast && isLessonDone && (
-        <DayCompleteBlock dayId={dayId} nextDayId={nextDayId} nextDayLabel={nextDayLabel} onGoNextDay={onGoNextDay} />
+        <DayCompleteBlock dayId={dayId} nextDayId={nextDayId} nextDayLabel={nextDayLabel} onGoNextDay={onGoNextDay} readOnly={readOnly} />
       )}
 
 
@@ -1035,7 +1098,8 @@ function LessonView({
   );
 }
 
-function DayCompleteBlock({ dayId, nextDayId, nextDayLabel, onGoNextDay }: {
+function DayCompleteBlock({ dayId, nextDayId, nextDayLabel, onGoNextDay, readOnly }: {
+  readOnly?: boolean;
   dayId: string;
   nextDayId: string | null;
   nextDayLabel: string | null;
@@ -1048,6 +1112,7 @@ function DayCompleteBlock({ dayId, nextDayId, nextDayLabel, onGoNextDay }: {
   const [saving, setSaving] = useState(false);
 
   async function handleMark() {
+    if (readOnly) return; // impersonating: would write to the admin's own row
     if (!user) { toast.error("Inicia sesión para guardar tu progreso"); return; }
     setSaving(true);
     try {
@@ -1065,7 +1130,11 @@ function DayCompleteBlock({ dayId, nextDayId, nextDayLabel, onGoNextDay }: {
   return (
     <div className="rounded-3xl border-2 border-blue/60 bg-gradient-to-br from-ice to-white p-6 text-center shadow-card">
       <p className="text-xs font-extrabold tracking-widest text-blue uppercase">🎉 Bravo ! Tu as terminé le Jour {dayId}</p>
-      {!alreadyMarked ? (
+      {readOnly ? (
+        <p className="mt-2 font-display text-lg font-extrabold text-navy/70">
+          👁️ Vista de solo lectura
+        </p>
+      ) : !alreadyMarked ? (
         <>
           <h3 className="mt-2 font-display text-xl font-extrabold text-navy sm:text-2xl">
             Marca este día como terminado para sumar tu progreso
@@ -1179,7 +1248,11 @@ function VideoBlock({ src, title }: { src: string; title: string }) {
   const gate = useContext(VideoGateCtx);
 
   useEffect(() => {
-    if (!isYouTube) gate?.register(src);
+    if (isYouTube) return;
+    gate?.register(src);
+    // Unregister when the lesson changes or this video unmounts, so the gate
+    // only ever tracks videos currently on screen.
+    return () => gate?.ended(src);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [src, isYouTube]);
 

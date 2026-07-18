@@ -1,7 +1,7 @@
 // Shared audio helpers for voice input (recording + base64 for the STT
 // server functions). Mirrors the MediaRecorder pattern used in StagedDefi.
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export async function blobToBase64(blob: Blob): Promise<string> {
   const buf = await blob.arrayBuffer();
@@ -20,11 +20,25 @@ export function useRecorder() {
   const recRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const resolveRef = useRef<((b: Blob | null) => void) | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+
+  // Release the mic if the component unmounts mid-recording, otherwise the
+  // browser's recording indicator stays on for the rest of the session.
+  useEffect(() => {
+    return () => {
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    };
+  }, []);
 
   async function start(): Promise<boolean> {
     setError("");
+    // A double-tap before getUserMedia resolves would orphan the first stream.
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
       const rec = new MediaRecorder(stream);
       recRef.current = rec;
       chunksRef.current = [];

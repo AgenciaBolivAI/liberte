@@ -66,10 +66,19 @@ export function useDayCompletions() {
   return { rows, days, weeksCompleted, percent, streak, loading, refresh };
 }
 
+/** Local calendar day (YYYY-MM-DD) — must match the local midnight used below,
+ *  otherwise students east/west of UTC get wrong streaks. */
+function localDayKey(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 function computeStreak(dates: string[]): number {
   if (dates.length === 0) return 0;
   const uniq = Array.from(
-    new Set(dates.map((d) => new Date(d).toISOString().slice(0, 10))),
+    new Set(dates.map((d) => localDayKey(new Date(d)))),
   ).sort();
   let streak = 1;
   let best = 1;

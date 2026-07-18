@@ -9,7 +9,9 @@
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
     "lint": "eslint .",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "test:all": "node scripts/test-all.mjs",
+    "verify": "tsc --noEmit && vite build && node scripts/test-all.mjs"
   },
   "dependencies": {
     "@fontsource/dm-sans": "^5.2.8",

@@ -169,7 +169,7 @@ function TeacherPanel() {
   if (!isAdmin) {
     return (
       <div
-        className="relative min-h-screen bg-cover bg-center bg-fixed"
+        className="relative min-h-screen bg-cover bg-center md:bg-fixed"
         style={{
           backgroundImage: `linear-gradient(180deg, oklch(0.42 0.075 265 / 0.78) 0%, oklch(0.32 0.08 265 / 0.90) 100%), url(${parisBg})`,
         }}
@@ -187,7 +187,7 @@ function TeacherPanel() {
 
   return (
     <div
-      className="relative min-h-screen bg-cover bg-center bg-fixed"
+      className="relative min-h-screen bg-cover bg-center md:bg-fixed"
       style={{
         backgroundImage: `linear-gradient(180deg, oklch(0.42 0.075 265 / 0.78) 0%, oklch(0.32 0.08 265 / 0.90) 100%), url(${parisBg})`,
       }}

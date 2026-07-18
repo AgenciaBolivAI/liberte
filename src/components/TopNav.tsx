@@ -16,13 +16,14 @@ import { toast } from "sonner";
 
 const HOME_PATH = "/liberte-plataforma-834798234728482934254-student";
 
+// `short` is used in the mobile bottom bar, where six full labels overflow.
 const nav = [
-  { to: HOME_PATH, label: "Accueil", icon: Home },
-  { to: "/calendar", label: "Calendrier", icon: Calendar },
-  { to: "/clasesenvivo", label: "En direct", icon: Radio },
-  { to: "/conversation", label: "Tutor IA", icon: MessageCircle },
-  { to: "/progress", label: "Mon progrès", icon: Sparkles },
-  { to: "/profile", label: "Mon profil", icon: User },
+  { to: HOME_PATH, label: "Accueil", short: "Accueil", icon: Home },
+  { to: "/calendar", label: "Calendrier", short: "Agenda", icon: Calendar },
+  { to: "/clasesenvivo", label: "En direct", short: "Direct", icon: Radio },
+  { to: "/conversation", label: "Tutor IA", short: "Tutor", icon: MessageCircle },
+  { to: "/progress", label: "Mon progrès", short: "Progrès", icon: Sparkles },
+  { to: "/profile", label: "Mon profil", short: "Profil", icon: User },
 ];
 
 
@@ -107,20 +108,22 @@ export function TopNav({ stars: starsProp }: { stars?: number } = {}) {
           </DropdownMenu>
         </div>
       </div>
-      {/* Mobile nav */}
-      <nav className="flex items-center justify-around border-t border-white/10 px-2 py-2 md:hidden">
+      {/* Mobile nav — 6 items must fit 360px without horizontal overflow */}
+      <nav className="flex items-stretch border-t border-white/10 px-1 py-1.5 md:hidden">
         {nav.map((n) => {
           const active = path === n.to;
           return (
             <Link
               key={n.to}
               to={n.to}
-              className={`flex flex-col items-center gap-0.5 rounded-lg px-3 py-1 text-[11px] ${
+              className={`flex min-w-0 flex-1 basis-0 flex-col items-center gap-0.5 rounded-lg px-0.5 py-1.5 ${
                 active ? "text-blue" : "text-white/70"
               }`}
             >
-              <n.icon className="h-5 w-5" />
-              {n.label}
+              <n.icon className="h-5 w-5 shrink-0" />
+              <span className="w-full truncate text-center text-[10px] leading-tight">
+                {n.short ?? n.label}
+              </span>
             </Link>
           );
         })}

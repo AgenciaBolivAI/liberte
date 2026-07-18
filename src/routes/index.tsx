@@ -361,13 +361,19 @@ function LeadForm() {
         return;
       }
       const body = (await res.json().catch(() => null)) as { error?: string } | null;
-      if (res.status === 429) {
+      if (res.status === 502) {
+        // Lead WAS saved; only the confirmation email failed.
+        setDone(true);
+      } else if (res.status === 429) {
         setError("Demasiadas solicitudes. Espera un minuto e inténtalo de nuevo.");
       } else if (res.status === 400) {
         setError(body?.error === "Datos inválidos" ? "Revisa tu nombre y tu correo." : (body?.error ?? "Revisa tus datos."));
       } else {
-        // 502 = lead saved but the email failed — still a success for the visitor.
-        setDone(true);
+        // 500 and anything else: the lead was NOT saved — never fake success.
+        setError(
+          body?.error ??
+            "No pudimos guardar tus datos. Inténtalo de nuevo o escríbenos a hola@libertefrances.com.",
+        );
       }
     } catch {
       setError("No pudimos enviar tus datos. Revisa tu conexión e inténtalo de nuevo.");

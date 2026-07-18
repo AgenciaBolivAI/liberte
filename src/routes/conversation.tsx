@@ -15,6 +15,9 @@ import { speakFr } from "@/lib/speak";
 import { blobToBase64, useRecorder } from "@/lib/audio";
 import { transcribeStage } from "@/lib/defi.functions";
 import { getCompletedDays } from "@/lib/week.functions";
+import { furthestUnlockedDay, isSceneUnlocked } from "@/lib/unlock";
+import { useAdminPreview } from "@/lib/admin-preview";
+import { AdminPreviewBanner } from "@/components/AdminPreviewBanner";
 import { TUTOR_DAY_TOPICS, TUTOR_SCENARIOS } from "@/lib/tutorContext";
 import {
   getTutorState,
@@ -50,7 +53,8 @@ function openerBubble(dayId: number): Bubble {
 }
 
 function ConversationPage() {
-  const { loading: authLoading, user, isAdmin } = useAuth();
+  const { loading: authLoading, user } = useAuth();
+  const { bypassLocks: isAdmin } = useAdminPreview();
   const { days } = useDayCompletions();
   const [defiDays, setDefiDays] = useState<number[]>([]);
   const [dayId, setDayId] = useState<number | null>(null);
@@ -71,13 +75,9 @@ function ConversationPage() {
   // Scenes unlock progressively: day N opens once day N-1 is finished
   // (day marked complete OR its défi submitted). Mirrors the lesson locks.
   const doneDays = useMemo(() => new Set([...days, ...defiDays]), [days, defiDays]);
-  const isDayUnlocked = (d: number) => isAdmin || d <= 1 || doneDays.has(d - 1);
+  const isDayUnlocked = (d: number) => isSceneUnlocked(d, doneDays, { isAdmin });
   // Default to the furthest scene the student has actually reached.
-  const furthestDay = useMemo(() => {
-    let d = 1;
-    while (d < 10 && doneDays.has(d)) d += 1;
-    return d;
-  }, [doneDays]);
+  const furthestDay = useMemo(() => furthestUnlockedDay(doneDays), [doneDays]);
 
   const activeDay = dayId ?? furthestDay;
   const scenario = TUTOR_SCENARIOS[activeDay];
@@ -139,6 +139,9 @@ function ConversationPage() {
   async function handleSend(textOverride?: string) {
     const text = (textOverride ?? input).trim();
     if (!text || sending) return;
+    // Pin the scene: `furthestDay` can still change as progress queries resolve,
+    // which would otherwise switch scenes mid-conversation and discard history.
+    if (dayId === null) setDayId(activeDay);
     setInput("");
     setShowSuggestion(false);
     setSending(true);
@@ -225,7 +228,7 @@ function ConversationPage() {
 
   return (
     <div
-      className="relative min-h-screen bg-cover bg-center bg-fixed"
+      className="relative min-h-screen bg-cover bg-center md:bg-fixed"
       style={{
         backgroundImage: `linear-gradient(180deg, oklch(0.42 0.075 265 / 0.82) 0%, oklch(0.32 0.08 265 / 0.92) 100%), url(${parisBg})`,
       }}
@@ -233,6 +236,7 @@ function ConversationPage() {
       <TopNav />
       <Toaster position="top-center" richColors />
       <main className="mx-auto max-w-5xl px-4 py-6 sm:px-6">
+        <AdminPreviewBanner />
         <div className="grid gap-4 md:grid-cols-[1fr_280px]">
           {/* Chat panel */}
           <section className="flex min-h-[70vh] flex-col rounded-3xl border border-white/15 bg-card shadow-card">
@@ -394,7 +398,7 @@ function ConversationPage() {
               <select
                 value={activeDay}
                 onChange={(e) => void handleReset(Number(e.target.value))}
-                className="mt-2 w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-navy"
+                className="mt-2 w-full rounded-xl border border-border bg-white px-3 py-2.5 text-base text-navy sm:text-sm"
               >
                 {Array.from({ length: 10 }, (_, i) => i + 1).map((d) => {
                   const locked = !isDayUnlocked(d);

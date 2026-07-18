@@ -1159,7 +1159,7 @@ function WritingStage(props: {
           onChange={(e) => props.setW1(e.target.value)}
           rows={9}
           placeholder="M: Bonsoir, bienvenue au Petit Marais ! …"
-          className="mt-3 w-full rounded-lg border border-slate-300 p-3 text-sm"
+          className="mt-3 w-full rounded-lg border border-slate-300 p-3 text-base sm:text-sm"
         />
         <details className="mt-2 text-xs text-slate-600">
           <summary className="cursor-pointer font-semibold">Criterios de evaluación</summary>
@@ -1208,7 +1208,7 @@ function WritingStage(props: {
           onChange={(e) => props.setW2(e.target.value)}
           rows={7}
           placeholder="Pour aller à…, je dois d'abord…"
-          className="mt-3 w-full rounded-lg border border-slate-300 p-3 text-sm"
+          className="mt-3 w-full rounded-lg border border-slate-300 p-3 text-base sm:text-sm"
         />
         <details className="mt-2 text-xs text-slate-600">
           <summary className="cursor-pointer font-semibold">Criterios de evaluación</summary>
@@ -1294,7 +1294,7 @@ function RoleplayStage(props: {
   onNext: () => void;
 }) {
   return (
-    <section className="grid gap-6 md:grid-cols-[1fr,260px]">
+    <section className="grid gap-6 md:grid-cols-[1fr_260px]">
       <div className="rounded-2xl bg-white p-4 text-[#111] shadow-lg">
         <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-[#6B2340]">
           Carrefour · Roleplay con Coach IA

@@ -56,7 +56,7 @@ export default function CalendarPage() {
 
   return (
     <div
-      className="relative min-h-screen bg-cover bg-center bg-fixed"
+      className="relative min-h-screen bg-cover bg-center md:bg-fixed"
       style={{
         backgroundImage: `linear-gradient(180deg, oklch(0.42 0.075 265 / 0.78) 0%, oklch(0.32 0.08 265 / 0.90) 100%), url(${parisBg})`,
       }}
@@ -114,8 +114,8 @@ export default function CalendarPage() {
                         <span className="sm:hidden">😴</span>
                       </button>
                     )}
-                    {/* Mobile: dots */}
-                    <div className="flex flex-wrap gap-1 sm:hidden">
+                    {/* Mobile: dots — 10px dot inside a 28px tap target */}
+                    <div className="flex flex-wrap sm:hidden">
                       {dayEvents.map((p) => {
                         const style = KIND_STYLE[p.ev.kind];
                         return (
@@ -123,8 +123,10 @@ export default function CalendarPage() {
                             key={p.ev.id}
                             onClick={() => setOpen(p.ev)}
                             aria-label={`${style.label} ${localTime(p.ev.startUtc)}`}
-                            className={`h-2.5 w-2.5 rounded-full ${style.bg}`}
-                          />
+                            className="grid h-7 w-7 place-items-center"
+                          >
+                            <span className={`block h-2.5 w-2.5 rounded-full ${style.bg}`} />
+                          </button>
                         );
                       })}
                     </div>
@@ -182,7 +184,7 @@ export default function CalendarPage() {
 
       {open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy/60 p-4 backdrop-blur-sm" onClick={() => setOpen(null)}>
-          <div className="w-full max-w-md rounded-3xl bg-card p-6 shadow-card" onClick={(e) => e.stopPropagation()}>
+          <div className="max-h-[85dvh] w-full max-w-md overflow-y-auto rounded-3xl bg-card p-6 shadow-card" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-start justify-between">
               <div>
                 <p className="text-xs font-bold tracking-widest uppercase" style={{ color: KIND_STYLE[open.kind].dot }}>

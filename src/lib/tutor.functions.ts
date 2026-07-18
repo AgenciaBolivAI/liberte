@@ -13,7 +13,10 @@ export type TutorCorrection = { said: string; corrected: string; rule_es: string
 type Ctx = {
   supabase: {
     from: (table: string) => any; // eslint-disable-line @typescript-eslint/no-explicit-any
-    rpc: (fn: string, args: Record<string, unknown>) => PromiseLike<{ data: unknown }>;
+    rpc: (
+      fn: string,
+      args: Record<string, unknown>,
+    ) => PromiseLike<{ data: unknown; error?: { message: string } | null }>;
   };
   userId: string;
 };
@@ -177,31 +180,23 @@ export const sendTutorMessage = createServerFn({ method: "POST" })
     await requireApprovedStudent(c);
     await assertDayUnlocked(c, data.dayId);
 
-    // Daily cap, increment-first so parallel requests can't sneak past it.
-    const today = todayKey();
-    const { data: usage } = await c.supabase
-      .from("tutor_usage")
-      .select("message_count")
-      .eq("user_id", c.userId)
-      .eq("usage_date", today)
-      .maybeSingle();
-    const used = Number(usage?.message_count ?? 0);
-    if (used >= TUTOR_DAILY_LIMIT) {
-      throw new Error(
-        "Has llegado a tu límite de mensajes de hoy. ¡Vuelve mañana para seguir practicando! 🌙",
-      );
-    }
-    const { error: usageError } = await c.supabase
-      .from("tutor_usage")
-      .upsert(
-        { user_id: c.userId, usage_date: today, message_count: used + 1 },
-        { onConflict: "user_id,usage_date" },
-      );
+    // Daily cap: a single atomic statement checks the limit AND increments, so
+    // parallel requests can't both slip through on the same count.
+    const { data: consumed, error: usageError } = await c.supabase.rpc(
+      "tutor_consume_message",
+      { _limit: TUTOR_DAILY_LIMIT },
+    );
     if (usageError) {
       throw new Error(
         "El tutor aún no está disponible: falta aplicar la migración de base de datos.",
       );
     }
+    if (consumed === null || consumed === undefined) {
+      throw new Error(
+        "Has llegado a tu límite de mensajes de hoy. ¡Vuelve mañana para seguir practicando! 🌙",
+      );
+    }
+    const used = Number(consumed) - 1;
 
     // History (reset when the student switches day).
     let history: TutorMessage[] = [];

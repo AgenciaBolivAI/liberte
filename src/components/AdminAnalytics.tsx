@@ -84,16 +84,22 @@ export function AdminAnalytics() {
   const rangeRef = useRef(range);
   rangeRef.current = range;
 
+  // Guards against a slow in-flight request resolving after the user switched
+  // range and overwriting the newer data.
+  const reqIdRef = useRef(0);
   const load = useCallback(async (r: Range) => {
+    const myReq = ++reqIdRef.current;
     try {
       const res = await getAdminAnalytics({ data: { range: r } });
+      if (myReq !== reqIdRef.current || r !== rangeRef.current) return; // stale
       setData(res);
       setError("");
       setUpdatedAt(new Date());
     } catch (e) {
+      if (myReq !== reqIdRef.current) return;
       setError(e instanceof Error ? e.message : "No se pudo cargar la analítica");
     } finally {
-      setLoading(false);
+      if (myReq === reqIdRef.current) setLoading(false);
     }
   }, []);
 
