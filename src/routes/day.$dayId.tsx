@@ -1246,7 +1246,14 @@ const VideoGateCtx = createContext<{
 function VideoBlock({ src, title }: { src: string; title: string }) {
   const isYouTube = src.includes("youtube.com/embed") || src.includes("youtube.com/watch") || src.includes("youtu.be");
   const gate = useContext(VideoGateCtx);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  // enablejsapi lets us subscribe to the player's state over postMessage,
+  // which is the only way to know an embedded video finished.
+  const ytSrc = isYouTube
+    ? `${src}${src.includes("?") ? "&" : "?"}enablejsapi=1&rel=0`
+    : src;
 
+  // Native <video>: gate on the real `ended` event.
   useEffect(() => {
     if (isYouTube) return;
     gate?.register(src);
@@ -1256,13 +1263,65 @@ function VideoBlock({ src, title }: { src: string; title: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [src, isYouTube]);
 
+  // YouTube embed: subscribe to onStateChange and release on ENDED (0).
+  useEffect(() => {
+    if (!isYouTube) return;
+    gate?.register(src);
+    let released = false;
+    let heardFromPlayer = false;
+    const release = () => {
+      if (released) return;
+      released = true;
+      gate?.ended(src);
+    };
+
+    const post = (msg: Record<string, unknown>) => {
+      iframeRef.current?.contentWindow?.postMessage(JSON.stringify(msg), "*");
+    };
+    const onMessage = (e: MessageEvent) => {
+      if (!String(e.origin).includes("youtube.com")) return;
+      if (iframeRef.current && e.source !== iframeRef.current.contentWindow) return;
+      heardFromPlayer = true;
+      try {
+        const d = typeof e.data === "string" ? JSON.parse(e.data) : e.data;
+        // 0 = ENDED
+        if (d?.event === "onStateChange" && Number(d.info) === 0) release();
+      } catch {
+        /* non-JSON player chatter */
+      }
+    };
+    window.addEventListener("message", onMessage);
+
+    // Keep offering the handshake until the iframe is ready to accept it.
+    const handshake = setInterval(() => {
+      if (released) return;
+      post({ event: "listening", id: 1 });
+      post({ event: "command", func: "addEventListener", args: ["onStateChange"] });
+    }, 600);
+
+    // If the player never talks back (blocked embed, extension, offline),
+    // unlock rather than trapping the student behind a gate we can't observe.
+    const failOpen = setTimeout(() => {
+      if (!heardFromPlayer) release();
+    }, 6000);
+
+    return () => {
+      window.removeEventListener("message", onMessage);
+      clearInterval(handshake);
+      clearTimeout(failOpen);
+      release();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [src, isYouTube]);
+
   return (
     <div className="overflow-hidden rounded-2xl border border-border bg-navy shadow-card">
       <div className="relative aspect-video w-full">
         {isYouTube ? (
           <iframe
-            key={src}
-            src={src}
+            key={ytSrc}
+            ref={iframeRef}
+            src={ytSrc}
             title={title}
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
             allowFullScreen

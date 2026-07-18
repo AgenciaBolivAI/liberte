@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, Languages, Lightbulb, Loader2, Mic, RotateCcw, Send, Square, Volume2 } from "lucide-react";
+import { Check, Languages, Lightbulb, Loader2, Mic, Phone, PhoneOff, RotateCcw, Send, Square, Volume2 } from "lucide-react";
 import { toast } from "sonner";
 import confetti from "canvas-confetti";
 import { TopNav } from "@/components/TopNav";
@@ -12,7 +12,7 @@ import parisBg from "@/assets/paris-map-bg.jpg";
 import { useAuth } from "@/lib/auth-context";
 import { useDayCompletions } from "@/lib/progress";
 import { speakFr } from "@/lib/speak";
-import { blobToBase64, useRecorder } from "@/lib/audio";
+import { blobToBase64, playBase64Mp3, useRecorder } from "@/lib/audio";
 import { transcribeStage } from "@/lib/defi.functions";
 import { getCompletedDays } from "@/lib/week.functions";
 import { furthestUnlockedDay, isSceneUnlocked } from "@/lib/unlock";
@@ -23,6 +23,7 @@ import {
   getTutorState,
   resetTutorConversation,
   sendTutorMessage,
+  speakTutorLine,
   TUTOR_DAILY_LIMIT,
   type TutorCorrection,
   type TutorMessage,
@@ -71,6 +72,15 @@ function ConversationPage() {
   const celebratedRef = useRef(false);
   const recorder = useRecorder();
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // ---- Hands-free voice mode ----
+  // idle → listening → thinking → speaking → listening …
+  type VoicePhase = "off" | "listening" | "thinking" | "speaking";
+  const [voicePhase, setVoicePhase] = useState<VoicePhase>("off");
+  const voiceOn = voicePhase !== "off";
+  const voiceOnRef = useRef(false);
+  voiceOnRef.current = voiceOn;
+  const listenRef = useRef<() => void>(() => {});
 
   // Scenes unlock progressively: day N opens once day N-1 is finished
   // (day marked complete OR its défi submitted). Mirrors the lesson locks.
@@ -136,7 +146,7 @@ function ConversationPage() {
     });
   }
 
-  async function handleSend(textOverride?: string) {
+  async function handleSend(textOverride?: string, opts?: { voice?: boolean }) {
     const text = (textOverride ?? input).trim();
     if (!text || sending) return;
     // Pin the scene: `furthestDay` can still change as progress queries resolve,
@@ -145,9 +155,13 @@ function ConversationPage() {
     setInput("");
     setShowSuggestion(false);
     setSending(true);
+    const useVoice = opts?.voice ?? false;
+    if (useVoice) setVoicePhase("thinking");
     setBubbles((b) => [...(b ?? [openerBubble(activeDay)]), { role: "user", content: text }]);
     try {
-      const out = await sendTutorMessage({ data: { dayId: activeDay, text } });
+      const out = await sendTutorMessage({
+        data: { dayId: activeDay, text, withAudio: useVoice },
+      });
       setRemaining(out.remaining);
       setSuggestion(out.suggestion);
       setObjectivesDone(out.objectivesDone);
@@ -167,13 +181,82 @@ function ConversationPage() {
         });
         return next;
       });
+
+      if (useVoice && voiceOnRef.current) {
+        setVoicePhase("speaking");
+        if (out.audio) await playBase64Mp3(out.audio);
+        else speakFr(out.reply); // TTS failed — fall back to the browser voice
+        // Loop: hand the turn straight back to the student.
+        if (voiceOnRef.current) listenRef.current();
+      }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "No se pudo enviar el mensaje");
       setBubbles((b) => (b ?? []).slice(0, -1));
       setInput(text);
+      if (voiceOnRef.current) setVoicePhase("off");
     } finally {
       setSending(false);
     }
+  }
+
+  /** One hands-free turn: listen → auto-stop on silence → transcribe → send. */
+  async function listenTurn() {
+    if (!voiceOnRef.current) return;
+    setVoicePhase("listening");
+    const ok = await recorder.start({
+      onSilence: () => {
+        void finishListening();
+      },
+    });
+    if (!ok) {
+      toast.error(recorder.error || "No pudimos acceder al micrófono");
+      setVoicePhase("off");
+    }
+  }
+  listenRef.current = listenTurn;
+
+  async function finishListening() {
+    const blob = await recorder.stop();
+    if (!voiceOnRef.current) return;
+    if (!blob) {
+      listenTurn(); // nothing captured — keep listening
+      return;
+    }
+    setVoicePhase("thinking");
+    try {
+      const b64 = await blobToBase64(blob);
+      const r = await transcribeStage({
+        data: { audioBase64: b64, mimeType: blob.type || "audio/webm" },
+      });
+      const said = r.text.trim();
+      if (!said) {
+        listenTurn(); // silence or noise — listen again
+        return;
+      }
+      await handleSend(said, { voice: true });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "No se pudo transcribir el audio");
+      setVoicePhase("off");
+    }
+  }
+
+  async function toggleVoiceMode() {
+    if (voiceOn) {
+      voiceOnRef.current = false;
+      setVoicePhase("off");
+      if (recorder.recording) await recorder.stop();
+      return;
+    }
+    voiceOnRef.current = true;
+    // Greet with the scene opener so the student hears French immediately.
+    setVoicePhase("speaking");
+    try {
+      const { audio } = await speakTutorLine({ data: { text: scenario.opener_fr } });
+      if (voiceOnRef.current) await playBase64Mp3(audio);
+    } catch {
+      /* skip the spoken opener if TTS is unavailable */
+    }
+    if (voiceOnRef.current) listenTurn();
   }
 
   async function handleMic() {
@@ -322,8 +405,52 @@ function ConversationPage() {
                 <p className="rounded-xl bg-ice p-3 text-center text-sm text-navy">
                   Has usado tus {TUTOR_DAILY_LIMIT} mensajes de hoy. ¡Vuelve mañana! 🌙
                 </p>
+              ) : voiceOn ? (
+                <div className="flex flex-col items-center gap-3 py-2">
+                  <div
+                    className={`relative grid h-20 w-20 place-items-center rounded-full text-white transition ${
+                      voicePhase === "listening"
+                        ? "bg-red"
+                        : voicePhase === "speaking"
+                          ? "bg-blue"
+                          : "bg-navy"
+                    }`}
+                  >
+                    {voicePhase === "listening" && (
+                      <span className="absolute inset-0 animate-ping rounded-full bg-red/40" />
+                    )}
+                    {voicePhase === "thinking" ? (
+                      <Loader2 className="h-8 w-8 animate-spin" />
+                    ) : voicePhase === "speaking" ? (
+                      <Volume2 className="h-8 w-8" />
+                    ) : (
+                      <Mic className="h-8 w-8" />
+                    )}
+                  </div>
+                  <p className="text-center text-sm font-semibold text-navy">
+                    {voicePhase === "listening" && "🎙️ Habla en francés… te escucho"}
+                    {voicePhase === "thinking" && "Un instant…"}
+                    {voicePhase === "speaking" && "🔊 Lib está hablando"}
+                  </p>
+                  <p className="text-center text-xs text-muted-foreground">
+                    Cuando dejes de hablar, te respondo automáticamente.
+                  </p>
+                  <Button
+                    onClick={() => void toggleVoiceMode()}
+                    variant="outline"
+                    className="rounded-full border-navy/20 text-navy"
+                  >
+                    <PhoneOff className="mr-2 h-4 w-4" /> Terminar conversación
+                  </Button>
+                </div>
               ) : (
                 <>
+                  <Button
+                    onClick={() => void toggleVoiceMode()}
+                    className="mb-2 h-12 w-full rounded-full bg-gradient-blue font-display text-base font-extrabold text-white shadow-card"
+                  >
+                    <Phone className="mr-2 h-5 w-5" /> Conversar en voz con Lib
+                  </Button>
                   {showSuggestion && suggestion && (
                     <button
                       onClick={() => {

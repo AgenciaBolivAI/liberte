@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { callChat } from "@/lib/ai";
+import { callChat, speakFrenchBase64 } from "@/lib/ai";
 import { getTutorDayContext, TUTOR_MAX_DAY } from "@/lib/tutorContext";
 
 export const TUTOR_DAILY_LIMIT = 30;
@@ -169,11 +169,11 @@ export const getTutorState = createServerFn({ method: "GET" })
 export const sendTutorMessage = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) => {
-    const d = input as { dayId?: number; text?: string };
+    const d = input as { dayId?: number; text?: string; withAudio?: boolean };
     const text = String(d?.text ?? "").trim();
     if (!text) throw new Error("Escribe un mensaje primero.");
     const dayId = Math.max(1, Math.min(TUTOR_MAX_DAY, Number(d?.dayId) || 1));
-    return { dayId, text: text.slice(0, 1000) };
+    return { dayId, text: text.slice(0, 1000), withAudio: Boolean(d?.withAudio) };
   })
   .handler(async ({ data, context }) => {
     const c = context as unknown as Ctx;
@@ -261,6 +261,17 @@ export const sendTutorMessage = createServerFn({ method: "POST" })
       { onConflict: "user_id" },
     );
 
+    // Voice mode: synthesise the reply in the same round trip so the student
+    // hears it immediately instead of waiting for a second request.
+    let audio: string | null = null;
+    if (data.withAudio) {
+      try {
+        audio = await speakFrenchBase64(reply);
+      } catch {
+        audio = null; // fall back to the browser voice client-side
+      }
+    }
+
     return {
       reply,
       replyEs,
@@ -268,8 +279,24 @@ export const sendTutorMessage = createServerFn({ method: "POST" })
       correction,
       encouragement,
       objectivesDone,
+      audio,
       remaining: Math.max(0, TUTOR_DAILY_LIMIT - (used + 1)),
     };
+  });
+
+/* ---------------- Speak arbitrary French text (opener, replays) ---------------- */
+
+export const speakTutorLine = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => {
+    const d = input as { text?: string };
+    const text = String(d?.text ?? "").trim();
+    if (!text) throw new Error("text required");
+    return { text: text.slice(0, 800) };
+  })
+  .handler(async ({ data, context }) => {
+    await requireApprovedStudent(context as unknown as Ctx);
+    return { audio: await speakFrenchBase64(data.text) };
   });
 
 /* ---------------- Reset ---------------- */

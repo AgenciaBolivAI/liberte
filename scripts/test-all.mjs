@@ -277,6 +277,36 @@ if (studentClient) {
   ok("server checks approval before spending tokens", gate.includes("requireApprovedStudent"));
 }
 
+/* ---------------- hands-free voice conversation ---------------- */
+g("9b. Hands-free voice tutor");
+{
+  const ai = readFileSync("src/lib/ai.ts", "utf8");
+  ok("real TTS model configured (not browser voice)", ai.includes("gpt-4o-mini-tts"));
+  ok("TTS helper returns base64 audio", ai.includes("speakFrenchBase64"));
+  ok("TTS instructs a learner-friendly pace", ai.includes("Slightly slower than native pace"));
+
+  const tut = readFileSync("src/lib/tutor.functions.ts", "utf8");
+  ok("reply audio comes back in the same round trip", tut.includes("withAudio"));
+  ok("TTS failure degrades gracefully", tut.includes("audio = null; // fall back"));
+  ok("standalone speak endpoint exists (opener/replay)", tut.includes("speakTutorLine"));
+
+  const aud = readFileSync("src/lib/audio.ts", "utf8");
+  ok("silence detection implemented (auto-stop)", aud.includes("watchForSilence"));
+  ok("silence detection uses RMS threshold", aud.includes("SILENCE") && aud.includes("HANG_MS"));
+  ok("ignores a stray click at the start", aud.includes("MIN_SPEECH_MS"));
+  ok("audio context torn down after each turn", aud.includes("vadCleanupRef"));
+  ok("base64 mp3 playback helper", aud.includes("playBase64Mp3"));
+
+  const conv = readFileSync("src/routes/conversation.tsx", "utf8");
+  ok("voice phases: listening/thinking/speaking", conv.includes('VoicePhase') && conv.includes('"speaking"'));
+  ok("loop hands the turn back automatically", conv.includes("listenRef.current()"));
+  ok("empty/noise transcript re-listens instead of sending", conv.includes("if (!said)"));
+  ok("voice mode opens with the spoken scene opener", conv.includes("scenario.opener_fr"));
+  ok("hang-up button ends the loop", conv.includes("Terminar conversación"));
+  ok("voice loop stops cleanly via ref guard", conv.includes("voiceOnRef"));
+  ok("entry point is prominent", conv.includes("Conversar en voz con Lib"));
+}
+
 /* ---------------- admin preview / view-as ---------------- */
 g("10. Admin preview modes (view as student / specific student)");
 {
@@ -350,6 +380,12 @@ g("12. Regressions (bugs found in audit — must stay fixed)");
   ok("video gate has NO parent reset effect", !/setPendingVideos\(new Set\(\)\)/.test(day));
   ok("video gate unregisters on unmount", day.includes("return () => gate?.ended(src)"));
   ok("video gate uses preview-aware flag", day.includes("!bypassLocks"));
+  // YouTube embeds (35 of them) were silently ungated — only local files locked.
+  ok("YouTube embeds are gated too", day.includes("enablejsapi=1"));
+  ok("YouTube gate listens for ENDED state", day.includes('d?.event === "onStateChange"'));
+  ok("YouTube gate verifies message origin", day.includes('String(e.origin).includes("youtube.com")'));
+  ok("YouTube gate fails open if player is blocked", day.includes("heardFromPlayer"));
+  ok("YouTube videos register with the gate", /if \(!isYouTube\) return;\s*\n\s*gate\?\.register/.test(day));
   // #4 progress reset on token refresh.
   ok("hydration keyed on user?.id, not user object", day.includes("user?.id, viewAsUserId"));
   ok("autosave keyed on userId", day.includes("[done, stars, lesson, userId, activeDay, readOnly]"));
