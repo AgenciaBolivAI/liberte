@@ -139,6 +139,15 @@ function ConversationPage() {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [bubbles, sending]);
 
+  // Leaving the page mid-conversation must stop the loop and free the mic.
+  useEffect(() => {
+    return () => {
+      voiceOnRef.current = false;
+      recorder.releaseMic();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   function toggleTranslation(idx: number) {
     setShowTranslation((s) => {
       const n = new Set(s);
@@ -221,6 +230,9 @@ function ConversationPage() {
     turnBusyRef.current = false;
     setVoicePhase("listening");
     const ok = await recorder.start({
+      // Hold the mic for the whole conversation: re-acquiring it every turn is
+      // what makes the browser ask for permission again and again.
+      keepAlive: true,
       onSilence: () => {
         void finishListening();
       },
@@ -271,6 +283,8 @@ function ConversationPage() {
       voiceOnRef.current = false;
       setVoicePhase("off");
       if (recorder.recording) await recorder.stop();
+      // Hand the mic back so the browser's recording indicator goes off.
+      recorder.releaseMic();
       return;
     }
     // MUST happen synchronously in this tap: iOS blocks any later playback

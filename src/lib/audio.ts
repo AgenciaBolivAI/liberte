@@ -91,6 +91,8 @@ export function useRecorder() {
       streamRef.current?.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
     };
+    // releaseMic is stable (module-scoped refs only)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   /** Optional: called once the speaker has been quiet for a moment, so voice
@@ -176,15 +178,35 @@ export function useRecorder() {
     }
   }
 
-  async function start(opts?: { onSilence?: () => void }): Promise<boolean> {
-    setError("");
-    // A double-tap before getUserMedia resolves would orphan the first stream.
+  const isStreamLive = () =>
+    Boolean(streamRef.current?.getAudioTracks().some((t) => t.readyState === "live"));
+
+  /** Stop the mic entirely (turns the browser's recording indicator off). */
+  function releaseMic() {
+    vadCleanupRef.current?.();
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
+  }
+
+  /**
+   * `keepAlive` reuses one MediaStream across turns. Re-calling getUserMedia
+   * every turn is what makes the browser re-prompt for the microphone (and on
+   * WebKit it can prompt on each acquisition) — so a conversation acquires it
+   * once and holds it until the loop ends.
+   */
+  async function start(opts?: { onSilence?: () => void; keepAlive?: boolean }): Promise<boolean> {
+    setError("");
     onSilenceRef.current = opts?.onSilence ?? null;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      streamRef.current = stream;
+      let stream = streamRef.current;
+      if (!isStreamLive()) {
+        // Drop anything stale before asking again.
+        streamRef.current?.getTracks().forEach((t) => t.stop());
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        streamRef.current = stream;
+      }
+      if (!stream) return false;
+      const keepAlive = opts?.keepAlive ?? false;
       if (opts?.onSilence) watchForSilence(stream);
       const rec = new MediaRecorder(stream);
       recRef.current = rec;
@@ -195,8 +217,8 @@ export function useRecorder() {
       rec.onstop = () => {
         const blob = new Blob(chunksRef.current, { type: rec.mimeType || "audio/webm" });
         vadCleanupRef.current?.();
-        stream.getTracks().forEach((t) => t.stop());
-        streamRef.current = null;
+        // Keep the stream open between turns so the next turn doesn't re-prompt.
+        if (!keepAlive) releaseMic();
         setRecording(false);
         resolveRef.current?.(blob.size > 0 ? blob : null);
         resolveRef.current = null;
@@ -224,5 +246,12 @@ export function useRecorder() {
     });
   }
 
-  return { recording, error, start, stop, heardSpeech: () => heardSpeechRef.current };
+  return {
+    recording,
+    error,
+    start,
+    stop,
+    releaseMic,
+    heardSpeech: () => heardSpeechRef.current,
+  };
 }

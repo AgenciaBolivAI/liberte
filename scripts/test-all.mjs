@@ -335,6 +335,14 @@ g("9b. Hands-free voice tutor");
   // Voice turns request a compact payload (measured 3.3s -> 1.4s).
   ok("voice mode uses a trimmed JSON schema", tut.includes("buildTutorSystem(data.dayId, data.withAudio)"));
   ok("trimmed schema documented with the measurement", tut.includes("3.3s → 1.4s"));
+
+  // Mic permission was re-requested every turn (stream killed after each one).
+  ok("mic stream reused across turns", aud.includes("keepAlive"));
+  ok("stream liveness checked before re-acquiring", aud.includes("isStreamLive"));
+  ok("explicit mic release exposed", aud.includes("releaseMic"));
+  ok("conversation holds the mic for the whole call", conv.includes("keepAlive: true"));
+  ok("hang-up frees the mic", conv.includes("recorder.releaseMic()"));
+  ok("leaving the page frees the mic", /return \(\) => \{\s*voiceOnRef\.current = false;\s*recorder\.releaseMic\(\);/.test(conv));
 }
 
 /* ---------------- admin preview / view-as ---------------- */
