@@ -106,11 +106,18 @@ export async function transcribeFr(audioBase64: string, mimeType: string): Promi
       : mimeType.includes("wav")
         ? "wav"
         : "webm";
+  // Near-empty audio makes transcription models hallucinate, often in an
+  // unrelated language (Cyrillic is a common failure). Refuse it outright.
+  if (bytes.length < 4000) return "";
   const blob = new Blob([bytes], { type: mimeType });
   const fd = new FormData();
   fd.append("model", STT_MODEL);
   fd.append("file", blob, `audio.${ext}`);
   fd.append("language", "fr");
+  // NOTE: deliberately no `prompt` bias. Verified against the API: with a
+  // prompt, near-silent audio makes the model echo the prompt back as if the
+  // student had said it — a fabricated transcript, worse than no transcript.
+  // With language alone, silence correctly yields "".
   const res = await fetch(`${OPENAI_BASE}/audio/transcriptions`, {
     method: "POST",
     headers: { Authorization: `Bearer ${key}` },
@@ -121,5 +128,9 @@ export async function transcribeFr(audioBase64: string, mimeType: string): Promi
     throw new Error(`STT ${res.status}: ${b.slice(0, 200)}`);
   }
   const json = (await res.json()) as { text?: string };
-  return (json.text ?? "").trim();
+  const text = (json.text ?? "").trim();
+  // Guard against hallucinated output in a non-Latin script (the model
+  // inventing Cyrillic/CJK text from noise) — treat it as "nothing heard".
+  if (text && /[Ѐ-ӿ一-鿿؀-ۿ]/.test(text)) return "";
+  return text;
 }

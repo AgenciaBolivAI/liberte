@@ -14,24 +14,62 @@ export async function blobToBase64(blob: Blob): Promise<string> {
   return btoa(bin);
 }
 
+// iOS Safari refuses programmatic playback on an <audio> element that wasn't
+// started inside a real user gesture. Creating a fresh Audio() per reply
+// therefore plays once (inside the tap) and is silently blocked afterwards.
+// The fix: keep ONE element, unlock it during the tap, and reuse it forever.
+let sharedAudio: HTMLAudioElement | null = null;
+const SILENT_WAV =
+  "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA=";
+
+/** Call this synchronously from a click/tap before any later playback. */
+export function unlockAudioPlayback(): void {
+  if (typeof window === "undefined") return;
+  if (!sharedAudio) {
+    sharedAudio = new Audio();
+    // playsInline keeps iOS/WebKit (including Chrome on iOS) from hijacking
+    // playback into a fullscreen player. Not in the HTMLAudioElement typings.
+    (sharedAudio as HTMLAudioElement & { playsInline?: boolean }).playsInline = true;
+    sharedAudio.preload = "auto";
+  }
+  try {
+    sharedAudio.src = SILENT_WAV;
+    void sharedAudio.play().catch(() => {});
+  } catch {
+    /* ignore */
+  }
+}
+
 /** Plays a base64 MP3 and resolves when it finishes (or fails). */
 export function playBase64Mp3(b64: string): Promise<void> {
   return new Promise((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      resolve();
+    };
     try {
       const bin = atob(b64);
       const bytes = new Uint8Array(bin.length);
       for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
       const url = URL.createObjectURL(new Blob([bytes], { type: "audio/mpeg" }));
-      const audio = new Audio(url);
+      const audio = sharedAudio ?? new Audio();
+      (audio as HTMLAudioElement & { playsInline?: boolean }).playsInline = true;
       const done = () => {
         URL.revokeObjectURL(url);
-        resolve();
+        audio.onended = null;
+        audio.onerror = null;
+        finish();
       };
       audio.onended = done;
       audio.onerror = done;
+      audio.src = url;
       void audio.play().catch(done);
+      // Safety net: never leave the conversation loop hanging on a stuck element.
+      setTimeout(finish, 60_000);
     } catch {
-      resolve();
+      finish();
     }
   });
 }
@@ -58,6 +96,7 @@ export function useRecorder() {
    *  mode can auto-submit without the student tapping anything. */
   const onSilenceRef = useRef<(() => void) | null>(null);
   const vadCleanupRef = useRef<(() => void) | null>(null);
+  const heardSpeechRef = useRef(false);
 
   function watchForSilence(stream: MediaStream) {
     try {
@@ -66,6 +105,9 @@ export function useRecorder() {
         (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
       if (!Ctx) return;
       const ctx = new Ctx();
+      // iOS creates contexts in a suspended state outside a user gesture —
+      // without this the analyser only ever reports silence.
+      if (ctx.state === "suspended") void ctx.resume().catch(() => {});
       const source = ctx.createMediaStreamSource(stream);
       const analyser = ctx.createAnalyser();
       analyser.fftSize = 512;
@@ -75,10 +117,15 @@ export function useRecorder() {
       const SILENCE = 0.015; // RMS below this counts as quiet
       const HANG_MS = 1400; // quiet this long => the student has finished
       const MIN_SPEECH_MS = 400; // ignore a stray click at the very start
+      const MAX_TURN_MS = 30_000; // hard stop so a failed VAD can't hang forever
       let spokeAt = 0;
       let quietSince = 0;
       const startedAt = performance.now();
       let raf = 0;
+      // Track whether we ever heard the student, so the caller can discard
+      // empty audio instead of sending it to the transcriber (which would
+      // hallucinate — often in a random language).
+      heardSpeechRef.current = false;
 
       const tick = () => {
         analyser.getByteTimeDomainData(buf);
@@ -93,12 +140,18 @@ export function useRecorder() {
         if (rms > SILENCE) {
           spokeAt = now;
           quietSince = 0;
+          heardSpeechRef.current = true;
         } else if (spokeAt && now - startedAt > MIN_SPEECH_MS) {
           if (!quietSince) quietSince = now;
           else if (now - quietSince > HANG_MS) {
             onSilenceRef.current?.();
             return; // stop polling; stop() tears the rest down
           }
+        }
+        // Never leave the mic open indefinitely if detection misbehaves.
+        if (now - startedAt > MAX_TURN_MS) {
+          onSilenceRef.current?.();
+          return;
         }
         raf = requestAnimationFrame(tick);
       };
@@ -167,5 +220,5 @@ export function useRecorder() {
     });
   }
 
-  return { recording, error, start, stop };
+  return { recording, error, start, stop, heardSpeech: () => heardSpeechRef.current };
 }

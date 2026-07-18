@@ -305,6 +305,25 @@ g("9b. Hands-free voice tutor");
   ok("hang-up button ends the loop", conv.includes("Terminar conversación"));
   ok("voice loop stops cleanly via ref guard", conv.includes("voiceOnRef"));
   ok("entry point is prominent", conv.includes("Conversar en voz con Lib"));
+
+  // iOS/WebKit (incl. Chrome on iOS) hardening — found on a real device.
+  ok("audio unlocked inside the user gesture", aud.includes("unlockAudioPlayback"));
+  ok("playback reuses ONE unlocked element", aud.includes("sharedAudio"));
+  ok("playsInline set for WebKit", aud.includes("playsInline"));
+  ok("AudioContext resumed (iOS starts suspended)", aud.includes('ctx.state === "suspended"'));
+  ok("mic never stays open forever", aud.includes("MAX_TURN_MS"));
+  ok("recorder reports whether speech was heard", aud.includes("heardSpeech"));
+  ok("voice mode unlocks audio on tap", conv.includes("unlockAudioPlayback()"));
+  ok("silent captures never reach the transcriber", conv.includes("!recorder.heardSpeech()"));
+  ok("listening circle is tappable as a manual send", conv.includes('voicePhase === "listening") void finishListening()'));
+
+  // Transcription hallucination guards (verified live against the API).
+  ok("tiny audio rejected before transcription", ai.includes("bytes.length < 4000"));
+  ok("non-Latin hallucinations discarded", ai.includes("Ѐ-ӿ"));
+  ok("NO prompt bias (it fabricates transcripts on silence)", !ai.includes('fd.append("prompt"'));
+
+  // Tutor must not parrot its opener at unintelligible input.
+  ok("prompt forbids repeating the opener", tut.includes("NUNCA repitas tu frase de apertura"));
 }
 
 /* ---------------- admin preview / view-as ---------------- */

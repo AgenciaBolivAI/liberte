@@ -12,7 +12,7 @@ import parisBg from "@/assets/paris-map-bg.jpg";
 import { useAuth } from "@/lib/auth-context";
 import { useDayCompletions } from "@/lib/progress";
 import { speakFr } from "@/lib/speak";
-import { blobToBase64, playBase64Mp3, useRecorder } from "@/lib/audio";
+import { blobToBase64, playBase64Mp3, unlockAudioPlayback, useRecorder } from "@/lib/audio";
 import { transcribeStage } from "@/lib/defi.functions";
 import { getCompletedDays } from "@/lib/week.functions";
 import { furthestUnlockedDay, isSceneUnlocked } from "@/lib/unlock";
@@ -222,6 +222,12 @@ function ConversationPage() {
       listenTurn(); // nothing captured — keep listening
       return;
     }
+    // Nothing audible captured — don't pay for a transcription that would
+    // hallucinate; just listen again.
+    if (!recorder.heardSpeech() || blob.size < 4000) {
+      listenTurn();
+      return;
+    }
     setVoicePhase("thinking");
     try {
       const b64 = await blobToBase64(blob);
@@ -247,6 +253,9 @@ function ConversationPage() {
       if (recorder.recording) await recorder.stop();
       return;
     }
+    // MUST happen synchronously in this tap: iOS blocks any later playback
+    // from an element that wasn't started inside a user gesture.
+    unlockAudioPlayback();
     voiceOnRef.current = true;
     // Greet with the scene opener so the student hears French immediately.
     setVoicePhase("speaking");
@@ -407,7 +416,14 @@ function ConversationPage() {
                 </p>
               ) : voiceOn ? (
                 <div className="flex flex-col items-center gap-3 py-2">
-                  <div
+                  <button
+                    type="button"
+                    onClick={() => {
+                      // Manual end-of-turn, in case silence detection misses.
+                      if (voicePhase === "listening") void finishListening();
+                    }}
+                    disabled={voicePhase !== "listening"}
+                    aria-label={voicePhase === "listening" ? "He terminado de hablar" : undefined}
                     className={`relative grid h-20 w-20 place-items-center rounded-full text-white transition ${
                       voicePhase === "listening"
                         ? "bg-red"
@@ -426,14 +442,16 @@ function ConversationPage() {
                     ) : (
                       <Mic className="h-8 w-8" />
                     )}
-                  </div>
+                  </button>
                   <p className="text-center text-sm font-semibold text-navy">
                     {voicePhase === "listening" && "🎙️ Habla en francés… te escucho"}
                     {voicePhase === "thinking" && "Un instant…"}
                     {voicePhase === "speaking" && "🔊 Lib está hablando"}
                   </p>
                   <p className="text-center text-xs text-muted-foreground">
-                    Cuando dejes de hablar, te respondo automáticamente.
+                    {voicePhase === "listening"
+                      ? "Cuando dejes de hablar te respondo sola — o toca el micrófono para enviar."
+                      : "Cuando dejes de hablar, te respondo automáticamente."}
                   </p>
                   <Button
                     onClick={() => void toggleVoiceMode()}
