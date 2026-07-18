@@ -54,23 +54,37 @@ function buildTutorSystem(dayId: number): string {
     .map((v) => `${v.fr} (${v.es})`)
     .join(" · ");
   const grammar = ctx.grammar.join("\n- ");
-  return `Eres "Lib", la tutora de conversación del programa Liberté (francés para hispanohablantes A2-B1). Hoy practican el Día ${ctx.dayId}: ${ctx.topic}.
+  const objectives = ctx.scenario.objectives.map((o, i) => `${i + 1}. ${o}`).join("\n");
+  return `Eres "Lib", la tutora de conversación del programa Liberté (francés para hispanohablantes PRINCIPIANTES, nivel A1-A2). Hoy es el Día ${ctx.dayId}: ${ctx.topic}.
 
-VOCABULARIO DEL DÍA (úsalo activamente en tus respuestas): ${vocab}
+ESCENA (roleplay): Tú eres ${ctx.scenario.role}. Tu primera frase ya fue: « ${ctx.scenario.opener_fr} ». Mantente SIEMPRE en tu papel dentro de la escena, con calidez.
+
+OBJETIVOS DEL ALUMNO en esta escena (en orden):
+${objectives}
+
+VOCABULARIO DEL DÍA (úsalo activamente y da preferencia a estas palabras): ${vocab}
 
 ESTRUCTURAS DEL DÍA:
 - ${grammar}
 
-REGLAS DE CONVERSACIÓN:
-1. Conversa SOLO en francés simple y claro (A2-B1), máximo 2-3 frases por turno, sobre el tema del día. Haz preguntas para que el alumno hable.
-2. Corrige con cariño: máximo UNA corrección por turno, solo si el error es importante. Si no hay error relevante, "correction" es null.
-3. Nunca cambies al español dentro de "reply_fr". El ánimo en español va en "encouragement_es" (1 frase corta, opcional — usa null si no aporta).
-4. Si el alumno escribe en español, anímale en "encouragement_es" a intentarlo en francés y dale en "reply_fr" una frase modelo sencilla.
+REGLAS:
+1. "reply_fr" es TU respuesta COMO PERSONAJE de la escena (ej.: la serveuse responde al pedido del cliente). NUNCA repitas ahí la frase corregida del alumno — las correcciones van SOLO en "correction". Ejemplo: alumno dice « je veux un café » → reply_fr: « Très bien, un café ! Et avec ça ? », correction: {"said":"je veux","corrected":"je voudrais",…}.
+2. Francés MUY sencillo: máximo 2 frases CORTAS (10-12 palabras), presente y fórmulas hechas. El alumno es principiante — nada de subjuntivo ni frases largas.
+3. Termina casi siempre con una pregunta corta que invite al alumno a cumplir su siguiente objetivo pendiente.
+4. Corrige con cariño: máximo UNA corrección por turno y solo si el error es importante; si no, "correction" = null.
+5. Si el alumno escribe en español o parece perdido: mantente en francés sencillo, y en "suggestion" dale exactamente la frase que necesita.
+6. "reply_es" = traducción natural al español de tu "reply_fr" (siempre).
+7. "suggestion" = una frase corta en francés que el alumno PODRÍA decir ahora para avanzar en sus objetivos, con su traducción (siempre).
+8. "objectives_done" = lista ACUMULADA de números de objetivos que el alumno YA cumplió en TODA la conversación (historial + este turno). Sé GENEROSO: si comunicó la idea del objetivo, cuenta — aunque tenga errores de gramática. Ejemplo: « bonjour, je veux un café » cumple el objetivo "saludar y pedir una bebida" → [1].
+9. "encouragement_es" = ánimo breve en español, solo cuando aporte (si no, null). Si acaba de cumplir los 3 objetivos, celébralo aquí.
 
 Respondes SIEMPRE con SOLO este JSON válido, sin texto extra:
-{ "reply_fr": "tu respuesta en francés",
-  "correction": null | { "said": "lo que dijo el alumno (fr)", "corrected": "versión correcta (fr)", "rule_es": "regla en una línea, en español" },
-  "encouragement_es": null | "ánimo breve en español" }`;
+{ "reply_fr": "…",
+  "reply_es": "…",
+  "suggestion": { "fr": "…", "es": "…" },
+  "objectives_done": [1],
+  "correction": null | { "said": "…", "corrected": "…", "rule_es": "…" },
+  "encouragement_es": null | "…" }`;
 }
 
 /* ---------------- Load current state ---------------- */
@@ -82,11 +96,12 @@ export const getTutorState = createServerFn({ method: "GET" })
     let messages: TutorMessage[] = [];
     let dayId = 1;
     let used = 0;
+    let objectivesDone: number[] = [];
     try {
       const [{ data: conv }, { data: usage }] = await Promise.all([
         c.supabase
           .from("tutor_conversations")
-          .select("day_id, messages")
+          .select("day_id, messages, objectives_done")
           .eq("user_id", c.userId)
           .maybeSingle(),
         c.supabase
@@ -99,12 +114,20 @@ export const getTutorState = createServerFn({ method: "GET" })
       if (conv) {
         dayId = Number(conv.day_id) || 1;
         if (Array.isArray(conv.messages)) messages = conv.messages as TutorMessage[];
+        if (Array.isArray(conv.objectives_done)) {
+          objectivesDone = (conv.objectives_done as number[]).map(Number);
+        }
       }
       used = Number(usage?.message_count ?? 0);
     } catch {
       // tables missing pre-migration → fresh state, full quota
     }
-    return { messages, dayId, remaining: Math.max(0, TUTOR_DAILY_LIMIT - used) };
+    return {
+      messages,
+      dayId,
+      objectivesDone,
+      remaining: Math.max(0, TUTOR_DAILY_LIMIT - used),
+    };
   });
 
 /* ---------------- Send one message ---------------- */
@@ -150,13 +173,19 @@ export const sendTutorMessage = createServerFn({ method: "POST" })
 
     // History (reset when the student switches day).
     let history: TutorMessage[] = [];
+    let prevObjectives: number[] = [];
     const { data: conv } = await c.supabase
       .from("tutor_conversations")
-      .select("day_id, messages")
+      .select("day_id, messages, objectives_done")
       .eq("user_id", c.userId)
       .maybeSingle();
-    if (conv && Number(conv.day_id) === data.dayId && Array.isArray(conv.messages)) {
-      history = (conv.messages as TutorMessage[]).slice(-MAX_HISTORY);
+    if (conv && Number(conv.day_id) === data.dayId) {
+      if (Array.isArray(conv.messages)) {
+        history = (conv.messages as TutorMessage[]).slice(-MAX_HISTORY);
+      }
+      if (Array.isArray(conv.objectives_done)) {
+        prevObjectives = (conv.objectives_done as number[]).map(Number);
+      }
     }
 
     const out = await callChat(buildTutorSystem(data.dayId), [
@@ -165,6 +194,12 @@ export const sendTutorMessage = createServerFn({ method: "POST" })
     ]);
 
     const reply = String(out.reply_fr ?? "").trim() || "Pardon, peux-tu répéter ?";
+    const replyEs = String(out.reply_es ?? "").trim() || null;
+    const rawSuggestion = out.suggestion as Record<string, unknown> | null | undefined;
+    const suggestion =
+      rawSuggestion && typeof rawSuggestion === "object" && rawSuggestion.fr
+        ? { fr: String(rawSuggestion.fr), es: String(rawSuggestion.es ?? "") }
+        : null;
     const rawCorrection = out.correction as Record<string, unknown> | null | undefined;
     const correction: TutorCorrection =
       rawCorrection && typeof rawCorrection === "object" && rawCorrection.corrected
@@ -176,6 +211,12 @@ export const sendTutorMessage = createServerFn({ method: "POST" })
         : null;
     const encouragement = out.encouragement_es ? String(out.encouragement_es) : null;
 
+    // Objectives only ever accumulate — the model can add, never remove.
+    const modelObjectives = Array.isArray(out.objectives_done)
+      ? (out.objectives_done as unknown[]).map(Number).filter((n) => n >= 1 && n <= 3)
+      : [];
+    const objectivesDone = Array.from(new Set([...prevObjectives, ...modelObjectives])).sort();
+
     const fullHistory: TutorMessage[] = [
       ...history,
       { role: "user", content: data.text },
@@ -184,14 +225,22 @@ export const sendTutorMessage = createServerFn({ method: "POST" })
     const nextMessages = fullHistory.slice(-MAX_HISTORY * 2);
 
     await c.supabase.from("tutor_conversations").upsert(
-      { user_id: c.userId, day_id: data.dayId, messages: nextMessages },
+      {
+        user_id: c.userId,
+        day_id: data.dayId,
+        messages: nextMessages,
+        objectives_done: objectivesDone,
+      },
       { onConflict: "user_id" },
     );
 
     return {
       reply,
+      replyEs,
+      suggestion,
       correction,
       encouragement,
+      objectivesDone,
       remaining: Math.max(0, TUTOR_DAILY_LIMIT - (used + 1)),
     };
   });
@@ -208,7 +257,7 @@ export const resetTutorConversation = createServerFn({ method: "POST" })
     const c = context as unknown as Ctx;
     try {
       await c.supabase.from("tutor_conversations").upsert(
-        { user_id: c.userId, day_id: data.dayId, messages: [] },
+        { user_id: c.userId, day_id: data.dayId, messages: [], objectives_done: [] },
         { onConflict: "user_id" },
       );
     } catch {

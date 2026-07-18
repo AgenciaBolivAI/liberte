@@ -447,18 +447,21 @@ export type Database = {
         Row: {
           day_id: number
           messages: Json
+          objectives_done: Json
           updated_at: string
           user_id: string
         }
         Insert: {
           day_id?: number
           messages?: Json
+          objectives_done?: Json
           updated_at?: string
           user_id: string
         }
         Update: {
           day_id?: number
           messages?: Json
+          objectives_done?: Json
           updated_at?: string
           user_id?: string
         }

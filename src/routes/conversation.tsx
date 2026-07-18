@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
-import { Loader2, Mic, RotateCcw, Send, Square, Volume2 } from "lucide-react";
+import { Check, Languages, Lightbulb, Loader2, Mic, RotateCcw, Send, Square, Volume2 } from "lucide-react";
 import { toast } from "sonner";
+import confetti from "canvas-confetti";
 import { TopNav } from "@/components/TopNav";
 import { Toaster } from "@/components/ui/sonner";
 import { Button } from "@/components/ui/button";
@@ -13,7 +14,7 @@ import { useDayCompletions } from "@/lib/progress";
 import { speakFr } from "@/lib/speak";
 import { blobToBase64, useRecorder } from "@/lib/audio";
 import { transcribeStage } from "@/lib/defi.functions";
-import { TUTOR_DAY_TOPICS } from "@/lib/tutorContext";
+import { TUTOR_DAY_TOPICS, TUTOR_SCENARIOS } from "@/lib/tutorContext";
 import {
   getTutorState,
   resetTutorConversation,
@@ -37,31 +38,39 @@ export const Route = createFileRoute("/conversation")({
 });
 
 type Bubble = TutorMessage & {
+  translation?: string | null;
   correction?: TutorCorrection;
   encouragement?: string | null;
 };
 
-const GREETING: Bubble = {
-  role: "assistant",
-  content: "Bonjour ! Je suis Lib 🐦 On pratique un peu de français ensemble ?",
-};
+function openerBubble(dayId: number): Bubble {
+  const sc = TUTOR_SCENARIOS[dayId];
+  return { role: "assistant", content: sc.opener_fr, translation: sc.opener_es };
+}
 
 function ConversationPage() {
   const { loading: authLoading, user } = useAuth();
   const { days } = useDayCompletions();
   const [dayId, setDayId] = useState<number | null>(null);
-  const [bubbles, setBubbles] = useState<Bubble[]>([GREETING]);
+  const [bubbles, setBubbles] = useState<Bubble[] | null>(null);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
   const [remaining, setRemaining] = useState<number | null>(null);
+  const [objectivesDone, setObjectivesDone] = useState<number[]>([]);
+  const [suggestion, setSuggestion] = useState<{ fr: string; es: string } | null>(null);
+  const [showSuggestion, setShowSuggestion] = useState(false);
+  const [showTranslation, setShowTranslation] = useState<Set<number>>(new Set());
   const [hydrated, setHydrated] = useState(false);
+  const celebratedRef = useRef(false);
   const recorder = useRecorder();
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Default day: one past the latest completed day (capped at 10).
   const suggestedDay = Math.min(10, (days.length ? Math.max(...days) : 0) + 1);
   const activeDay = dayId ?? suggestedDay;
+  const scenario = TUTOR_SCENARIOS[activeDay];
+  const shownBubbles = bubbles ?? [openerBubble(activeDay)];
 
   useEffect(() => {
     if (authLoading || !user) return;
@@ -73,7 +82,9 @@ function ConversationPage() {
         setRemaining(state.remaining);
         if (state.messages.length > 0) {
           setDayId(state.dayId);
-          setBubbles([GREETING, ...state.messages]);
+          setBubbles([openerBubble(state.dayId), ...state.messages]);
+          setObjectivesDone(state.objectivesDone ?? []);
+          celebratedRef.current = (state.objectivesDone ?? []).length >= 3;
         }
       } catch {
         // start fresh
@@ -90,26 +101,46 @@ function ConversationPage() {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [bubbles, sending]);
 
-  async function handleSend() {
-    const text = input.trim();
+  function toggleTranslation(idx: number) {
+    setShowTranslation((s) => {
+      const n = new Set(s);
+      if (n.has(idx)) n.delete(idx);
+      else n.add(idx);
+      return n;
+    });
+  }
+
+  async function handleSend(textOverride?: string) {
+    const text = (textOverride ?? input).trim();
     if (!text || sending) return;
     setInput("");
+    setShowSuggestion(false);
     setSending(true);
-    setBubbles((b) => [...b, { role: "user", content: text }]);
+    setBubbles((b) => [...(b ?? [openerBubble(activeDay)]), { role: "user", content: text }]);
     try {
       const out = await sendTutorMessage({ data: { dayId: activeDay, text } });
       setRemaining(out.remaining);
+      setSuggestion(out.suggestion);
+      setObjectivesDone(out.objectivesDone);
+      if (out.objectivesDone.length >= 3 && !celebratedRef.current) {
+        celebratedRef.current = true;
+        confetti({ particleCount: 120, spread: 80, origin: { y: 0.6 } });
+      }
       setBubbles((b) => {
-        const next = [...b];
-        // Attach the correction to the user bubble it corrects.
+        const next = [...(b ?? [])];
         const lastUserIdx = next.length - 1;
         next[lastUserIdx] = { ...next[lastUserIdx], correction: out.correction };
-        next.push({ role: "assistant", content: out.reply, encouragement: out.encouragement });
+        next.push({
+          role: "assistant",
+          content: out.reply,
+          translation: out.replyEs,
+          encouragement: out.encouragement,
+        });
         return next;
       });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "No se pudo enviar el mensaje");
-      setBubbles((b) => b.slice(0, -1));
+      setBubbles((b) => (b ?? []).slice(0, -1));
       setInput(text);
     } finally {
       setSending(false);
@@ -141,8 +172,13 @@ function ConversationPage() {
 
   async function handleReset(newDay?: number) {
     const d = newDay ?? activeDay;
-    setBubbles([GREETING]);
     setDayId(d);
+    setBubbles([openerBubble(d)]);
+    setObjectivesDone([]);
+    setSuggestion(null);
+    setShowSuggestion(false);
+    setShowTranslation(new Set());
+    celebratedRef.current = false;
     try {
       await resetTutorConversation({ data: { dayId: d } });
     } catch {
@@ -159,6 +195,7 @@ function ConversationPage() {
   }
 
   const quotaEmpty = remaining !== null && remaining <= 0;
+  const allDone = objectivesDone.length >= 3;
 
   return (
     <div
@@ -170,7 +207,7 @@ function ConversationPage() {
       <TopNav />
       <Toaster position="top-center" richColors />
       <main className="mx-auto max-w-5xl px-4 py-6 sm:px-6">
-        <div className="grid gap-4 md:grid-cols-[1fr_260px]">
+        <div className="grid gap-4 md:grid-cols-[1fr_280px]">
           {/* Chat panel */}
           <section className="flex min-h-[70vh] flex-col rounded-3xl border border-white/15 bg-card shadow-card">
             <header className="flex items-center gap-3 border-b border-border p-4">
@@ -181,10 +218,15 @@ function ConversationPage() {
                   Día {activeDay} · {TUTOR_DAY_TOPICS[activeDay]}
                 </p>
               </div>
+              {allDone && (
+                <span className="rounded-full bg-success/10 px-3 py-1 text-xs font-bold text-success">
+                  🎉 ¡Escena completada!
+                </span>
+              )}
             </header>
 
             <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto p-4">
-              {bubbles.map((m, i) => (
+              {shownBubbles.map((m, i) => (
                 <div key={i}>
                   <div className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
                     <div
@@ -196,13 +238,29 @@ function ConversationPage() {
                     >
                       {m.content}
                       {m.role === "assistant" && (
-                        <button
-                          onClick={() => speakFr(m.content)}
-                          aria-label="Escuchar en francés"
-                          className="ml-2 inline-flex translate-y-0.5 text-blue hover:text-navy"
-                        >
-                          <Volume2 className="h-4 w-4" />
-                        </button>
+                        <span className="ml-2 inline-flex translate-y-0.5 gap-2">
+                          <button
+                            onClick={() => speakFr(m.content)}
+                            aria-label="Escuchar en francés"
+                            className="text-blue hover:text-navy"
+                          >
+                            <Volume2 className="h-4 w-4" />
+                          </button>
+                          {m.translation && (
+                            <button
+                              onClick={() => toggleTranslation(i)}
+                              aria-label="Ver traducción"
+                              className={showTranslation.has(i) ? "text-navy" : "text-blue hover:text-navy"}
+                            >
+                              <Languages className="h-4 w-4" />
+                            </button>
+                          )}
+                        </span>
+                      )}
+                      {m.role === "assistant" && m.translation && showTranslation.has(i) && (
+                        <span className="mt-1 block border-t border-border pt-1 text-xs italic text-navy/60">
+                          {m.translation}
+                        </span>
                       )}
                     </div>
                   </div>
@@ -235,45 +293,70 @@ function ConversationPage() {
                   Has usado tus {TUTOR_DAILY_LIMIT} mensajes de hoy. ¡Vuelve mañana! 🌙
                 </p>
               ) : (
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => void handleMic()}
-                    disabled={transcribing || sending}
-                    aria-label={recorder.recording ? "Detener grabación" : "Grabar audio"}
-                    className={`grid h-11 w-11 shrink-0 place-items-center rounded-full text-white transition ${
-                      recorder.recording ? "animate-pulse bg-red" : "bg-navy hover:bg-navy/85"
-                    } disabled:opacity-50`}
-                  >
-                    {transcribing ? (
-                      <Loader2 className="h-5 w-5 animate-spin" />
-                    ) : recorder.recording ? (
-                      <Square className="h-5 w-5" />
-                    ) : (
-                      <Mic className="h-5 w-5" />
+                <>
+                  {showSuggestion && suggestion && (
+                    <button
+                      onClick={() => {
+                        setInput(suggestion.fr);
+                        setShowSuggestion(false);
+                      }}
+                      className="mb-2 block w-full rounded-xl border border-sky/50 bg-ice px-3 py-2 text-left text-sm text-navy transition hover:border-blue"
+                    >
+                      <span className="font-bold">{suggestion.fr}</span>
+                      <span className="block text-xs italic text-navy/60">{suggestion.es}</span>
+                      <span className="block text-[10px] text-blue">Toca para usar esta frase ↑</span>
+                    </button>
+                  )}
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => void handleMic()}
+                      disabled={transcribing || sending}
+                      aria-label={recorder.recording ? "Detener grabación" : "Grabar audio"}
+                      className={`grid h-11 w-11 shrink-0 place-items-center rounded-full text-white transition ${
+                        recorder.recording ? "animate-pulse bg-red" : "bg-navy hover:bg-navy/85"
+                      } disabled:opacity-50`}
+                    >
+                      {transcribing ? (
+                        <Loader2 className="h-5 w-5 animate-spin" />
+                      ) : recorder.recording ? (
+                        <Square className="h-5 w-5" />
+                      ) : (
+                        <Mic className="h-5 w-5" />
+                      )}
+                    </button>
+                    {suggestion && (
+                      <button
+                        onClick={() => setShowSuggestion((v) => !v)}
+                        aria-label="¿Qué puedo decir?"
+                        title="¿Qué puedo decir?"
+                        className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-gold/20 text-gold transition hover:bg-gold/30"
+                      >
+                        <Lightbulb className="h-5 w-5" />
+                      </button>
                     )}
-                  </button>
-                  <Input
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && !e.shiftKey) {
-                        e.preventDefault();
-                        void handleSend();
-                      }
-                    }}
-                    placeholder={recorder.recording ? "Grabando… habla en francés 🎙️" : "Écris en français…"}
-                    disabled={sending}
-                    className="h-11 rounded-full border-border bg-white"
-                  />
-                  <Button
-                    onClick={() => void handleSend()}
-                    disabled={sending || !input.trim()}
-                    aria-label="Enviar"
-                    className="h-11 w-11 shrink-0 rounded-full bg-gradient-blue p-0 text-white"
-                  >
-                    <Send className="h-5 w-5" />
-                  </Button>
-                </div>
+                    <Input
+                      value={input}
+                      onChange={(e) => setInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault();
+                          void handleSend();
+                        }
+                      }}
+                      placeholder={recorder.recording ? "Grabando… habla en francés 🎙️" : "Écris en français…"}
+                      disabled={sending}
+                      className="h-11 rounded-full border-border bg-white"
+                    />
+                    <Button
+                      onClick={() => void handleSend()}
+                      disabled={sending || !input.trim()}
+                      aria-label="Enviar"
+                      className="h-11 w-11 shrink-0 rounded-full bg-gradient-blue p-0 text-white"
+                    >
+                      <Send className="h-5 w-5" />
+                    </Button>
+                  </div>
+                </>
               )}
             </footer>
           </section>
@@ -281,7 +364,7 @@ function ConversationPage() {
           {/* Sidebar */}
           <aside className="space-y-4">
             <div className="rounded-3xl border border-white/15 bg-card p-4 shadow-card">
-              <p className="text-xs font-extrabold tracking-widest text-navy/70 uppercase">Tema del día</p>
+              <p className="text-xs font-extrabold tracking-widest text-navy/70 uppercase">La escena de hoy</p>
               <select
                 value={activeDay}
                 onChange={(e) => void handleReset(Number(e.target.value))}
@@ -293,9 +376,26 @@ function ConversationPage() {
                   </option>
                 ))}
               </select>
-              <p className="mt-2 text-[11px] text-muted-foreground">
-                Cambiar de día inicia una conversación nueva.
+              <p className="mt-3 text-xs text-navy/75">
+                🎭 Lib es <span className="font-semibold">{scenario.role.split(";")[0]}</span>.
               </p>
+              <ul className="mt-3 space-y-2">
+                {scenario.objectives.map((o, i) => {
+                  const isDone = objectivesDone.includes(i + 1);
+                  return (
+                    <li key={i} className="flex items-start gap-2 text-xs text-navy/85">
+                      <span
+                        className={`mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full text-[10px] font-extrabold ${
+                          isDone ? "bg-success text-white" : "bg-ice text-navy/60"
+                        }`}
+                      >
+                        {isDone ? <Check className="h-3 w-3" /> : i + 1}
+                      </span>
+                      <span className={isDone ? "line-through opacity-60" : ""}>{o}</span>
+                    </li>
+                  );
+                })}
+              </ul>
             </div>
 
             <div className="rounded-3xl border border-white/15 bg-card p-4 shadow-card">
@@ -321,9 +421,9 @@ function ConversationPage() {
             </Button>
 
             <div className="rounded-3xl border border-white/15 bg-white/10 p-4 text-xs text-white/85">
-              💡 Consejos: escribe o usa el micrófono 🎙️ y revisa la transcripción antes de enviar.
-              Toca el altavoz 🔊 para escuchar a Lib. Ella te corrige con cariño — ¡equivocarse es
-              parte de aprender!
+              💡 Escribe o usa el micrófono 🎙️. Toca 🔊 para escuchar a Lib y{" "}
+              <Languages className="inline h-3 w-3" /> para ver la traducción. Si te quedas sin
+              palabras, toca la 💡 para una sugerencia. ¡Equivocarse es parte de aprender!
             </div>
           </aside>
         </div>
