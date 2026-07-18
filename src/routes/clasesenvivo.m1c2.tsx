@@ -293,7 +293,12 @@ function M1C2() {
             ].map((r, idx) => (
               <tr key={idx} className="border-t border-slate-200">
                 <td className="p-3 font-bold">{r[0]}</td>
-                <td className="p-3">{r[1]}</td>
+                <td className="p-3">
+                  {r[1]}
+                  {/* The description column is hidden on phones — stack it here
+                      so mobile students don't lose the dish description. */}
+                  <span className="mt-0.5 block text-xs text-slate-600 sm:hidden">{r[2]}</span>
+                </td>
                 <td className="p-3 hidden sm:table-cell text-slate-600">{r[2]}</td>
                 <td className="p-3 text-right font-extrabold" style={{ color: RED }}>{r[3]}</td>
               </tr>

@@ -100,14 +100,26 @@ function LandingPage() {
     <div className="bg-ice text-navy">
       {/* Nav */}
       <header className="sticky top-0 z-40 border-b border-navy/10 bg-white/90 backdrop-blur-xl">
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
-          <img src={logoFull.url} alt="Liberté · Instituto de Francés" className="h-10 w-auto" />
-          <div className="flex items-center gap-2">
-            <Button asChild variant="ghost" className="hidden text-navy sm:inline-flex">
-              <Link to={LOGIN_PATH}>Iniciar sesión</Link>
-            </Button>
-            <Button asChild className="rounded-full bg-gradient-blue font-bold text-white">
-              <a href="#inscripcion">Quiero información</a>
+        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-2 px-4 sm:px-6">
+          <img
+            src={logoFull.url}
+            alt="Liberté · Instituto de Francés"
+            className="h-8 w-auto max-w-[32vw] shrink object-contain object-left sm:h-10 sm:max-w-none"
+          />
+          {/* Login must stay reachable on phones — students land here too. */}
+          <div className="flex shrink-0 items-center gap-1 sm:gap-2">
+            <Link
+              to={LOGIN_PATH}
+              className="whitespace-nowrap rounded-full px-3 py-2 text-sm font-semibold text-navy transition hover:text-blue"
+            >
+              <span className="sm:hidden">Entrar</span>
+              <span className="hidden sm:inline">Iniciar sesión</span>
+            </Link>
+            <Button asChild className="rounded-full bg-gradient-blue px-4 font-bold whitespace-nowrap text-white sm:px-6">
+              <a href="#inscripcion">
+                <span className="sm:hidden">Quiero info</span>
+                <span className="hidden sm:inline">Quiero información</span>
+              </a>
             </Button>
           </div>
         </div>

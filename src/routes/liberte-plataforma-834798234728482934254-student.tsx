@@ -176,7 +176,7 @@ function Home() {
                     Mois {idx + 1}
                   </span>
                   <h3 className="font-display text-xl font-extrabold sm:text-2xl">{m.name}</h3>
-                  <span className="hidden text-sm text-white/60 sm:inline">— {m.subtitle}</span>
+                  <span className="text-sm text-white/60">— {m.subtitle}</span>
                 </div>
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
                   {monthWeeks.map((w) => (

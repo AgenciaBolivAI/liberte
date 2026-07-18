@@ -371,6 +371,11 @@ g("12. Regressions (bugs found in audit — must stay fixed)");
   const idx = readFileSync("src/routes/index.tsx", "utf8");
   ok("lead form only treats 502 as saved", idx.includes("res.status === 502"));
   ok("lead form surfaces 500 as an error", idx.includes("No pudimos guardar tus datos"));
+  // Landing header: login was hidden below sm, stranding mobile students.
+  ok("landing login link visible on mobile", !/hidden text-navy sm:inline-flex/.test(idx));
+  ok("landing header has a mobile login label", idx.includes(">Entrar<"));
+  ok("landing header buttons don't wrap", idx.includes("whitespace-nowrap"));
+  ok("landing logo capped on mobile", idx.includes("max-w-[32vw]"));
 
   // #5 atomic tutor cap.
   const tut = readFileSync("src/lib/tutor.functions.ts", "utf8");
