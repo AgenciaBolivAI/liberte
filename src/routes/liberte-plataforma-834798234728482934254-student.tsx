@@ -50,11 +50,15 @@ function Home() {
       .eq("user_id", user.id)
       .then(({ data }) => {
         const fromDb = (data ?? []).map((r) => r.week_number);
-        // Teacher mode unlocks all 24 weeks for content review. In "Ver como
-        // alumno" the dashboard must behave exactly like a student's.
+        // Teacher mode unlocks all 24 weeks for content review. Students get
+        // only what the coach granted in week_unlocks plus the time-based
+        // schedule — week 2 used to be hardcoded open for everyone, which
+        // let a day-one student skip straight to day 6.
+        // Weeks 1-2 are open to every student at launch (the only weeks with
+        // content); teacher mode opens all 24 for review.
         const extras = bypassLocks
           ? Array.from({ length: TOTAL_WEEKS }, (_, i) => i + 1)
-          : [2];
+          : [1, 2];
         setOverrides(Array.from(new Set([...fromDb, ...extras])));
       });
   }, [user, bypassLocks]);
@@ -236,10 +240,13 @@ function Home() {
   );
 }
 
+// Weeks that actually have lesson content today. Anything beyond this is
+// shown as "próximamente" instead of silently dumping the student on Day 1.
 const WEEK_START_DAY: Record<number, string> = {
   1: "1",
   2: "6",
 };
+const LAST_WEEK_WITH_CONTENT = 2;
 
 function WeekCard({
   w,
@@ -255,9 +262,36 @@ function WeekCard({
   const isActive = w.status === "active" && !isCurrent;
   const isLocked = w.status === "locked-time";
   const startDay = WEEK_START_DAY[w.globalIndex] ?? "1";
+  const hasContent = w.globalIndex <= LAST_WEEK_WITH_CONTENT;
 
   const base =
     "group relative flex aspect-[4/3] flex-col justify-between overflow-hidden rounded-2xl p-4 transition";
+
+  // Unlocked by the calendar but not built yet — say so instead of sending the
+  // student to Day 1 with no explanation.
+  if (!hasContent && !isLocked) {
+    return (
+      <div
+        className={`${base} border border-white/20 text-white/80`}
+        style={{
+          backgroundImage: `linear-gradient(180deg, oklch(0.28 0.06 250 / 0.80) 0%, oklch(0.20 0.06 250 / 0.88) 100%), url(${cover})`,
+          backgroundSize: "cover",
+          backgroundPosition: "center 30%",
+        }}
+      >
+        <div className="flex items-center justify-between">
+          <span className="rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-semibold tracking-wider uppercase">
+            Semaine {w.weekIndexInMonth}
+          </span>
+          <Sparkles className="h-4 w-4 opacity-70" />
+        </div>
+        <div>
+          <p className="font-display text-lg font-extrabold drop-shadow">{monthName}</p>
+          <p className="text-[11px] text-white/75">Próximamente</p>
+        </div>
+      </div>
+    );
+  }
 
   // Current week — original photo, pulsing button with blue glow behind it
   if (isCurrent) {

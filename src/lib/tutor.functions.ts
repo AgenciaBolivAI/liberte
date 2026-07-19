@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { callChat, speakFrenchBase64 } from "@/lib/ai";
 import { getTutorDayContext, TUTOR_MAX_DAY } from "@/lib/tutorContext";
+import { OPEN_THROUGH_DAY } from "@/lib/unlock";
 
 export const TUTOR_DAILY_LIMIT = 30;
 const MAX_HISTORY = 20;
@@ -30,6 +31,8 @@ function todayKey(): string {
 // too, not just in the picker, so the server fn can't be called for a locked
 // day. Admins bypass.
 async function assertDayUnlocked(context: Ctx, dayId: number): Promise<void> {
+  // Launch setting: every scene in weeks 1-2 is open to all students.
+  if (dayId <= OPEN_THROUGH_DAY) return;
   if (dayId <= 1) return;
   const { data: isAdmin } = await context.supabase.rpc("has_role", {
     _user_id: context.userId,

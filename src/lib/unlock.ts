@@ -7,6 +7,18 @@
 
 export const LESSON_DAYS = 10;
 
+/**
+ * Launch setting: weeks 1-2 (days 1-10) are open to every student from day
+ * one — no time gate, no coach grant, no "finish the previous day first".
+ * Only these two weeks have content today, and the cohort was migrated
+ * mid-programme, so gating them would lock existing students out of work
+ * they had already reached.
+ *
+ * Lesson-by-lesson progression and the watch-the-video gate INSIDE each day
+ * still apply. To re-enable day-by-day gating later, lower this to 0.
+ */
+export const OPEN_THROUGH_DAY = 10;
+
 /** Day N opens when day N-1 is done. Day 1 (and the first day of the
  *  viewed week, which is itself time-gated on the dashboard) is always open. */
 export function isDayUnlocked(
@@ -15,6 +27,7 @@ export function isDayUnlocked(
   opts: { isAdmin?: boolean; firstDayOfWeek?: number } = {},
 ): boolean {
   if (opts.isAdmin) return true;
+  if (dayId <= OPEN_THROUGH_DAY) return true;
   if (dayId <= 1) return true;
   if (opts.firstDayOfWeek !== undefined && dayId === opts.firstDayOfWeek) return true;
   if (doneDays.has(dayId)) return true;
@@ -42,6 +55,7 @@ export function isSceneUnlocked(
   opts: { isAdmin?: boolean } = {},
 ): boolean {
   if (opts.isAdmin) return true;
+  if (dayId <= OPEN_THROUGH_DAY) return true;
   if (dayId <= 1) return true;
   return doneDays.has(dayId - 1);
 }

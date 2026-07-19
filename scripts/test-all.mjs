@@ -74,13 +74,15 @@ new Function("exports", "module", compiled)(modExports, { exports: modExports })
 const mod = modExports;
 const S = (...a) => new Set(a);
 
-ok("day 1 always open", mod.isDayUnlocked(1, S()));
-ok("day 2 LOCKED when day 1 not done", !mod.isDayUnlocked(2, S()));
-ok("day 2 opens once day 1 done", mod.isDayUnlocked(2, S(1)));
-ok("day 3 LOCKED when only day 1 done", !mod.isDayUnlocked(3, S(1)));
-ok("day 10 LOCKED for fresh student", !mod.isDayUnlocked(10, S()));
-ok("admin sees every day", mod.isDayUnlocked(10, S(), { isAdmin: true }));
-ok("first day of week 2 (day 6) open", mod.isDayUnlocked(6, S(), { firstDayOfWeek: 6 }));
+// LAUNCH SETTING: weeks 1-2 (days 1-10) are open to every student.
+eq("OPEN_THROUGH_DAY covers weeks 1-2", mod.OPEN_THROUGH_DAY, 10);
+for (const d of [1, 2, 5, 6, 10]) {
+  ok(`day ${d} open to a brand-new student`, mod.isDayUnlocked(d, S()));
+}
+ok("admin sees every day", mod.isDayUnlocked(11, S(), { isAdmin: true }));
+// Beyond the open range the sequential rule still governs (future content).
+ok("day 12 LOCKED when day 11 not done", !mod.isDayUnlocked(12, S()));
+ok("day 12 opens once day 11 done", mod.isDayUnlocked(12, S(11)));
 
 const order = ["gym", "intro", "vocab", "cles", "defi"];
 ok("lesson 1 always open", mod.isLessonUnlocked(0, {}, order));
@@ -90,11 +92,10 @@ ok("lesson 5 LOCKED with only lesson 1 done", !mod.isLessonUnlocked(4, { gym: tr
 ok("lesson 5 opens after lesson 4 done", mod.isLessonUnlocked(4, { cles: true }, order));
 ok("admin sees every lesson", mod.isLessonUnlocked(4, {}, order, { isAdmin: true }));
 
-ok("scene 1 always open", mod.isSceneUnlocked(1, S()));
-ok("scene 2 LOCKED when day 1 not done", !mod.isSceneUnlocked(2, S()));
-ok("scene 2 opens once day 1 done", mod.isSceneUnlocked(2, S(1)));
-ok("scene 6 LOCKED even at week boundary (no week exception)", !mod.isSceneUnlocked(6, S(1, 2, 3)));
-ok("scene 6 opens once day 5 done", mod.isSceneUnlocked(6, S(1, 2, 3, 4, 5)));
+// Tutor scenes for weeks 1-2 are open to everyone at launch too.
+for (const d of [1, 2, 5, 6, 9, 10]) {
+  ok(`tutor scene ${d} open to a brand-new student`, mod.isSceneUnlocked(d, S()));
+}
 eq("furthest day, fresh student", mod.furthestUnlockedDay(S()), 1);
 eq("furthest day, days 1-4 done", mod.furthestUnlockedDay(S(1, 2, 3, 4)), 5);
 eq("furthest day caps at 10", mod.furthestUnlockedDay(S(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)), 10);
@@ -287,12 +288,10 @@ if (studentClient) {
   ]);
   const done = new Set([...(dc ?? []).map((r) => r.day_id), ...(dr ?? []).map((r) => r.day_id)]);
   eq("student has days 1,2 done", [...done].sort(), [1, 2]);
-  ok("day 2 unlocked", mod.isDayUnlocked(2, done));
-  ok("day 3 unlocked (day 2 done)", mod.isDayUnlocked(3, done));
-  ok("day 4 still LOCKED", !mod.isDayUnlocked(4, done));
-  ok("scene 3 unlocked", mod.isSceneUnlocked(3, done));
-  ok("scene 4 still LOCKED", !mod.isSceneUnlocked(4, done));
-  eq("furthest day = 3", mod.furthestUnlockedDay(done), 3);
+  // Launch: all of weeks 1-2 open regardless of how far they've got.
+  for (const d of [3, 6, 10]) ok(`day ${d} open for this student`, mod.isDayUnlocked(d, done));
+  for (const d of [3, 6, 10]) ok(`scene ${d} open for this student`, mod.isSceneUnlocked(d, done));
+  eq("furthest completed-day pointer = 3", mod.furthestUnlockedDay(done), 3);
 }
 
 /* ---------------- tutor ---------------- */
@@ -379,6 +378,16 @@ g("9b. Hands-free voice tutor");
   // Voice turns request a compact payload (measured 3.3s -> 1.4s).
   ok("voice mode uses a trimmed JSON schema", tut.includes("buildTutorSystem(data.dayId, data.withAudio)"));
   ok("trimmed schema documented with the measurement", tut.includes("3.3s → 1.4s"));
+
+  // Week 2 wiring.
+  const dash = readFileSync("src/routes/liberte-plataforma-834798234728482934254-student.tsx", "utf8");
+  ok("weeks 1-2 open to every student at launch", /: \[1, 2\]/.test(dash));
+  ok("server-side tutor gate honours the launch window", readFileSync("src/lib/tutor.functions.ts", "utf8").includes("dayId <= OPEN_THROUGH_DAY"));
+  ok("weeks without content show 'próximamente'", dash.includes("LAST_WEEK_WITH_CONTENT") && dash.includes("Próximamente"));
+  ok("dashboard respects the student-preview toggle", dash.includes("bypassLocks"));
+  const dayRoute = readFileSync("src/routes/day.$dayId.tsx", "utf8");
+  ok("week-2 final challenge is reachable from day 10", dayRoute.includes('to="/defi-semaine2"'));
+  ok("week-1 challenge still reachable from day 5", dayRoute.includes('params={{ weekId: "1" }}'));
 
   // Mic permission was re-requested every turn (stream killed after each one).
   ok("mic stream reused across turns", aud.includes("keepAlive"));

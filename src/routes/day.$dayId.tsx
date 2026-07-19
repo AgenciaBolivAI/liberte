@@ -863,6 +863,24 @@ function DayPage() {
                 </Link>
               </div>
             )}
+            {/* Week 2's final challenge lives on its own route and had no entry
+                point anywhere in the app — students could only reach it by
+                typing the URL. */}
+            {doneDays.has(10) && activeDay === "10" && !readOnly && (
+              <div className="mt-6 rounded-3xl border-2 border-gold/50 bg-gradient-to-br from-white to-gold/10 p-6 text-center shadow-card">
+                <p className="text-xs font-bold tracking-widest text-gold uppercase">Fin de la Semaine 2</p>
+                <h3 className="mt-1 font-display text-2xl font-extrabold text-navy">🏆 Le Défi Final de la Semaine 2</h3>
+                <p className="mt-1 text-sm text-navy/80">
+                  100 puntos: quiz, vocabulario, escritura y roleplay con la Coach IA — con tu informe PDF al final.
+                </p>
+                <Link
+                  to="/defi-semaine2"
+                  className="mt-4 inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-gold to-[oklch(0.78_0.14_80)] px-6 py-3 font-extrabold text-navy shadow-card transition hover:brightness-105"
+                >
+                  Comenzar mi défi <ArrowRight className="h-4 w-4" />
+                </Link>
+              </div>
+            )}
           </div>
         </main>
       </div>
