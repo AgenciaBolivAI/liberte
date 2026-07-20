@@ -39,20 +39,27 @@ export const Route = createFileRoute("/liberte-plataforma-834798234728482934254-
 
 function Home() {
   const { loading, user, fullName } = useAuth();
-  const { bypassLocks } = useAdminPreview();
+  // "view as student": render the whole dashboard as the chosen student.
+  const { bypassLocks, viewAsUserId, viewAsName } = useAdminPreview();
   const [overrides, setOverrides] = useState<number[]>([]);
   const [lockedWeeks, setLockedWeeks] = useState<number[]>([]);
-  const { stars: totalStars } = useStars();
-  const { days: completedDayIds, weeksCompleted, percent: daysPercent } = useDayCompletions();
+  const { stars: totalStars } = useStars(viewAsUserId);
+  const {
+    days: completedDayIds,
+    weeksCompleted,
+    percent: daysPercent,
+    enrolledAt: viewedEnrolledAt,
+  } = useDayCompletions(viewAsUserId);
+  const dataUserId = viewAsUserId ?? user?.id ?? null;
 
   useEffect(() => {
-    if (!user) return;
+    if (!dataUserId) return;
     Promise.all([
-      supabase.from("week_unlocks").select("week_number").eq("user_id", user.id),
+      supabase.from("week_unlocks").select("week_number").eq("user_id", dataUserId),
       supabase
         .from("content_access")
         .select("scope, target_type, target_id, access")
-        .or(`scope.eq.global,user_id.eq.${user.id}`),
+        .or(`scope.eq.global,user_id.eq.${dataUserId}`),
     ]).then(([wu, ca]) => {
       const fromDb = (wu.data ?? []).map((r) => r.week_number);
       // Admin day/week enable-disable overrides (empty pre-migration).
@@ -75,7 +82,7 @@ function Home() {
       setOverrides(Array.from(open));
       setLockedWeeks(bypassLocks ? [] : locked);
     });
-  }, [user, bypassLocks]);
+  }, [dataUserId, bypassLocks]);
 
   if (loading) {
     return (
@@ -86,7 +93,7 @@ function Home() {
   }
   if (!user) return <AuthPage />;
 
-  const enrolledAt = user.created_at;
+  const enrolledAt = viewedEnrolledAt ?? user.created_at;
   // Consider a week "completed" if it appears in weeksCompleted counter (first N weeks in order).
   const completedWeekNumbers = Array.from({ length: weeksCompleted }, (_, i) => i + 1);
   const base = getWeeks(enrolledAt, overrides, completedWeekNumbers);
@@ -105,6 +112,7 @@ function Home() {
     }
   }
   const studentName =
+    (viewAsName && viewAsName.split(" ")[0]) ||
     (fullName && fullName.split(" ")[0]) ||
     (user?.email ? user.email.split("@")[0] : "Marie");
   const currentWeek = weeks.find((w) => w.isCurrent) ?? weeks[0];

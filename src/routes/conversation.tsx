@@ -14,7 +14,6 @@ import { useDayCompletions } from "@/lib/progress";
 import { speakFr } from "@/lib/speak";
 import { blobToBase64, playBase64Mp3, unlockAudioPlayback, useRecorder } from "@/lib/audio";
 import { transcribeStage } from "@/lib/defi.functions";
-import { getCompletedDays } from "@/lib/week.functions";
 import { effectiveOverride, furthestUnlockedDay, isSceneUnlocked } from "@/lib/unlock";
 import { useContentOverrides } from "@/lib/content-access";
 import { useAdminPreview } from "@/lib/admin-preview";
@@ -57,9 +56,10 @@ function openerBubble(dayId: number): Bubble {
 
 function ConversationPage() {
   const { loading: authLoading, user } = useAuth();
-  const { bypassLocks: isAdmin } = useAdminPreview();
-  const { days } = useDayCompletions();
-  const [defiDays, setDefiDays] = useState<number[]>([]);
+  // "view as student": load the chosen student's progress (read-only — an admin
+  // previewing can see the student's scenes but can't send messages as them).
+  const { bypassLocks: isAdmin, viewAsUserId, readOnly } = useAdminPreview();
+  const { days, defiDays } = useDayCompletions(viewAsUserId);
   const [dayId, setDayId] = useState<number | null>(null);
   const [bubbles, setBubbles] = useState<Bubble[] | null>(null);
   const [input, setInput] = useState("");
@@ -91,7 +91,7 @@ function ConversationPage() {
   const doneDays = useMemo(() => new Set([...days, ...defiDays]), [days, defiDays]);
   // Tutor scenes follow the SAME day/week gating as the lessons — an admin who
   // disables a day or week also disables its matching tutor lesson.
-  const accessOverrides = useContentOverrides();
+  const accessOverrides = useContentOverrides(viewAsUserId);
   const isDayUnlocked = (d: number) =>
     isSceneUnlocked(d, doneDays, { isAdmin, override: effectiveOverride(d, accessOverrides) });
   // Default to the furthest scene the student has actually reached.
@@ -100,21 +100,6 @@ function ConversationPage() {
   const activeDay = dayId ?? furthestDay;
   const scenario = TUTOR_SCENARIOS[activeDay];
   const shownBubbles = bubbles ?? [openerBubble(activeDay)];
-
-  useEffect(() => {
-    if (!user) return;
-    let alive = true;
-    getCompletedDays()
-      .then((d) => {
-        if (alive) setDefiDays(d);
-      })
-      .catch(() => {
-        /* fall back to day_completions only */
-      });
-    return () => {
-      alive = false;
-    };
-  }, [user]);
 
   useEffect(() => {
     if (authLoading || !user) return;
@@ -164,6 +149,7 @@ function ConversationPage() {
   }
 
   async function handleSend(textOverride?: string, opts?: { voice?: boolean }) {
+    if (readOnly) return; // impersonating — read-only preview
     const text = (textOverride ?? input).trim();
     if (!text || sending) return;
     // Pin the scene: `furthestDay` can still change as progress queries resolve,
@@ -285,6 +271,7 @@ function ConversationPage() {
   }
 
   async function toggleVoiceMode() {
+    if (readOnly && !voiceOn) return; // impersonating — read-only preview
     if (voiceOn) {
       voiceOnRef.current = false;
       setVoicePhase("off");
@@ -309,6 +296,7 @@ function ConversationPage() {
   }
 
   async function handleMic() {
+    if (readOnly && !recorder.recording) return; // impersonating — read-only preview
     if (recorder.recording) {
       const blob = await recorder.stop();
       if (!blob) return;
@@ -522,10 +510,15 @@ function ConversationPage() {
                       <span className="block text-[10px] text-blue">Toca para usar esta frase ↑</span>
                     </button>
                   )}
+                  {readOnly && (
+                    <p className="mb-2 text-center text-xs text-navy/60">
+                      👀 Vista de solo lectura — no puedes enviar mensajes como este alumno.
+                    </p>
+                  )}
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => void handleMic()}
-                      disabled={transcribing || sending}
+                      disabled={transcribing || sending || readOnly}
                       aria-label={recorder.recording ? "Detener grabación" : "Grabar audio"}
                       className={`grid h-11 w-11 shrink-0 place-items-center rounded-full text-white transition ${
                         recorder.recording ? "animate-pulse bg-red" : "bg-navy hover:bg-navy/85"
@@ -559,12 +552,12 @@ function ConversationPage() {
                         }
                       }}
                       placeholder={recorder.recording ? "Grabando… habla en francés 🎙️" : "Écris en français…"}
-                      disabled={sending}
+                      disabled={sending || readOnly}
                       className="h-11 rounded-full border-border bg-white"
                     />
                     <Button
                       onClick={() => void handleSend()}
-                      disabled={sending || !input.trim()}
+                      disabled={sending || !input.trim() || readOnly}
                       aria-label="Enviar"
                       className="h-11 w-11 shrink-0 rounded-full bg-gradient-blue p-0 text-white"
                     >

@@ -3,6 +3,8 @@ import { TopNav } from "@/components/TopNav";
 import parisBg from "@/assets/paris-map-bg.jpg";
 import { Star, Flame, Trophy, Calendar } from "lucide-react";
 import { useStars, useDayCompletions, TOTAL_DAYS, TOTAL_WEEKS } from "@/lib/progress";
+import { useAdminPreview } from "@/lib/admin-preview";
+import { AdminPreviewBanner } from "@/components/AdminPreviewBanner";
 
 export const Route = createFileRoute("/progress")({
   head: () => ({ meta: [{ title: "Mi progreso — Liberté" }] }),
@@ -10,8 +12,10 @@ export const Route = createFileRoute("/progress")({
 });
 
 function ProgressPage() {
-  const { stars } = useStars();
-  const { days, weeksCompleted, percent, streak } = useDayCompletions();
+  // "view as student": show the chosen student's progress (read-only).
+  const { viewAsUserId } = useAdminPreview();
+  const { stars } = useStars(viewAsUserId);
+  const { days, weeksCompleted, percent, streak } = useDayCompletions(viewAsUserId);
 
   const stats = [
     {
@@ -57,6 +61,7 @@ function ProgressPage() {
     >
       <TopNav />
       <main className="mx-auto max-w-5xl px-4 py-8 sm:px-6 sm:py-10">
+        <AdminPreviewBanner />
         <h1 className="font-display text-3xl font-extrabold text-white sm:text-4xl">⭐ Mi progreso</h1>
         <p className="mt-1 text-sm text-white/80 sm:text-base">Mira lo lejos que has llegado.</p>
 

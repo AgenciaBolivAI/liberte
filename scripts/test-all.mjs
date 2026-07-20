@@ -587,6 +587,19 @@ g("12. Regressions (bugs found in audit — must stay fixed)");
   ok("preview syncs across tabs", prev.includes('addEventListener("storage"'));
   ok("preview has SSR snapshot", prev.includes("getServerSnapshot"));
 
+  // "View as student" must work app-wide, not just in the lesson player.
+  const progHooks = readFileSync("src/lib/progress.ts", "utf8");
+  ok("progress hooks accept a target user", progHooks.includes("useStars(targetUserId") && progHooks.includes("useDayCompletions(targetUserId"));
+  ok("impersonation reads via service-role snapshot", progHooks.includes("getStudentSnapshot({ data: { userId: targetUserId } })"));
+  ok("snapshot carries enrolledAt + completions", readFileSync("src/lib/admin.functions.ts", "utf8").includes("createdAt") && readFileSync("src/lib/admin.functions.ts", "utf8").includes("completions: completionRows"));
+  const dashImp = readFileSync("src/routes/liberte-plataforma-834798234728482934254-student.tsx", "utf8");
+  ok("dashboard renders the viewed student", dashImp.includes("useDayCompletions(viewAsUserId)") && dashImp.includes("useStars(viewAsUserId)"));
+  ok("dashboard reads unlocks/overrides for the viewed student", dashImp.includes("dataUserId"));
+  const convImp = readFileSync("src/routes/conversation.tsx", "utf8");
+  ok("tutor renders the viewed student", convImp.includes("useDayCompletions(viewAsUserId)"));
+  ok("tutor send is read-only while impersonating", convImp.includes("if (readOnly) return; // impersonating"));
+  ok("progress page renders the viewed student", readFileSync("src/routes/progress.tsx", "utf8").includes("useDayCompletions(viewAsUserId)"));
+
   // #3 lead form must not fake success.
   const idx = readFileSync("src/routes/index.tsx", "utf8");
   ok("lead form only treats 502 as saved", idx.includes("res.status === 502"));

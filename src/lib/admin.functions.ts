@@ -81,8 +81,10 @@ export type StudentSnapshot = {
   profile: { id: string; full_name: string; email: string | null } | null;
   dayStates: { day_id: number; done_lessons: string[]; current_lesson: string | null; stars: number }[];
   completedDays: number[];
+  completions: { day_id: number; completed_at: string }[];
   defiDays: number[];
   stars: number;
+  createdAt: string | null;
 };
 
 /** Roster for the "view as" picker. */
@@ -111,12 +113,16 @@ export const getStudentSnapshot = createServerFn({ method: "POST" })
     await requireAdmin(context as Ctx);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const [profile, dayStates, completions, defis, stars] = await Promise.all([
-      supabaseAdmin.from("profiles").select("id, full_name, email").eq("id", data.userId).maybeSingle(),
+      supabaseAdmin.from("profiles").select("id, full_name, email, created_at").eq("id", data.userId).maybeSingle(),
       supabaseAdmin.from("day_state").select("day_id, done_lessons, current_lesson, stars").eq("user_id", data.userId),
-      supabaseAdmin.from("day_completions").select("day_id").eq("user_id", data.userId),
+      supabaseAdmin.from("day_completions").select("day_id, completed_at").eq("user_id", data.userId).order("completed_at", { ascending: true }),
       supabaseAdmin.from("defi_results").select("day_id").eq("user_id", data.userId),
       supabaseAdmin.from("star_awards").select("amount").eq("user_id", data.userId),
     ]);
+    const completionRows = ((completions.data ?? []) as { day_id: number; completed_at: string }[]).map((r) => ({
+      day_id: Number(r.day_id),
+      completed_at: String(r.completed_at ?? ""),
+    }));
     return {
       profile: (profile.data ?? null) as StudentSnapshot["profile"],
       dayStates: ((dayStates.data ?? []) as unknown[]).map((r) => {
@@ -128,9 +134,11 @@ export const getStudentSnapshot = createServerFn({ method: "POST" })
           stars: Number(row.stars ?? 0),
         };
       }),
-      completedDays: (completions.data ?? []).map((r) => Number(r.day_id)),
+      completedDays: completionRows.map((r) => r.day_id),
+      completions: completionRows,
       defiDays: (defis.data ?? []).map((r) => Number(r.day_id)),
       stars: (stars.data ?? []).reduce((s, r) => s + Number(r.amount ?? 0), 0),
+      createdAt: (profile.data as { created_at?: string } | null)?.created_at ?? null,
     };
   });
 

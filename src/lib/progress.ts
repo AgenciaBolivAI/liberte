@@ -8,12 +8,27 @@ export const DAYS_PER_WEEK = 5;
 
 type DayCompletion = { day_id: number; week_number: number; completed_at: string };
 
-export function useStars() {
+// When `targetUserId` is passed (an admin previewing "view as student"), the
+// browser client can't read another user's rows under RLS, so we pull the data
+// through the service-role snapshot server fn instead. Strictly read-only.
+
+export function useStars(targetUserId?: string | null) {
   const { user } = useAuth();
   const [stars, setStars] = useState(0);
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
+    if (targetUserId) {
+      try {
+        const { getStudentSnapshot } = await import("@/lib/admin.functions");
+        const snap = await getStudentSnapshot({ data: { userId: targetUserId } });
+        setStars(snap.stars);
+      } catch {
+        setStars(0);
+      }
+      setLoading(false);
+      return;
+    }
     if (!user) {
       setStars(0);
       setLoading(false);
@@ -25,7 +40,7 @@ export function useStars() {
       .eq("user_id", user.id);
     setStars((data ?? []).reduce((s, r) => s + (r.amount ?? 0), 0));
     setLoading(false);
-  }, [user]);
+  }, [user, targetUserId]);
 
   useEffect(() => {
     void refresh();
@@ -34,25 +49,55 @@ export function useStars() {
   return { stars, loading, refresh };
 }
 
-export function useDayCompletions() {
+export function useDayCompletions(targetUserId?: string | null) {
   const { user } = useAuth();
   const [rows, setRows] = useState<DayCompletion[]>([]);
+  const [defiDays, setDefiDays] = useState<number[]>([]);
+  const [enrolledAt, setEnrolledAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
-    if (!user) {
-      setRows([]);
+    if (targetUserId) {
+      try {
+        const { getStudentSnapshot } = await import("@/lib/admin.functions");
+        const snap = await getStudentSnapshot({ data: { userId: targetUserId } });
+        setRows(
+          snap.completions.map((c) => ({
+            day_id: c.day_id,
+            week_number: Math.ceil(c.day_id / DAYS_PER_WEEK),
+            completed_at: c.completed_at,
+          })),
+        );
+        setDefiDays(snap.defiDays);
+        setEnrolledAt(snap.createdAt);
+      } catch {
+        setRows([]);
+        setDefiDays([]);
+        setEnrolledAt(null);
+      }
       setLoading(false);
       return;
     }
-    const { data } = await supabase
-      .from("day_completions")
-      .select("day_id, week_number, completed_at")
-      .eq("user_id", user.id)
-      .order("completed_at", { ascending: true });
-    setRows((data as DayCompletion[]) ?? []);
+    if (!user) {
+      setRows([]);
+      setDefiDays([]);
+      setEnrolledAt(null);
+      setLoading(false);
+      return;
+    }
+    const [dc, dr] = await Promise.all([
+      supabase
+        .from("day_completions")
+        .select("day_id, week_number, completed_at")
+        .eq("user_id", user.id)
+        .order("completed_at", { ascending: true }),
+      supabase.from("defi_results").select("day_id").eq("user_id", user.id),
+    ]);
+    setRows((dc.data as DayCompletion[]) ?? []);
+    setDefiDays(Array.from(new Set((dr.data ?? []).map((r) => Number(r.day_id)))));
+    setEnrolledAt(user.created_at ?? null);
     setLoading(false);
-  }, [user]);
+  }, [user, targetUserId]);
 
   useEffect(() => {
     void refresh();
@@ -63,7 +108,7 @@ export function useDayCompletions() {
   const percent = Math.round((days.length / TOTAL_DAYS) * 100);
   const streak = computeStreak(rows.map((r) => r.completed_at));
 
-  return { rows, days, weeksCompleted, percent, streak, loading, refresh };
+  return { rows, days, defiDays, enrolledAt, weeksCompleted, percent, streak, loading, refresh };
 }
 
 /** Local calendar day (YYYY-MM-DD) — must match the local midnight used below,
@@ -76,9 +121,10 @@ function localDayKey(d: Date): string {
 }
 
 function computeStreak(dates: string[]): number {
-  if (dates.length === 0) return 0;
+  const valid = dates.filter((d) => d && !Number.isNaN(new Date(d).getTime()));
+  if (valid.length === 0) return 0;
   const uniq = Array.from(
-    new Set(dates.map((d) => localDayKey(new Date(d)))),
+    new Set(valid.map((d) => localDayKey(new Date(d)))),
   ).sort();
   let streak = 1;
   let best = 1;
