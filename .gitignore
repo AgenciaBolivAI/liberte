@@ -21,6 +21,11 @@ dist-ssr
 .env.*
 !.env.example
 
+# Database exports — contain student PII and signed download URLs
+db-export/
+*.backup
+backup-csv/
+
 # Wrangler / Cloudflare
 .wrangler/
 .dev.vars

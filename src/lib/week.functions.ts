@@ -194,7 +194,10 @@ Reglas:
 
     const daysCompleted = new Set(defiRows.map((d) => d.day_id)).size;
 
-    await context.supabase
+    // Service role: weekly_evaluations holds the AI score that fires the
+    // +3-stars trigger, so students must not write it directly.
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    await supabaseAdmin
       .from("weekly_evaluations")
       .upsert(
         {
@@ -226,7 +229,8 @@ export const markWeeklyPdfGenerated = createServerFn({ method: "POST" })
     return { weekNumber: Number(d?.weekNumber ?? 1) };
   })
   .handler(async ({ data, context }) => {
-    await context.supabase
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    await supabaseAdmin
       .from("weekly_evaluations")
       .update({ pdf_generated: true, pdf_generated_at: new Date().toISOString() })
       .eq("user_id", context.userId)

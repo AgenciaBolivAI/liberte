@@ -16,8 +16,19 @@ REVOKE ALL ON FUNCTION public.move_to_dlq(text, text, bigint, jsonb) FROM PUBLIC
 REVOKE ALL ON FUNCTION public.delete_email(text, bigint) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.enqueue_email(text, jsonb) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.read_email_batch(text, integer, integer) FROM PUBLIC, anon, authenticated;
-REVOKE ALL ON FUNCTION public.email_queue_wake() FROM PUBLIC, anon, authenticated;
-REVOKE ALL ON FUNCTION public.email_queue_dispatch() FROM PUBLIC, anon, authenticated;
+-- These two are created out-of-band by Lovable's "setup_email_infra" step
+-- (pg_cron + vault), so they may not exist on a fresh project. Guard the
+-- REVOKEs so the migration set can rebuild a database from scratch.
+DO $$
+BEGIN
+  EXECUTE 'REVOKE ALL ON FUNCTION public.email_queue_wake() FROM PUBLIC, anon, authenticated';
+EXCEPTION WHEN undefined_function THEN NULL;
+END $$;
+DO $$
+BEGIN
+  EXECUTE 'REVOKE ALL ON FUNCTION public.email_queue_dispatch() FROM PUBLIC, anon, authenticated';
+EXCEPTION WHEN undefined_function THEN NULL;
+END $$;
 REVOKE ALL ON FUNCTION public.handle_new_user() FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.get_week_defi_summary(uuid, integer, integer) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.has_role(uuid, public.app_role) FROM PUBLIC, anon;

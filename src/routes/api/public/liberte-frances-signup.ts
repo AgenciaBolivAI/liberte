@@ -1,12 +1,18 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 
-const bodySchema = z.object({
-  full_name: z.string().trim().min(2).max(100),
-  email: z.string().trim().email().max(255),
-  nationality: z.string().trim().min(2).max(80).optional(),
-  phone: z.string().trim().min(6).max(30).optional(),
-});
+// `.strict()` rejects a body padded with extra junk keys (a way to bloat the
+// request into isolate memory). CRLF is stripped so no field can inject an
+// email header downstream.
+const noCRLF = (s: string) => s.replace(/[\r\n]+/g, " ");
+const bodySchema = z
+  .object({
+    full_name: z.string().trim().transform(noCRLF).pipe(z.string().min(2).max(100)),
+    email: z.string().trim().email().max(255),
+    nationality: z.string().trim().transform(noCRLF).pipe(z.string().min(2).max(80)).optional(),
+    phone: z.string().trim().transform(noCRLF).pipe(z.string().min(6).max(30)).optional(),
+  })
+  .strict();
 
 // User-supplied fields are interpolated into email HTML — escape them so a
 // crafted name/phone can't inject markup into the emails we send.
@@ -114,6 +120,12 @@ export const Route = createFileRoute("/api/public/liberte-frances-signup")({
           );
         }
 
+        // Cap body size before parsing so a padded payload can't balloon memory.
+        const len = Number(request.headers.get("content-length") ?? "0");
+        if (len > 8_192) {
+          return Response.json({ error: "Datos inválidos" }, { status: 400 });
+        }
+
         let json: unknown;
         try {
           json = await request.json();
@@ -123,10 +135,8 @@ export const Route = createFileRoute("/api/public/liberte-frances-signup")({
 
         const parsed = bodySchema.safeParse(json);
         if (!parsed.success) {
-          return Response.json(
-            { error: "Datos inválidos", details: parsed.error.issues },
-            { status: 400 },
-          );
+          // Do not echo zod internals (field names / constraints) back to callers.
+          return Response.json({ error: "Datos inválidos" }, { status: 400 });
         }
 
         const { full_name, email, nationality, phone } = parsed.data;
@@ -158,15 +168,13 @@ export const Route = createFileRoute("/api/public/liberte-frances-signup")({
           return Response.json({ error: "No pudimos guardar tus datos" }, { status: 500 });
         }
 
-        if (existing) {
-          const { error: updErr } = await supabase
-            .from("leads")
-            .update({ full_name, nationality, phone, status: "pending" })
-            .eq("id", existing.id);
-          if (updErr) {
-            console.error("Lead update failed", updErr);
-          }
-        } else {
+        // Insert-only. This endpoint is anonymous, so it must NEVER update an
+        // existing row: anyone who knows a student's email could otherwise
+        // overwrite their name/phone. A repeat submission of a known email is a
+        // silent no-op, and — critically — does NOT re-send any email, which
+        // removes the "loop one address to spam" amplification.
+        const isNewLead = !existing;
+        if (isNewLead) {
           const { error: insErr } = await supabase
             .from("leads")
             .insert({ full_name, email: emailLc, nationality, phone, status: "pending" });
@@ -174,6 +182,12 @@ export const Route = createFileRoute("/api/public/liberte-frances-signup")({
             console.error("Lead insert failed", insErr);
             return Response.json({ error: "No pudimos guardar tus datos" }, { status: 500 });
           }
+        }
+
+        // Nothing new to notify about — return success without sending mail, so
+        // a known email cannot be used to trigger repeated sends.
+        if (!isNewLead) {
+          return Response.json({ ok: true, emailed: false });
         }
 
         // 2. Send welcome email via the Resend API
@@ -246,8 +260,11 @@ export const Route = createFileRoute("/api/public/liberte-frances-signup")({
             body: JSON.stringify({
               from: "Liberté <hola@libertefrances.com>",
               to: ["libertedirec@gmail.com"],
-              reply_to: email,
-              subject: `Nuevo alumno: ${full_name}`,
+              // Static subject/reply-to: full_name is attacker-controlled and a
+              // CRLF in it could otherwise inject email headers or send the
+              // admin's reply to the attacker.
+              reply_to: "hola@libertefrances.com",
+              subject: "Nuevo registro en Liberté",
               html: adminHtml,
             }),
           }).then(async (r) => {

@@ -233,7 +233,12 @@ Tono cálido, profesional, en español.`;
       note: parsed.stages?.[i]?.note ?? "",
     }));
 
-    const { error: upErr } = await context.supabase
+    // Written with the service role, never the user client: defi_results holds
+    // AI-computed scores that fire a star-award trigger, so students must not
+    // be able to insert their own rows (which would mint stars). user_id is
+    // pinned to the authenticated caller.
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { error: upErr } = await supabaseAdmin
       .from("defi_results")
       .upsert(
         {
@@ -253,7 +258,7 @@ Tono cálido, profesional, en español.`;
       );
     if (upErr) {
       // fall back to plain insert if no unique — non-fatal for UX
-      await context.supabase.from("defi_results").insert({
+      await supabaseAdmin.from("defi_results").insert({
         user_id: context.userId,
         day_id: data.dayId,
         score_10: score,

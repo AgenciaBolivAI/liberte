@@ -136,7 +136,7 @@ export const saveWeek2Result = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) => input as Week2Report)
   .handler(async ({ data, context }) => {
-    const { supabase, userId } = context;
+    const { userId } = context;
     const payload = {
       user_id: userId,
       week_number: 2,
@@ -152,7 +152,10 @@ export const saveWeek2Result = createServerFn({ method: "POST" })
       ai_report: {} as Record<string, unknown>,
       responses: (data.responses ?? {}) as Record<string, unknown>,
     };
-    const { error } = await supabase
+    // Service role: this row fires the weekly star trigger; students must not
+    // write it directly.
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { error } = await supabaseAdmin
       .from("weekly_evaluations")
       .upsert(payload as never, { onConflict: "user_id,week_number" });
     if (error) throw new Error(error.message);

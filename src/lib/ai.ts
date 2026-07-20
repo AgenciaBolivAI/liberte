@@ -17,6 +17,13 @@ export const TTS_VOICE = "shimmer";
 
 export type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
 
+// Hard ceiling on generated tokens so a single request can never run away and
+// bill unbounded output. All tutor/grading JSON responses fit well under this.
+export const MAX_OUTPUT_TOKENS = 1500;
+// Reject oversized audio before we decode it in memory (base64 chars). ~8 MB
+// of base64 ≈ 6 MB of audio, far more than any legitimate 30s clip.
+export const MAX_AUDIO_B64 = 8_000_000;
+
 export function requireOpenAIKey(): string {
   const k = process.env.OPENAI_API_KEY;
   if (!k) {
@@ -48,6 +55,7 @@ export async function callChat(
       model: opts?.model ?? CHAT_MODEL,
       messages,
       response_format: { type: "json_object" },
+      max_tokens: MAX_OUTPUT_TOKENS,
     }),
   });
   if (!res.ok) {
@@ -96,6 +104,11 @@ export async function speakFrenchBase64(text: string): Promise<string> {
 
 export async function transcribeFr(audioBase64: string, mimeType: string): Promise<string> {
   const key = requireOpenAIKey();
+  // Reject oversized payloads BEFORE decoding — a huge base64 string would
+  // otherwise materialize hundreds of MB in memory per concurrent request.
+  if (audioBase64.length > MAX_AUDIO_B64) {
+    throw new Error("Audio demasiado largo.");
+  }
   const bin = atob(audioBase64);
   const bytes = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);

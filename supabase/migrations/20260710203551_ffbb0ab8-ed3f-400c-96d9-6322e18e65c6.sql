@@ -1,13 +1,25 @@
+-- DISABLED 2026-07-18.
+--
+-- This was a one-off "wipe all test data" reset run during early development.
+-- It deleted every row in every app table AND all of auth.users.
+--
+-- It is neutered rather than deleted so the migration history stays intact for
+-- databases that already applied it. Re-running the migration set against a
+-- database that holds real students — for example when rebuilding on a new
+-- Supabase project and then importing the cohort — would otherwise destroy
+-- every account and all progress.
+--
+-- Original statements, kept for the record:
+--   DELETE FROM public.weekly_evaluations;
+--   DELETE FROM public.activity_results;
+--   DELETE FROM public.defi_results;
+--   DELETE FROM public.week_unlocks;
+--   DELETE FROM public.user_roles;
+--   DELETE FROM public.email_send_log;
+--   DELETE FROM public.email_unsubscribe_tokens;
+--   DELETE FROM public.suppressed_emails;
+--   DELETE FROM public.leads;
+--   DELETE FROM public.profiles;
+--   DELETE FROM auth.users;
 
--- Wipe all test data
-DELETE FROM public.weekly_evaluations;
-DELETE FROM public.activity_results;
-DELETE FROM public.defi_results;
-DELETE FROM public.week_unlocks;
-DELETE FROM public.user_roles;
-DELETE FROM public.email_send_log;
-DELETE FROM public.email_unsubscribe_tokens;
-DELETE FROM public.suppressed_emails;
-DELETE FROM public.leads;
-DELETE FROM public.profiles;
-DELETE FROM auth.users;
+SELECT 1;
