@@ -11,6 +11,7 @@ import { es } from "date-fns/locale";
 import { StudentDetailPanel } from "@/components/StudentDetailPanel";
 import { AdminAnalytics } from "@/components/AdminAnalytics";
 import { ApprovalQueue } from "@/components/ApprovalQueue";
+import { ContentAccessManager } from "@/components/ContentAccessManager";
 import { Toaster } from "@/components/ui/sonner";
 
 export const Route = createFileRoute("/liberte-profesor-panel-9382745-admin")({
@@ -205,6 +206,8 @@ function TeacherPanel() {
         <ApprovalQueue />
 
         <AdminAnalytics />
+
+        <ContentAccessManager students={students} />
 
         <div className="mb-4 flex flex-wrap gap-3">
           <input

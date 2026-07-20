@@ -11,6 +11,7 @@ import {
 import {
   AlertCircle,
   Calendar,
+  Download,
   Flame,
   Loader2,
   MessageCircle,
@@ -21,6 +22,7 @@ import {
   Trophy,
   UserPlus,
   Users,
+  X,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
@@ -34,6 +36,7 @@ import {
 } from "@/components/ui/chart";
 import { Button } from "@/components/ui/button";
 import { getAdminAnalytics, type AdminAnalytics as Analytics, type Delta, type Range } from "@/lib/admin.functions";
+import { generateAnalyticsPdf } from "@/lib/analyticsPdf";
 
 // Deepened brand hues, palette-validated on the white card surface
 // (lightness band, chroma, CVD separation, 3:1 contrast — all pass).
@@ -80,6 +83,7 @@ export function AdminAnalytics() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
+  const [drill, setDrill] = useState<string | null>(null);
   const [, setTick] = useState(0);
   const rangeRef = useRef(range);
   rangeRef.current = range;
@@ -155,6 +159,20 @@ export function AdminAnalytics() {
           >
             <RefreshCw className="mr-1 h-3.5 w-3.5" /> Actualizar
           </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={!data}
+            onClick={() => {
+              if (!data) return;
+              generateAnalyticsPdf(data).save(
+                `liberte-analitica-${range}-${new Date().toISOString().slice(0, 10)}.pdf`,
+              );
+            }}
+            className="h-8 rounded-full border-white/30 bg-white/10 text-white hover:bg-white/20 disabled:opacity-50"
+          >
+            <Download className="mr-1 h-3.5 w-3.5" /> PDF
+          </Button>
         </div>
       </div>
 
@@ -177,13 +195,13 @@ export function AdminAnalytics() {
       {data && (
         <>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <Kpi icon={<UserPlus className="h-4 w-4" />} label="Cuentas nuevas" delta={data.kpis.newStudents} range={range} />
-            <Kpi icon={<MessageCircle className="h-4 w-4" />} label="Leads nuevos" delta={data.kpis.newLeads} range={range} />
-            <Kpi icon={<Users className="h-4 w-4" />} label="Alumnos activos" delta={data.kpis.activeStudents} range={range} />
-            <Kpi icon={<Calendar className="h-4 w-4" />} label="Días completados" delta={data.kpis.daysCompleted} range={range} />
-            <Kpi icon={<Star className="h-4 w-4" />} label="Estrellas otorgadas" delta={data.kpis.starsAwarded} range={range} />
-            <Kpi icon={<Trophy className="h-4 w-4" />} label="Nota media défi" delta={data.kpis.avgDefiScore} range={range} suffix="/10" />
-            <Kpi icon={<Flame className="h-4 w-4" />} label="Mensajes al tutor IA" delta={data.kpis.tutorMessages} range={range} />
+            <Kpi icon={<UserPlus className="h-4 w-4" />} label="Cuentas nuevas" delta={data.kpis.newStudents} range={range} active={drill === "newStudents"} onSelect={() => setDrill(drill === "newStudents" ? null : "newStudents")} />
+            <Kpi icon={<MessageCircle className="h-4 w-4" />} label="Leads nuevos" delta={data.kpis.newLeads} range={range} active={drill === "newLeads"} onSelect={() => setDrill(drill === "newLeads" ? null : "newLeads")} />
+            <Kpi icon={<Users className="h-4 w-4" />} label="Alumnos activos" delta={data.kpis.activeStudents} range={range} active={drill === "activeStudents"} onSelect={() => setDrill(drill === "activeStudents" ? null : "activeStudents")} />
+            <Kpi icon={<Calendar className="h-4 w-4" />} label="Días completados" delta={data.kpis.daysCompleted} range={range} active={drill === "daysCompleted"} onSelect={() => setDrill(drill === "daysCompleted" ? null : "daysCompleted")} />
+            <Kpi icon={<Star className="h-4 w-4" />} label="Estrellas otorgadas" delta={data.kpis.starsAwarded} range={range} active={drill === "starsAwarded"} onSelect={() => setDrill(drill === "starsAwarded" ? null : "starsAwarded")} />
+            <Kpi icon={<Trophy className="h-4 w-4" />} label="Nota media défi" delta={data.kpis.avgDefiScore} range={range} suffix="/10" active={drill === "avgDefiScore"} onSelect={() => setDrill(drill === "avgDefiScore" ? null : "avgDefiScore")} />
+            <Kpi icon={<Flame className="h-4 w-4" />} label="Mensajes al tutor IA" delta={data.kpis.tutorMessages} range={range} active={drill === "tutorMessages"} onSelect={() => setDrill(drill === "tutorMessages" ? null : "tutorMessages")} />
             <div className="rounded-2xl border border-white/15 bg-card p-4 shadow-card">
               <div className="flex items-center gap-2 text-muted-foreground">
                 <UserPlus className="h-4 w-4" />
@@ -199,6 +217,8 @@ export function AdminAnalytics() {
               </p>
             </div>
           </div>
+
+          {drill && <DrillPanel metric={drill} data={data} onClose={() => setDrill(null)} />}
 
           <div className="mt-4 grid gap-4 lg:grid-cols-2">
             <div className="rounded-3xl border border-white/15 bg-card p-5 shadow-card">
@@ -338,26 +358,166 @@ export function AdminAnalytics() {
   );
 }
 
+const DRILL_TITLE: Record<string, string> = {
+  newStudents: "Cuentas nuevas",
+  newLeads: "Leads nuevos",
+  activeStudents: "Alumnos activos",
+  daysCompleted: "Días completados",
+  starsAwarded: "Estrellas otorgadas",
+  avgDefiScore: "Nota media défi",
+  tutorMessages: "Mensajes al tutor IA",
+};
+
+function DrillPanel({ metric, data, onClose }: { metric: string; data: Analytics; onClose: () => void }) {
+  const title = DRILL_TITLE[metric] ?? metric;
+  const series: { date: string; value: number }[] =
+    metric === "newStudents"
+      ? data.growthSeries.map((r) => ({ date: r.date, value: r.signups }))
+      : metric === "newLeads"
+        ? data.growthSeries.map((r) => ({ date: r.date, value: r.leads }))
+        : metric === "daysCompleted"
+          ? data.activitySeries.map((r) => ({ date: r.date, value: r.completions }))
+          : metric === "avgDefiScore"
+            ? data.activitySeries.map((r) => ({ date: r.date, value: r.defis }))
+            : [];
+  const seriesLabel = metric === "avgDefiScore" ? "Défis por día" : "Por día";
+  const showStudents = metric === "activeStudents" || metric === "daysCompleted" || metric === "avgDefiScore";
+  const showStars = metric === "starsAwarded";
+  const feedType = metric === "newStudents" ? "signup" : metric === "newLeads" ? "lead" : null;
+  const feed = feedType ? data.recentActivity.filter((f) => f.type === feedType) : [];
+  const hasSeriesData = series.some((r) => r.value > 0);
+
+  return (
+    <div className="mt-4 rounded-3xl border border-blue/30 bg-card p-5 shadow-card">
+      <div className="mb-3 flex items-center justify-between">
+        <h3 className="font-display text-sm font-extrabold text-navy">🔎 Detalle · {title}</h3>
+        <button
+          onClick={onClose}
+          aria-label="Cerrar detalle"
+          className="rounded-full p-1.5 text-navy/60 transition hover:bg-ice"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2">
+        {series.length > 0 && (
+          <div>
+            <p className="mb-1 text-[11px] font-bold tracking-widest text-muted-foreground uppercase">{seriesLabel}</p>
+            <div className="max-h-56 overflow-y-auto rounded-xl border border-border">
+              {!hasSeriesData ? (
+                <p className="p-3 text-xs text-muted-foreground">Sin datos en el periodo.</p>
+              ) : (
+                <table className="w-full text-xs">
+                  <tbody>
+                    {series.map((r) => (
+                      <tr key={r.date} className="border-b border-border/60 last:border-0">
+                        <td className="px-3 py-1.5 text-navy/70">{r.date}</td>
+                        <td className="px-3 py-1.5 text-right font-bold text-navy">{r.value}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        )}
+        {showStudents && (
+          <div>
+            <p className="mb-1 text-[11px] font-bold tracking-widest text-muted-foreground uppercase">Top alumnos</p>
+            {data.topStudents.length === 0 ? (
+              <p className="text-xs text-muted-foreground">Sin datos.</p>
+            ) : (
+              <ul className="space-y-1">
+                {data.topStudents.map((s, i) => (
+                  <li key={s.id} className="flex items-center justify-between gap-2 text-xs">
+                    <span className="truncate text-navy">
+                      {i + 1}. {s.name}
+                    </span>
+                    <span className="shrink-0 text-muted-foreground">
+                      {s.stars} ⭐ · {s.days} d
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+        {showStars && (
+          <div>
+            <p className="mb-1 text-[11px] font-bold tracking-widest text-muted-foreground uppercase">Por motivo</p>
+            {data.starsByReason.length === 0 ? (
+              <p className="text-xs text-muted-foreground">Sin estrellas en el periodo.</p>
+            ) : (
+              <ul className="space-y-1">
+                {data.starsByReason.map((r) => (
+                  <li key={r.reason} className="flex items-center justify-between text-xs">
+                    <span className="text-navy">{REASON_LABEL[r.reason] ?? r.reason}</span>
+                    <span className="font-bold text-navy">{r.total}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+        {feed.length > 0 && (
+          <div>
+            <p className="mb-1 text-[11px] font-bold tracking-widest text-muted-foreground uppercase">Recientes</p>
+            <ul className="max-h-56 space-y-1 overflow-y-auto">
+              {feed.slice(0, 12).map((f, i) => (
+                <li key={i} className="flex items-center justify-between gap-2 text-xs">
+                  <span className="truncate text-navy">{f.who}</span>
+                  <span className="shrink-0 text-muted-foreground">
+                    {new Date(f.at).toLocaleDateString("es", { day: "numeric", month: "short" })}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {metric === "tutorMessages" && (
+          <p className="text-xs text-muted-foreground">
+            {data.kpis.tutorMessages.value} mensajes en el periodo. El desglose por alumno estará disponible próximamente.
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function Kpi({
   icon,
   label,
   delta,
   range,
   suffix = "",
+  active = false,
+  onSelect,
 }: {
   icon: React.ReactNode;
   label: string;
   delta: Delta;
   range: Range;
   suffix?: string;
+  active?: boolean;
+  onSelect?: () => void;
 }) {
   const diff = delta.value - delta.prev;
   const showDelta = range !== "all" && (delta.prev !== 0 || delta.value !== 0);
   return (
-    <div className="rounded-2xl border border-white/15 bg-card p-4 shadow-card">
-      <div className="flex items-center gap-2 text-muted-foreground">
-        {icon}
-        <span className="text-[10px] font-bold tracking-widest uppercase">{label}</span>
+    <button
+      type="button"
+      onClick={onSelect}
+      aria-pressed={active}
+      className={`rounded-2xl border bg-card p-4 text-left shadow-card transition hover:border-blue/50 hover:shadow-lg ${
+        active ? "border-blue ring-1 ring-blue" : "border-white/15"
+      }`}
+    >
+      <div className="flex items-center justify-between gap-2 text-muted-foreground">
+        <span className="flex items-center gap-2">
+          {icon}
+          <span className="text-[10px] font-bold tracking-widest uppercase">{label}</span>
+        </span>
+        <span className="text-[9px] font-semibold text-blue opacity-0 transition group-hover:opacity-100">ver</span>
       </div>
       <p className="mt-1 font-display text-2xl font-extrabold text-navy">
         {delta.value}
@@ -374,6 +534,6 @@ function Kpi({
           {suffix ? diff.toFixed(1) : diff} vs período anterior
         </p>
       )}
-    </div>
+    </button>
   );
 }

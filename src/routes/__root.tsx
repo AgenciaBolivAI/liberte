@@ -14,6 +14,7 @@ import { reportLovableError } from "../lib/lovable-error-reporting";
 import { IntroSplash } from "@/components/IntroSplash";
 import { AuthProvider } from "@/lib/auth-context";
 import { AuthGate } from "@/components/AuthGate";
+import { TutorMascot } from "@/components/TutorMascot";
 
 
 function NotFoundComponent() {
@@ -131,6 +132,7 @@ function RootComponent() {
           {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
           <Outlet />
         </AuthGate>
+        <TutorMascot />
       </AuthProvider>
     </QueryClientProvider>
   );

@@ -119,6 +119,39 @@ export type Database = {
         }
         Relationships: []
       }
+      content_access: {
+        Row: {
+          access: string
+          id: string
+          scope: string
+          set_by: string | null
+          target_id: number
+          target_type: string
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          access: string
+          id?: string
+          scope: string
+          set_by?: string | null
+          target_id: number
+          target_type: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          access?: string
+          id?: string
+          scope?: string
+          set_by?: string | null
+          target_id?: number
+          target_type?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       day_completions: {
         Row: {
           completed_at: string

@@ -18,6 +18,8 @@ import bonVoyageMobileBanner from "@/assets/bon-voyage-mobile-banner.png.asset.j
 import mascot from "@/assets/liberte-mascot.png.asset.json";
 import { useAuth } from "@/lib/auth-context";
 import { supabase } from "@/integrations/supabase/client";
+import { weekOverride } from "@/lib/content-access";
+import type { AccessOverride } from "@/lib/unlock";
 import { useDayCompletions, useStars, TOTAL_WEEKS, DAYS_PER_WEEK, TOTAL_DAYS } from "@/lib/progress";
 import { UpcomingClassPopup } from "@/components/UpcomingClassPopup";
 
@@ -39,28 +41,40 @@ function Home() {
   const { loading, user, fullName } = useAuth();
   const { bypassLocks } = useAdminPreview();
   const [overrides, setOverrides] = useState<number[]>([]);
+  const [lockedWeeks, setLockedWeeks] = useState<number[]>([]);
   const { stars: totalStars } = useStars();
   const { days: completedDayIds, weeksCompleted, percent: daysPercent } = useDayCompletions();
 
   useEffect(() => {
     if (!user) return;
-    supabase
-      .from("week_unlocks")
-      .select("week_number")
-      .eq("user_id", user.id)
-      .then(({ data }) => {
-        const fromDb = (data ?? []).map((r) => r.week_number);
-        // Teacher mode unlocks all 24 weeks for content review. Students get
-        // only what the coach granted in week_unlocks plus the time-based
-        // schedule — week 2 used to be hardcoded open for everyone, which
-        // let a day-one student skip straight to day 6.
-        // Weeks 1-2 are open to every student at launch (the only weeks with
-        // content); teacher mode opens all 24 for review.
-        const extras = bypassLocks
-          ? Array.from({ length: TOTAL_WEEKS }, (_, i) => i + 1)
-          : [1, 2];
-        setOverrides(Array.from(new Set([...fromDb, ...extras])));
-      });
+    Promise.all([
+      supabase.from("week_unlocks").select("week_number").eq("user_id", user.id),
+      supabase
+        .from("content_access")
+        .select("scope, target_type, target_id, access")
+        .or(`scope.eq.global,user_id.eq.${user.id}`),
+    ]).then(([wu, ca]) => {
+      const fromDb = (wu.data ?? []).map((r) => r.week_number);
+      // Admin day/week enable-disable overrides (empty pre-migration).
+      const rows = (ca.error ? [] : (ca.data ?? [])) as AccessOverride[];
+      const opened: number[] = [];
+      const locked: number[] = [];
+      for (let w = 1; w <= TOTAL_WEEKS; w++) {
+        const a = weekOverride(w, rows);
+        if (a === "open") opened.push(w);
+        if (a === "locked") locked.push(w);
+      }
+      // Teacher mode unlocks all 24 weeks for content review. Students get
+      // only what the coach granted in week_unlocks plus the time-based
+      // schedule and any admin "open" override — minus admin "locked" weeks.
+      const extras = bypassLocks
+        ? Array.from({ length: TOTAL_WEEKS }, (_, i) => i + 1)
+        : [1, 2];
+      const open = new Set([...fromDb, ...extras, ...opened]);
+      if (!bypassLocks) locked.forEach((w) => open.delete(w));
+      setOverrides(Array.from(open));
+      setLockedWeeks(bypassLocks ? [] : locked);
+    });
   }, [user, bypassLocks]);
 
   if (loading) {
@@ -75,7 +89,21 @@ function Home() {
   const enrolledAt = user.created_at;
   // Consider a week "completed" if it appears in weeksCompleted counter (first N weeks in order).
   const completedWeekNumbers = Array.from({ length: weeksCompleted }, (_, i) => i + 1);
-  const { weeks, vacations, monthThemes } = getWeeks(enrolledAt, overrides, completedWeekNumbers);
+  const base = getWeeks(enrolledAt, overrides, completedWeekNumbers);
+  const { vacations, monthThemes } = base;
+  // Force admin-locked weeks closed even if the calendar/time schedule opened
+  // them, and make sure exactly one non-locked week stays "current".
+  const lockedSet = new Set(lockedWeeks);
+  let weeks = base.weeks;
+  if (lockedSet.size) {
+    weeks = weeks.map((w) =>
+      lockedSet.has(w.globalIndex) ? { ...w, status: "locked-time" as const, isCurrent: false } : w,
+    );
+    if (!weeks.some((w) => w.isCurrent)) {
+      const resume = weeks.find((w) => w.status === "active") ?? weeks.find((w) => w.status === "completed");
+      if (resume) resume.isCurrent = true;
+    }
+  }
   const studentName =
     (fullName && fullName.split(" ")[0]) ||
     (user?.email ? user.email.split("@")[0] : "Marie");
@@ -329,9 +357,11 @@ function WeekCard({
       <Link
         to="/day/$dayId"
         params={{ dayId: startDay }}
-        className={`${base} border border-white/25 text-white shadow-card hover:translate-y-[-2px]`}
+        className={`${base} border border-sky/40 text-white shadow-card hover:translate-y-[-2px]`}
         style={{
-          backgroundImage: `linear-gradient(180deg, oklch(0.32 0.12 250 / 0.55) 0%, oklch(0.22 0.12 250 / 0.70) 100%), url(${cover})`,
+          // Enabled (unlocked) week: keep the photo bright so it clearly reads
+          // as available. Only blocked weeks get the heavier, greyed tint.
+          backgroundImage: `linear-gradient(180deg, oklch(0.45 0.10 250 / 0.15) 0%, oklch(0.28 0.10 250 / 0.42) 100%), url(${cover})`,
           backgroundSize: "cover",
           backgroundPosition: "center 30%",
         }}
@@ -369,9 +399,11 @@ function WeekCard({
         <p className="font-display text-base font-bold opacity-90">{monthName}</p>
         {isLocked && (
           <p className="mt-1 text-[10px] font-semibold text-sky/90">
-            {w.daysUntilUnlock === 1
-              ? "Disponible dans 1 jour"
-              : `Disponible dans ${w.daysUntilUnlock} jours`}
+            {w.daysUntilUnlock > 0
+              ? w.daysUntilUnlock === 1
+                ? "Disponible dans 1 jour"
+                : `Disponible dans ${w.daysUntilUnlock} jours`
+              : "Bloqueado por tu profesor"}
           </p>
         )}
       </div>

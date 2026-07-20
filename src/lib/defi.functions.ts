@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { callChat, transcribeFr } from "@/lib/ai";
+import { assertDayNotLocked } from "@/lib/content-access.functions";
 
 /* ---------------- Correct one open activity (PE or PO) ---------------- */
 
@@ -51,6 +52,9 @@ export const correctActivity = createServerFn({ method: "POST" })
     };
   })
   .handler(async ({ data, context }) => {
+    // Same hard gate as evaluateDefi: a day an admin disabled can't run the
+    // paid per-activity AI correction either. Admins bypass.
+    await assertDayNotLocked(context, data.dayId);
     const user = JSON.stringify({
       dia: data.dayId,
       seccion: data.section,
@@ -157,6 +161,9 @@ export const evaluateDefi = createServerFn({ method: "POST" })
     };
   })
   .handler(async ({ data, context }) => {
+    // Hard gate: a day an admin has disabled can't be scored (also blocks the
+    // paid AI call). A locked week locks its days too. Admins bypass.
+    await assertDayNotLocked(context, data.dayId);
     const system = `Eres una profesora de francés cálida y precisa. Evalúas el DESAFÍO FINAL del Día ${data.dayId} ("${data.title}"). Recibes por cada etapa: la intención (hint), el ejemplo base en francés y la transcripción real del alumno. Devuelves SOLO JSON válido con esta forma exacta, sin texto extra:
 
 {

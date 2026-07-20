@@ -107,6 +107,23 @@ eq("furthest day, fresh student", mod.furthestUnlockedDay(S()), 1);
 eq("furthest day, days 1-4 done", mod.furthestUnlockedDay(S(1, 2, 3, 4)), 5);
 eq("furthest day caps at 10", mod.furthestUnlockedDay(S(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)), 10);
 
+// Admin content_access overrides — most specific wins, and locks beat the window.
+const ovr = (scope, target_type, target_id, access) => ({ scope, target_type, target_id, access });
+eq("weekOfDay: day 3 -> week 1", mod.weekOfDay(3), 1);
+eq("weekOfDay: day 6 -> week 2", mod.weekOfDay(6), 2);
+eq("no overrides => undefined", mod.effectiveOverride(3, []), undefined);
+eq("global week lock covers its days", mod.effectiveOverride(6, [ovr("global", "week", 2, "locked")]), "locked");
+eq("global day open", mod.effectiveOverride(15, [ovr("global", "day", 15, "open")]), "open");
+eq("per-user day beats global week", mod.effectiveOverride(6, [ovr("global", "week", 2, "locked"), ovr("user", "day", 6, "open")]), "open");
+eq("per-user week beats global day", mod.effectiveOverride(7, [ovr("global", "day", 7, "open"), ovr("user", "week", 2, "locked")]), "locked");
+eq("per-user day beats per-user week", mod.effectiveOverride(6, [ovr("user", "week", 2, "open"), ovr("user", "day", 6, "locked")]), "locked");
+ok("locked override closes an otherwise-open day", !mod.isDayUnlocked(3, S(), { override: "locked" }));
+ok("open override opens a day beyond the window", mod.isDayUnlocked(50, S(), { override: "open" }));
+ok("admin still sees a locked day", mod.isDayUnlocked(3, S(), { override: "locked", isAdmin: true }));
+ok("no override keeps weeks 1-2 open", mod.isDayUnlocked(3, S()));
+ok("locked override closes a tutor scene", !mod.isSceneUnlocked(3, S(), { override: "locked" }));
+ok("open override opens a tutor scene beyond the window", mod.isSceneUnlocked(50, S(), { override: "open" }));
+
 /* ---------------- program / current week ---------------- */
 g("2b. Program weeks & 'current week'");
 {
@@ -558,7 +575,9 @@ g("12. Regressions (bugs found in audit — must stay fixed)");
   // #16 impersonation must not write to the admin's own row.
   ok("day-complete button gated by readOnly", day.includes("if (readOnly) return; // impersonating"));
   ok("day-complete block receives readOnly", day.includes("readOnly={readOnly}"));
-  ok("week1Done uses snapshot-aware doneDays", day.includes("const week1Done = doneDays.has(5)"));
+  // Weekly challenge now requires EVERY day of the active week (not just day 5).
+  ok("weekly challenge gated on whole-week completion", day.includes("weekDayIds.every((id) => doneDays.has(id))"));
+  ok("weekly challenge routes per active week", day.includes('activeWeek === 2 ? (') && day.includes('params={{ weekId: String(activeWeek) }}'));
   // #10 confetti replay.
   ok("confetti only on transition", day.includes("wasDoneAtMount"));
 
@@ -599,11 +618,42 @@ g("12. Regressions (bugs found in audit — must stay fixed)");
   ok("calendar edit pre-fills via beginEdit", coach.includes("function beginEdit("));
   ok("calendar reload fetches description for pre-fill", coach.includes("duration_min, zoom_url, zoom_id, description"));
 
+  // Admin day/week content-access control + enforcement.
+  const caFn = readFileSync("src/lib/content-access.functions.ts", "utf8");
+  ok("content-access exposes getContentAccess", caFn.includes("export const getContentAccess"));
+  ok("content-access exposes setContentAccess", caFn.includes("export const setContentAccess"));
+  ok("content-access exposes loadUserOverrides", caFn.includes("export async function loadUserOverrides"));
+  ok("content-access day/week gates exist", caFn.includes("assertDayNotLocked") && caFn.includes("assertWeekNotLocked"));
+  const dayRoute = readFileSync("src/routes/day.$dayId.tsx", "utf8");
+  ok("day route applies effectiveOverride", dayRoute.includes("effectiveOverride(id, accessOverrides)"));
+  ok("day route reads overrides via hook", dayRoute.includes("useContentOverrides(viewAsUserId)"));
+  ok("day route pending-lesson fixes cross-day reset", dayRoute.includes("pendingLessonRef"));
+  ok("tutor server gate honours the override lock", tut.includes("effectiveOverride(dayId, await loadUserOverrides"));
+  ok("conversation picker honours the override", conv.includes("effectiveOverride(d, accessOverrides)"));
+  const defiFnSrc = readFileSync("src/lib/defi.functions.ts", "utf8");
+  ok("defi submit is gated by day lock", defiFnSrc.includes("assertDayNotLocked(context, data.dayId)"));
+  // Both evaluateDefi AND correctActivity (per-activity AI) must be gated.
+  ok("per-activity AI correction also gated", (defiFnSrc.match(/assertDayNotLocked\(context, data\.dayId\)/g) || []).length >= 2);
+  ok("week eval is gated by week lock", readFileSync("src/lib/week.functions.ts", "utf8").includes("assertWeekNotLocked(context, data.weekNumber)"));
+  ok("week-2 challenge AI gated by week lock", readFileSync("src/lib/defiSemaine2.functions.ts", "utf8").includes("assertWeekNotLocked(context, 2)"));
+  ok("student dashboard applies admin week locks", readFileSync("src/routes/liberte-plataforma-834798234728482934254-student.tsx", "utf8").includes("lockedWeeks"));
+  ok("content_access migration present", readFileSync("supabase/migrations/20260720000000_content_access.sql", "utf8").includes("CREATE TABLE IF NOT EXISTS public.content_access"));
+
+  // Colibrí tutor mascot floats across the platform → /conversation.
+  const mascotSrc = readFileSync("src/components/TutorMascot.tsx", "utf8");
+  ok("mascot links to the tutor", mascotSrc.includes('to="/conversation"'));
+  ok("mascot hidden on the tutor page", mascotSrc.includes('HIDE_PREFIXES'));
+  ok("mascot mounted at the root", readFileSync("src/routes/__root.tsx", "utf8").includes("<TutorMascot />"));
+
   // #7/#8 analytics.
   const adm = readFileSync("src/lib/admin.functions.ts", "utf8");
   ok("analytics raises the 1000-row cap", adm.includes("MAX_ROWS"));
   const an = readFileSync("src/components/AdminAnalytics.tsx", "utf8");
   ok("analytics ignores stale responses", an.includes("reqIdRef"));
+  // Analytics drill-down + PDF export of the selected timeframe.
+  ok("KPI tiles open a drill-down", an.includes("<DrillPanel") && an.includes("onSelect={() => setDrill("));
+  ok("analytics has a PDF export button", an.includes("generateAnalyticsPdf(data).save("));
+  ok("analytics PDF generator exists", readFileSync("src/lib/analyticsPdf.ts", "utf8").includes("export function generateAnalyticsPdf"));
 
   // #13 mic stream leak.
   const aud = readFileSync("src/lib/audio.ts", "utf8");

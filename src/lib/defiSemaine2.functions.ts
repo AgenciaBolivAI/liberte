@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { callChat } from "@/lib/ai";
+import { assertWeekNotLocked } from "@/lib/content-access.functions";
 
 const callAI = (system: string, user: string) => callChat(system, user);
 
@@ -13,7 +14,9 @@ export const evaluateWeek2Writing = createServerFn({ method: "POST" })
     if (!d?.situation || !d?.text) throw new Error("Invalid input");
     return { situation: d.situation === 2 ? 2 : 1, text: String(d.text).slice(0, 4000) };
   })
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
+    // Week-2 challenge is week-2 content: honour an admin lock on week 2.
+    await assertWeekNotLocked(context, 2);
     const criteria =
       data.situation === 1
         ? [
@@ -76,7 +79,8 @@ export const chatWeek2Roleplay = createServerFn({ method: "POST" })
       finish: Boolean(d?.finish),
     };
   })
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
+    await assertWeekNotLocked(context, 2);
     const system = `Eres un empleado amable del supermercado Carrefour en París que habla SOLO en francés claro (nivel A2-B1). El alumno está haciendo un roleplay del Défi Semana 2. Objetivos que debe cumplir:
 1) Saluda y pregunta dónde está la sección de lácteos (rayon produits laitiers)
 2) Usa IL Y A o IL N'Y A PAS DE al menos 1 vez

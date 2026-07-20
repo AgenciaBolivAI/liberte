@@ -28,12 +28,14 @@ import { StagedDefi } from "@/components/StagedDefi";
 import { getCompletedDays } from "@/lib/week.functions";
 import { markDayCompleted, useDayCompletions } from "@/lib/progress";
 import {
+  effectiveOverride,
   isDayUnlocked as isDayUnlockedRule,
   isLessonUnlocked as isLessonUnlockedRule,
   OPEN_THROUGH_DAY,
   REQUIRE_VIDEO_WATCHED,
   SEQUENTIAL_LESSON_GATE,
 } from "@/lib/unlock";
+import { useContentOverrides } from "@/lib/content-access";
 import { useAdminPreview } from "@/lib/admin-preview";
 import { AdminPreviewBanner } from "@/components/AdminPreviewBanner";
 import { getStudentSnapshot, type StudentSnapshot } from "@/lib/admin.functions";
@@ -430,9 +432,17 @@ function DayPage() {
     () => Math.min(...DAYS_META.filter((d) => d.week === activeWeek).map((d) => d.id)),
     [activeWeek],
   );
+  // Admin day/week enable-disable overrides (global + this student's own).
+  // While impersonating, preview the target student's overrides.
+  const accessOverrides = useContentOverrides(viewAsUserId);
   const isDayUnlocked = useCallback(
-    (id: number) => isDayUnlockedRule(id, doneDays, { isAdmin, firstDayOfWeek }),
-    [isAdmin, firstDayOfWeek, doneDays],
+    (id: number) =>
+      isDayUnlockedRule(id, doneDays, {
+        isAdmin,
+        firstDayOfWeek,
+        override: effectiveOverride(id, accessOverrides),
+      }),
+    [isAdmin, firstDayOfWeek, doneDays, accessOverrides],
   );
   const DAYS = useMemo(
     () =>
@@ -444,7 +454,10 @@ function DayPage() {
   );
 
   const currentDayUnlocked = isDayUnlocked(Number(activeDay));
-  const week1Done = doneDays.has(5);
+  // The weekly challenge ("défi de la semaine") unlocks only once EVERY day of
+  // the active week is completed — not just the last day.
+  const weekDayIds = DAYS_META.filter((d) => d.week === activeWeek).map((d) => d.id);
+  const weekComplete = weekDayIds.length > 0 && weekDayIds.every((id) => doneDays.has(id));
 
   // Lessons within a reachable day are all navigable unless sequential gating
   // is explicitly turned back on. This fixes the "only lesson 1 available, but
@@ -471,6 +484,10 @@ function DayPage() {
   // Hydrate per-day state (done lessons, current lesson, stars) from DB
   // so that progress survives refresh and syncs across devices.
   const hydratedKeyRef = useRef<string>("");
+  // A lesson the student clicked on a DIFFERENT day: it must survive the day
+  // navigation + re-hydration (which otherwise resets to lesson 1). Cleared
+  // once applied. This fixes "click lesson 3 of day 3 → lands on lesson 1".
+  const pendingLessonRef = useRef<LessonKey | null>(null);
   useEffect(() => {
     // The key changes ONLY when the day, the user, or (while impersonating) the
     // loaded snapshot changes. Clicking a lesson, a token refresh on tab
@@ -479,6 +496,16 @@ function DayPage() {
     // re-render. That was the "comes back to the first lesson" bug.
     const key = `${viewAsUserId ?? user?.id ?? "anon"}:${activeDay}:${snapshot ? "snap" : "nosnap"}`;
     if (hydratedKeyRef.current === key) return;
+
+    // A lesson clicked on another day wins over both the reset-to-lesson-1 and
+    // the saved resume position. Capture-and-clear the ref immediately so a
+    // rejected/aborted fetch or a rapid re-navigation can't strand it and
+    // hijack a later navigation.
+    const pending = pendingLessonRef.current;
+    pendingLessonRef.current = null;
+    const applyPendingLesson = () => {
+      if (pending && order.includes(pending)) setLesson(pending);
+    };
 
     setOpenDay(Number(activeDay));
     setLesson(order[0]);
@@ -500,10 +527,12 @@ function DayPage() {
           }
         }
       }
+      applyPendingLesson();
       hydratedKeyRef.current = key;
       return;
     }
     if (!user) {
+      applyPendingLesson();
       hydratedKeyRef.current = key;
       return;
     }
@@ -526,6 +555,7 @@ function DayPage() {
           setLesson(data.current_lesson as LessonKey);
         }
       }
+      applyPendingLesson();
       hydratedKeyRef.current = key;
     })();
     return () => { alive = false; };
@@ -651,10 +681,14 @@ function DayPage() {
                         disabled={lessonLocked}
                         onClick={() => {
                           if (lessonLocked) return;
-                          if (String(d.id) !== activeDay) {
-                            navigate({ to: "/day/$dayId", params: { dayId: String(d.id) } });
-                          }
                           setPlusItemId(null);
+                          if (String(d.id) !== activeDay) {
+                            // Remember the chosen lesson so re-hydration on the
+                            // new day doesn't snap back to lesson 1.
+                            pendingLessonRef.current = l.key;
+                            navigate({ to: "/day/$dayId", params: { dayId: String(d.id) } });
+                            return;
+                          }
                           setLesson(l.key);
                         }}
                         className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition ${isActive && String(d.id) === activeDay && !plusItemId ? "bg-gradient-to-r from-blue to-blue-deep shadow-card" : lessonLocked ? "cursor-not-allowed opacity-45" : "hover:bg-white/5"}`}
@@ -721,24 +755,37 @@ function DayPage() {
           )}
         </div>
 
-        {/* Le défi de la semaine */}
-        {week1Done ? (
-          <Link
-            to="/semaine/$weekId"
-            params={{ weekId: "1" }}
-            className="flex items-center gap-3 rounded-2xl border border-gold/60 bg-gradient-to-r from-gold to-[oklch(0.78_0.14_80)] px-3 py-3 text-left text-navy shadow-card transition hover:brightness-105"
-          >
-            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white/70 text-sm">🎉</span>
-            <div className="min-w-0">
-              <p className="text-[10px] font-extrabold tracking-widest uppercase">Disponible</p>
-              <p className="truncate text-sm font-extrabold">Le défi de la semaine</p>
-            </div>
-          </Link>
+        {/* Le défi de la semaine — unlocks once every day of the week is done */}
+        {weekComplete ? (
+          activeWeek === 2 ? (
+            <Link
+              to="/defi-semaine2"
+              className="flex items-center gap-3 rounded-2xl border border-gold/60 bg-gradient-to-r from-gold to-[oklch(0.78_0.14_80)] px-3 py-3 text-left text-navy shadow-card transition hover:brightness-105"
+            >
+              <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white/70 text-sm">🏆</span>
+              <div className="min-w-0">
+                <p className="text-[10px] font-extrabold tracking-widest uppercase">Disponible</p>
+                <p className="truncate text-sm font-extrabold">Le défi de la semaine</p>
+              </div>
+            </Link>
+          ) : (
+            <Link
+              to="/semaine/$weekId"
+              params={{ weekId: String(activeWeek) }}
+              className="flex items-center gap-3 rounded-2xl border border-gold/60 bg-gradient-to-r from-gold to-[oklch(0.78_0.14_80)] px-3 py-3 text-left text-navy shadow-card transition hover:brightness-105"
+            >
+              <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white/70 text-sm">🎉</span>
+              <div className="min-w-0">
+                <p className="text-[10px] font-extrabold tracking-widest uppercase">Disponible</p>
+                <p className="truncate text-sm font-extrabold">Le défi de la semaine</p>
+              </div>
+            </Link>
+          )
         ) : (
           <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-3 text-left opacity-70">
             <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white/10 text-sm">🎉</span>
             <div className="min-w-0 flex-1">
-              <p className="text-[10px] font-bold tracking-widest text-sky/70 uppercase">Se abre tras el Día 5</p>
+              <p className="text-[10px] font-bold tracking-widest text-sky/70 uppercase">Se abre al completar la semana</p>
               <p className="truncate text-sm font-bold text-white">Le défi de la semaine</p>
             </div>
             <Lock className="h-3.5 w-3.5 shrink-0 text-white/40" />
@@ -778,7 +825,7 @@ function DayPage() {
           </div>
           <h1 className="mt-4 font-display text-2xl font-extrabold text-navy">Jour {activeDay} encore verrouillé</h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            Termina el día anterior para desbloquear este. Cada lección se abre al completar la anterior — ¡paso a paso! 🐦
+            Este día aún no está disponible. Se abrirá al completar el día anterior o cuando tu profesor lo habilite. 🐦
           </p>
           <button
             onClick={() => navigate({ to: "/day/$dayId", params: { dayId: String(lastOpen) } })}
@@ -864,7 +911,7 @@ function DayPage() {
               isLast={lesson === order[order.length - 1]}
             />
             )}
-            {week1Done && activeDay === "5" && !readOnly && (
+            {weekComplete && activeDay === "5" && !readOnly && (
               <div className="mt-6 rounded-3xl border-2 border-gold/50 bg-gradient-to-br from-white to-gold/10 p-6 text-center shadow-card">
                 <p className="text-xs font-bold tracking-widest text-gold uppercase">Fin de la Semaine 1</p>
                 <h3 className="mt-1 font-display text-2xl font-extrabold text-navy">🎉 Le défi de la semaine t'attend</h3>
@@ -883,7 +930,7 @@ function DayPage() {
             {/* Week 2's final challenge lives on its own route and had no entry
                 point anywhere in the app — students could only reach it by
                 typing the URL. */}
-            {doneDays.has(10) && activeDay === "10" && !readOnly && (
+            {weekComplete && activeDay === "10" && !readOnly && (
               <div className="mt-6 rounded-3xl border-2 border-gold/50 bg-gradient-to-br from-white to-gold/10 p-6 text-center shadow-card">
                 <p className="text-xs font-bold tracking-widest text-gold uppercase">Fin de la Semaine 2</p>
                 <h3 className="mt-1 font-display text-2xl font-extrabold text-navy">🏆 Le Défi Final de la Semaine 2</h3>

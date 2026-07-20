@@ -15,7 +15,8 @@ import { speakFr } from "@/lib/speak";
 import { blobToBase64, playBase64Mp3, unlockAudioPlayback, useRecorder } from "@/lib/audio";
 import { transcribeStage } from "@/lib/defi.functions";
 import { getCompletedDays } from "@/lib/week.functions";
-import { furthestUnlockedDay, isSceneUnlocked } from "@/lib/unlock";
+import { effectiveOverride, furthestUnlockedDay, isSceneUnlocked } from "@/lib/unlock";
+import { useContentOverrides } from "@/lib/content-access";
 import { useAdminPreview } from "@/lib/admin-preview";
 import { AdminPreviewBanner } from "@/components/AdminPreviewBanner";
 import { TUTOR_DAY_TOPICS, TUTOR_SCENARIOS } from "@/lib/tutorContext";
@@ -88,7 +89,11 @@ function ConversationPage() {
   // Scenes unlock progressively: day N opens once day N-1 is finished
   // (day marked complete OR its défi submitted). Mirrors the lesson locks.
   const doneDays = useMemo(() => new Set([...days, ...defiDays]), [days, defiDays]);
-  const isDayUnlocked = (d: number) => isSceneUnlocked(d, doneDays, { isAdmin });
+  // Tutor scenes follow the SAME day/week gating as the lessons — an admin who
+  // disables a day or week also disables its matching tutor lesson.
+  const accessOverrides = useContentOverrides();
+  const isDayUnlocked = (d: number) =>
+    isSceneUnlocked(d, doneDays, { isAdmin, override: effectiveOverride(d, accessOverrides) });
   // Default to the furthest scene the student has actually reached.
   const furthestDay = useMemo(() => furthestUnlockedDay(doneDays), [doneDays]);
 

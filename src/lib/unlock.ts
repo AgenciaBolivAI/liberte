@@ -31,14 +31,58 @@ export const OPEN_THROUGH_DAY = 10;
 export const SEQUENTIAL_LESSON_GATE = false;
 export const REQUIRE_VIDEO_WATCHED = false;
 
+/** An admin content-access override value. */
+export type AccessValue = "open" | "locked";
+
+/** A single override row, scoped either globally or to one student. Mirrors the
+ *  `content_access` table; readers filter to (global + the current user). */
+export type AccessOverride = {
+  scope: "global" | "user";
+  target_type: "day" | "week";
+  target_id: number;
+  access: AccessValue;
+};
+
+/** The week (1-based) that contains a lesson day — 5 days per week, matching
+ *  DAYS_META and the dashboard's week→day mapping. */
+export function weekOfDay(dayId: number): number {
+  return Math.ceil(dayId / 5);
+}
+
+/**
+ * The winning admin override for a day, from overrides already scoped to a
+ * single student (global rows + that user's rows). Most specific wins:
+ *   per-user day → per-user week → global day → global week.
+ * Returns undefined when no admin set anything, so the default rules apply.
+ */
+export function effectiveOverride(
+  dayId: number,
+  rows: readonly AccessOverride[],
+): AccessValue | undefined {
+  const wk = weekOfDay(dayId);
+  const at = (scope: "global" | "user", type: "day" | "week", id: number) =>
+    rows.find((r) => r.scope === scope && r.target_type === type && r.target_id === id)?.access;
+  return (
+    at("user", "day", dayId) ??
+    at("user", "week", wk) ??
+    at("global", "day", dayId) ??
+    at("global", "week", wk)
+  );
+}
+
 /** Day N opens when day N-1 is done. Day 1 (and the first day of the
- *  viewed week, which is itself time-gated on the dashboard) is always open. */
+ *  viewed week, which is itself time-gated on the dashboard) is always open.
+ *  An admin `override` (open/locked) takes precedence over EVERYTHING except a
+ *  real admin viewer — including the launch open-window — so a locked day is
+ *  genuinely locked even within weeks 1-2. */
 export function isDayUnlocked(
   dayId: number,
   doneDays: ReadonlySet<number>,
-  opts: { isAdmin?: boolean; firstDayOfWeek?: number } = {},
+  opts: { isAdmin?: boolean; firstDayOfWeek?: number; override?: AccessValue } = {},
 ): boolean {
   if (opts.isAdmin) return true;
+  if (opts.override === "locked") return false;
+  if (opts.override === "open") return true;
   if (dayId <= OPEN_THROUGH_DAY) return true;
   if (dayId <= 1) return true;
   if (opts.firstDayOfWeek !== undefined && dayId === opts.firstDayOfWeek) return true;
@@ -66,9 +110,11 @@ export function isLessonUnlocked(
 export function isSceneUnlocked(
   dayId: number,
   doneDays: ReadonlySet<number>,
-  opts: { isAdmin?: boolean } = {},
+  opts: { isAdmin?: boolean; override?: AccessValue } = {},
 ): boolean {
   if (opts.isAdmin) return true;
+  if (opts.override === "locked") return false;
+  if (opts.override === "open") return true;
   if (dayId <= OPEN_THROUGH_DAY) return true;
   if (dayId <= 1) return true;
   return doneDays.has(dayId - 1);

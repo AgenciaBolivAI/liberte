@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { callChat, transcribeFr } from "@/lib/ai";
+import { assertWeekNotLocked } from "@/lib/content-access.functions";
 
 /* ---------- Which days did the user complete (defi sent) ---------- */
 
@@ -66,6 +67,8 @@ export const evaluateWeek = createServerFn({ method: "POST" })
     };
   })
   .handler(async ({ data, context }) => {
+    // Hard gate: a week an admin has disabled can't be evaluated. Admins bypass.
+    await assertWeekNotLocked(context, data.weekNumber);
     // ---- Fetch weekly data from DB ----
     const dayIds = data.weekNumber === 1 ? [1, 2, 3, 4, 5] : [];
     const { data: defis } = await context.supabase
