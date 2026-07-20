@@ -351,7 +351,10 @@ function WeekCard({
   }
 
 
-  // Other unlocked but not current (either already completed or accessible)
+  // Other unlocked but not current (either already completed or accessible).
+  // An available week must look just as ENABLED as the current one — same bright
+  // photo, no dimming tint. The current week is set apart only by its glow,
+  // pulse and "En cours" badge, not by greying every other available week.
   if (isActive || isCompleted) {
     return (
       <Link
@@ -359,20 +362,22 @@ function WeekCard({
         params={{ dayId: startDay }}
         className={`${base} border border-sky/40 text-white shadow-card hover:translate-y-[-2px]`}
         style={{
-          // Enabled (unlocked) week: keep the photo bright so it clearly reads
-          // as available. Only blocked weeks get the heavier, greyed tint.
-          backgroundImage: `linear-gradient(180deg, oklch(0.45 0.10 250 / 0.15) 0%, oklch(0.28 0.10 250 / 0.42) 100%), url(${cover})`,
+          backgroundImage: `url(${cover})`,
           backgroundSize: "cover",
           backgroundPosition: "center 30%",
         }}
       >
         <div className="flex items-center justify-between">
-          <span className="rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-semibold tracking-wider uppercase">
+          <span className="rounded-full bg-black/35 px-2 py-0.5 text-[10px] font-bold tracking-wider text-white uppercase shadow-soft backdrop-blur-sm">
             Semaine {w.weekIndexInMonth}
           </span>
-          {isCompleted ? <Check className="h-4 w-4" /> : <ArrowRight className="h-4 w-4 opacity-80" />}
+          {isCompleted ? (
+            <Check className="h-4 w-4 drop-shadow-[0_1px_3px_rgba(0,0,0,0.7)]" />
+          ) : (
+            <ArrowRight className="h-4 w-4 drop-shadow-[0_1px_3px_rgba(0,0,0,0.7)]" />
+          )}
         </div>
-        <p className="font-display text-lg font-extrabold drop-shadow">{monthName}</p>
+        <p className="font-display text-lg font-extrabold drop-shadow-[0_2px_4px_rgba(0,0,0,0.85)]">{monthName}</p>
       </Link>
     );
   }

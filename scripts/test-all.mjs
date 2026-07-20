@@ -636,7 +636,11 @@ g("12. Regressions (bugs found in audit — must stay fixed)");
   ok("per-activity AI correction also gated", (defiFnSrc.match(/assertDayNotLocked\(context, data\.dayId\)/g) || []).length >= 2);
   ok("week eval is gated by week lock", readFileSync("src/lib/week.functions.ts", "utf8").includes("assertWeekNotLocked(context, data.weekNumber)"));
   ok("week-2 challenge AI gated by week lock", readFileSync("src/lib/defiSemaine2.functions.ts", "utf8").includes("assertWeekNotLocked(context, 2)"));
-  ok("student dashboard applies admin week locks", readFileSync("src/routes/liberte-plataforma-834798234728482934254-student.tsx", "utf8").includes("lockedWeeks"));
+  const dashSrc = readFileSync("src/routes/liberte-plataforma-834798234728482934254-student.tsx", "utf8");
+  ok("student dashboard applies admin week locks", dashSrc.includes("lockedWeeks"));
+  // Available (unlocked, non-current) weeks must render bright — no dark dimming
+  // overlay — so they read as enabled, like the current week.
+  ok("available weeks render bright (no dimming tint)", dashSrc.includes("look just as ENABLED as the current") && !dashSrc.includes("250 / 0.55"));
   ok("content_access migration present", readFileSync("supabase/migrations/20260720000000_content_access.sql", "utf8").includes("CREATE TABLE IF NOT EXISTS public.content_access"));
 
   // Colibrí tutor mascot floats across the platform → /conversation.
