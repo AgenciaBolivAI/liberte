@@ -86,11 +86,18 @@ ok("day 12 opens once day 11 done", mod.isDayUnlocked(12, S(11)));
 
 const order = ["gym", "intro", "vocab", "cles", "defi"];
 ok("lesson 1 always open", mod.isLessonUnlocked(0, {}, order));
-ok("lesson 2 LOCKED before lesson 1 done", !mod.isLessonUnlocked(1, {}, order));
+ok("lesson 2 LOCKED before lesson 1 done (sequential mode)", !mod.isLessonUnlocked(1, {}, order));
 ok("lesson 2 opens after lesson 1 done", mod.isLessonUnlocked(1, { gym: true }, order));
-ok("lesson 5 LOCKED with only lesson 1 done", !mod.isLessonUnlocked(4, { gym: true }, order));
-ok("lesson 5 opens after lesson 4 done", mod.isLessonUnlocked(4, { cles: true }, order));
 ok("admin sees every lesson", mod.isLessonUnlocked(4, {}, order, { isAdmin: true }));
+// LAUNCH: a day in the open-window has ALL its lessons navigable.
+for (const idx of [1, 2, 3, 4]) {
+  ok(`open-window day: lesson ${idx + 1} navigable with no progress`, mod.isLessonUnlocked(idx, {}, order, { allOpen: true }));
+}
+// PRODUCT FLAGS: sequential lesson gate + watch-the-video gate are OFF, so
+// every lesson in a reachable day is open (fixes the day-1/day-6 "only lesson
+// 1 available" inconsistency at the root, not just via OPEN_THROUGH_DAY).
+eq("SEQUENTIAL_LESSON_GATE is off", mod.SEQUENTIAL_LESSON_GATE, false);
+eq("REQUIRE_VIDEO_WATCHED is off", mod.REQUIRE_VIDEO_WATCHED, false);
 
 // Tutor scenes for weeks 1-2 are open to everyone at launch too.
 for (const d of [1, 2, 5, 6, 9, 10]) {
@@ -142,6 +149,16 @@ g("2b. Program weeks & 'current week'");
   r = pm.getWeeks(enrolled(0), [], []);
   eq("week 2 unlocks on day 7", r.weeks[1].unlockDay, 7);
   eq("week 5 (month 2) unlocks on day 35", r.weeks[4].unlockDay, 35);
+
+  // TUTOR-1: month→day scene picker groups (5 days/week, 4 weeks/month).
+  const groups = pm.tutorDayGroups(10);
+  eq("tutor picker has 2 groups for days 1-10", groups.length, 2);
+  eq("group 1 = days 1-5", groups[0].days.join(","), "1,2,3,4,5");
+  eq("group 2 = days 6-10", groups[1].days.join(","), "6,7,8,9,10");
+  ok("groups labeled by month theme (J'OSE)", groups.every((x) => x.label.includes("J'OSE")));
+  ok("group 1 labeled Semaine 1", groups[0].label.includes("Semaine 1"));
+  ok("group 2 labeled Semaine 2", groups[1].label.includes("Semaine 2"));
+  ok("every day 1-10 appears exactly once", groups.flatMap((x) => x.days).join(",") === "1,2,3,4,5,6,7,8,9,10");
 }
 
 /* ---------------- schema ---------------- */
@@ -166,6 +183,25 @@ for (const t of required) {
 
 /* ---------------- test student ---------------- */
 g("4. Auth & approval");
+// Sweep any test students left behind by an interrupted prior run, so they
+// never accumulate in the real teacher roster.
+try {
+  const res = await fetch(`${URL_}/auth/v1/admin/users?per_page=200`, {
+    headers: { Authorization: `Bearer ${SVC}`, apikey: SVC },
+  });
+  const stale = ((await res.json()).users ?? []).filter((u) =>
+    (u.email ?? "").endsWith("@liberte-test.local"),
+  );
+  for (const u of stale) {
+    await fetch(`${URL_}/auth/v1/admin/users/${u.id}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${SVC}`, apikey: SVC },
+    });
+  }
+  if (stale.length) console.log(`  (swept ${stale.length} stale test account(s))`);
+} catch {
+  /* non-fatal */
+}
 const email = `test-${Date.now()}@liberte-test.local`;
 const password = "TestPass!2026";
 let uid = null, studentClient = null;
@@ -211,6 +247,18 @@ if (studentClient) {
   const { error: starHack } = await studentClient.from("star_awards")
     .insert({ user_id: uid, amount: 9999, reason: "hack", source_key: "hack:1" });
   ok("student CANNOT insert stars directly", Boolean(starHack));
+  // Audit M1: score tables fire star triggers, so students must not write them.
+  const { error: defiHack } = await studentClient.from("defi_results")
+    .insert({ user_id: uid, day_id: 88, score_10: 10, hits: 5, misses: 0 });
+  ok("student CANNOT insert defi_results (star-minting)", Boolean(defiHack));
+  const { error: weekHack } = await studentClient.from("weekly_evaluations")
+    .insert({ user_id: uid, week_number: 88, test_score: 100, weekly_score: 10 });
+  ok("student CANNOT insert weekly_evaluations (star-minting)", Boolean(weekHack));
+  // Audit H1(b): the tutor quota counter must not be resettable by the student.
+  await admin.from("tutor_usage").upsert({ user_id: uid, usage_date: new Date().toISOString().slice(0, 10), message_count: 5 }, { onConflict: "user_id,usage_date" });
+  const { error: quotaHack } = await studentClient.from("tutor_usage")
+    .update({ message_count: 0 }).eq("user_id", uid);
+  ok("student CANNOT reset their tutor quota", Boolean(quotaHack));
   const { error: selfApprove } = await studentClient.from("profiles")
     .update({ approved_at: new Date().toISOString() }).eq("id", uid);
   ok("student CANNOT write approved_at", Boolean(selfApprove));
@@ -307,9 +355,11 @@ if (studentClient) {
   eq("objectives persist", convLoad?.objectives_done, [1]);
 
   const today = new Date().toISOString().slice(0, 10);
-  await studentClient.from("tutor_usage").upsert({ user_id: uid, usage_date: today, message_count: 30 }, { onConflict: "user_id,usage_date" });
+  // Students can no longer write tutor_usage directly (H1(b) fix) — only the
+  // SECURITY DEFINER RPC and the service role may. Seed via admin.
+  await admin.from("tutor_usage").upsert({ user_id: uid, usage_date: today, message_count: 30 }, { onConflict: "user_id,usage_date" });
   const { data: usage } = await studentClient.from("tutor_usage").select("message_count").eq("user_id", uid).eq("usage_date", today).maybeSingle();
-  eq("daily counter records usage", usage?.message_count, 30);
+  eq("student can READ own daily counter", usage?.message_count, 30);
   ok("cap reached at 30 blocks further messages", (usage?.message_count ?? 0) >= 30);
 
   const scen = readFileSync("src/lib/tutorContext.ts", "utf8");
@@ -378,6 +428,30 @@ g("9b. Hands-free voice tutor");
   // Voice turns request a compact payload (measured 3.3s -> 1.4s).
   ok("voice mode uses a trimmed JSON schema", tut.includes("buildTutorSystem(data.dayId, data.withAudio)"));
   ok("trimmed schema documented with the measurement", tut.includes("3.3s → 1.4s"));
+
+  // Audit H1(a)/H2: AI cost guards.
+  const aiSrc = readFileSync("src/lib/ai.ts", "utf8");
+  ok("callChat caps output tokens", aiSrc.includes("max_tokens: MAX_OUTPUT_TOKENS"));
+  ok("transcription rejects oversized audio before decode", aiSrc.includes("MAX_AUDIO_B64"));
+  const tutSrc = readFileSync("src/lib/tutor.functions.ts", "utf8");
+  ok("tutor cap is not caller-controlled", readFileSync("supabase/migrations/20260718000008_launch_security_hardening.sql", "utf8").includes("cap CONSTANT INT := 30"));
+  // Audit C2: signup endpoint hardening.
+  const sup = readFileSync("src/routes/api/public/liberte-frances-signup.ts", "utf8");
+  ok("signup endpoint no longer updates leads by email", !/\.from\("leads"\)\s*\.update/.test(sup));
+  ok("signup endpoint doesn't re-send mail for known emails", sup.includes("isNewLead"));
+  ok("signup endpoint doesn't echo zod internals", !sup.includes("parsed.error.issues"));
+  ok("signup admin email uses a static reply-to", sup.includes('reply_to: "hola@libertefrances.com"'));
+  // Audit M1: grading writes go through the service role.
+  const defiSrc = readFileSync("src/lib/defi.functions.ts", "utf8");
+  ok("defi_results written via service role", defiSrc.includes('supabaseAdmin\n      .from("defi_results")'));
+
+  // Launch: the day route applies the product flags so lessons are all open
+  // and the video gate is off — regardless of active-day (root-cause fix).
+  const dayLaunch = readFileSync("src/routes/day.$dayId.tsx", "utf8");
+  ok("lesson unlock gated behind SEQUENTIAL_LESSON_GATE", dayLaunch.includes("!SEQUENTIAL_LESSON_GATE ||"));
+  ok("video gate behind REQUIRE_VIDEO_WATCHED", dayLaunch.includes("REQUIRE_VIDEO_WATCHED &&"));
+  // Lesson-resume: hydration guarded so it doesn't reset on every re-render.
+  ok("hydration guarded against spurious resets", dayLaunch.includes("if (hydratedKeyRef.current === key) return"));
 
   // Week 2 wiring.
   const dash = readFileSync("src/routes/liberte-plataforma-834798234728482934254-student.tsx", "utf8");
@@ -512,6 +586,18 @@ g("12. Regressions (bugs found in audit — must stay fixed)");
   // #6 conversation day pinning.
   const conv = readFileSync("src/routes/conversation.tsx", "utf8");
   ok("conversation pins the scene on first send", conv.includes("if (dayId === null) setDayId(activeDay)"));
+
+  // TUTOR-1: scene picker is grouped month→day and keeps its binding.
+  ok("scene picker renders <optgroup> groups", conv.includes("<optgroup") && conv.includes("tutorDayGroups("));
+  ok("scene picker still binds value to activeDay", conv.includes("value={activeDay}"));
+  ok("scene picker still resets on change", conv.includes("void handleReset(Number(e.target.value))"));
+
+  // TEACH-2: calendar edit path wired in the coach panel.
+  const coach = readFileSync("src/routes/coach.tsx", "utf8");
+  ok("calendar has an editingId state", coach.includes("editingId"));
+  ok("calendar edit calls update().eq(id)", /\.update\(payload\)\.eq\("id", editingId\)/.test(coach));
+  ok("calendar edit pre-fills via beginEdit", coach.includes("function beginEdit("));
+  ok("calendar reload fetches description for pre-fill", coach.includes("duration_min, zoom_url, zoom_id, description"));
 
   // #7/#8 analytics.
   const adm = readFileSync("src/lib/admin.functions.ts", "utf8");

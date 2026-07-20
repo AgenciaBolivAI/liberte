@@ -102,3 +102,31 @@ export function getWeeks(
 }
 
 export const dayLabels = Array.from({ length: 20 }, (_, i) => `Día ${i + 1}`);
+
+/**
+ * Group tutor lesson days into `<optgroup>`-friendly buckets for the month→day
+ * scene picker. The program is 5 days/week, 4 weeks/month, so a day maps to
+ * `week = ceil(day/5)`, `monthIndex = ceil(week/4)`. Each bucket is labeled with
+ * its month theme and the week within that month, e.g. "Mes 1 · J'OSE — Semaine 1".
+ * With only weeks 1-2 of content today this yields two groups under month 1, and
+ * it generalizes automatically as more days are added.
+ */
+export function tutorDayGroups(maxDay = 10): { label: string; days: number[] }[] {
+  const groups: { label: string; days: number[] }[] = [];
+  const byKey = new Map<string, { label: string; days: number[] }>();
+  for (let day = 1; day <= maxDay; day++) {
+    const week = Math.ceil(day / 5);
+    const monthIndex = Math.ceil(week / 4);
+    const weekInMonth = ((week - 1) % 4) + 1;
+    const theme = monthThemes[monthIndex - 1] ?? monthThemes[monthThemes.length - 1];
+    const key = `${monthIndex}-${weekInMonth}`;
+    let group = byKey.get(key);
+    if (!group) {
+      group = { label: `Mes ${monthIndex} · ${theme.name} — Semaine ${weekInMonth}`, days: [] };
+      byKey.set(key, group);
+      groups.push(group);
+    }
+    group.days.push(day);
+  }
+  return groups;
+}

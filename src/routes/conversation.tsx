@@ -19,6 +19,7 @@ import { furthestUnlockedDay, isSceneUnlocked } from "@/lib/unlock";
 import { useAdminPreview } from "@/lib/admin-preview";
 import { AdminPreviewBanner } from "@/components/AdminPreviewBanner";
 import { TUTOR_DAY_TOPICS, TUTOR_SCENARIOS } from "@/lib/tutorContext";
+import { tutorDayGroups } from "@/data/program";
 import {
   getTutorState,
   resetTutorConversation,
@@ -295,7 +296,7 @@ function ConversationPage() {
     setVoicePhase("speaking");
     try {
       const { audio } = await speakTutorLine({ data: { text: scenario.opener_fr } });
-      if (voiceOnRef.current) await playBase64Mp3(audio);
+      if (voiceOnRef.current && audio) await playBase64Mp3(audio);
     } catch {
       /* skip the spoken opener if TTS is unavailable */
     }
@@ -579,14 +580,18 @@ function ConversationPage() {
                 onChange={(e) => void handleReset(Number(e.target.value))}
                 className="mt-2 w-full rounded-xl border border-border bg-white px-3 py-2.5 text-base text-navy sm:text-sm"
               >
-                {Array.from({ length: 10 }, (_, i) => i + 1).map((d) => {
-                  const locked = !isDayUnlocked(d);
-                  return (
-                    <option key={d} value={d} disabled={locked}>
-                      {locked ? "🔒 " : ""}Día {d} — {TUTOR_DAY_TOPICS[d]}
-                    </option>
-                  );
-                })}
+                {tutorDayGroups(10).map((group) => (
+                  <optgroup key={group.label} label={group.label}>
+                    {group.days.map((d) => {
+                      const locked = !isDayUnlocked(d);
+                      return (
+                        <option key={d} value={d} disabled={locked}>
+                          {locked ? "🔒 " : ""}Día {d} — {TUTOR_DAY_TOPICS[d]}
+                        </option>
+                      );
+                    })}
+                  </optgroup>
+                ))}
               </select>
               {activeDay < 10 && !isDayUnlocked(activeDay + 1) && (
                 <p className="mt-2 text-[11px] text-navy/55">

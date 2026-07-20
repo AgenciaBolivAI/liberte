@@ -310,7 +310,17 @@ export const speakTutorLine = createServerFn({ method: "POST" })
     return { text: text.slice(0, 800) };
   })
   .handler(async ({ data, context }) => {
-    await requireApprovedStudent(context as unknown as Ctx);
+    const c = context as unknown as Ctx;
+    await requireApprovedStudent(c);
+    // Count against the same daily quota so this can't be looped for free,
+    // unmetered TTS. Over the cap → no audio (the UI falls back to the browser
+    // voice), never an error that would break the conversation.
+    const { data: consumed } = await c.supabase.rpc("tutor_consume_message", {
+      _limit: TUTOR_DAILY_LIMIT,
+    });
+    if (consumed === null || consumed === undefined) {
+      return { audio: null as string | null };
+    }
     return { audio: await speakFrenchBase64(data.text) };
   });
 

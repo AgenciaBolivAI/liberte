@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
-import { Loader2, ArrowLeft, User, Target, AlertCircle, Sparkles, Unlock, Lock, CalendarPlus, Trash2 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Loader2, ArrowLeft, User, Target, AlertCircle, Sparkles, Unlock, Lock, CalendarPlus, Trash2, Pencil, X } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { supabase } from "@/integrations/supabase/client";
 import { getCoachRoster, getStudentResults } from "@/lib/defi.functions";
@@ -142,7 +142,17 @@ type CalendarRow = {
   duration_min: number;
   zoom_url: string | null;
   zoom_id: string | null;
+  description: string | null;
 };
+
+/** ISO (UTC) → the `YYYY-MM-DDTHH:mm` local string a datetime-local input needs,
+ *  so editing round-trips through `new Date(startLocal).toISOString()` unchanged. */
+function isoToLocalInput(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
 
 function CalendarManager() {
   const [rows, setRows] = useState<CalendarRow[] | null>(null);
@@ -150,6 +160,8 @@ function CalendarManager() {
   const [expanded, setExpanded] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const formRef = useRef<HTMLFormElement>(null);
   const [form, setForm] = useState({
     title: "",
     kind: "europa" as EventKind,
@@ -163,7 +175,7 @@ function CalendarManager() {
   async function reload() {
     const { data, error } = await supabase
       .from("calendar_events")
-      .select("id, kind, title, start_utc, duration_min, zoom_url, zoom_id")
+      .select("id, kind, title, start_utc, duration_min, zoom_url, zoom_id, description")
       .order("start_utc", { ascending: true });
     if (error) {
       setTableMissing(true);
@@ -178,7 +190,28 @@ function CalendarManager() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function addEvent(e: React.FormEvent) {
+  function resetForm() {
+    setForm({ title: "", kind: "europa", startLocal: "", durationMin: 90, zoomUrl: "", zoomId: "", description: "" });
+    setEditingId(null);
+    setErr("");
+  }
+
+  function beginEdit(row: CalendarRow) {
+    setErr("");
+    setEditingId(row.id);
+    setForm({
+      title: row.title,
+      kind: (["europa", "latam", "taller", "repos"].includes(row.kind) ? row.kind : "taller") as EventKind,
+      startLocal: isoToLocalInput(row.start_utc),
+      durationMin: row.duration_min,
+      zoomUrl: row.zoom_url ?? "",
+      zoomId: row.zoom_id ?? "",
+      description: row.description ?? "",
+    });
+    formRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+
+  async function saveEvent(e: React.FormEvent) {
     e.preventDefault();
     setErr("");
     if (!form.title.trim() || !form.startLocal) {
@@ -190,23 +223,38 @@ function CalendarManager() {
       setErr("Fecha/hora inválida.");
       return;
     }
+    const payload = {
+      title: form.title.trim(),
+      kind: form.kind,
+      start_utc: start.toISOString(),
+      duration_min: Number(form.durationMin) || 90,
+      zoom_url: form.zoomUrl.trim() || null,
+      zoom_id: form.zoomId.trim() || null,
+      description: form.description.trim() || null,
+    };
     setBusy(true);
     try {
-      const { error } = await supabase.from("calendar_events").insert({
-        title: form.title.trim(),
-        kind: form.kind,
-        start_utc: start.toISOString(),
-        duration_min: Number(form.durationMin) || 90,
-        zoom_url: form.zoomUrl.trim() || null,
-        zoom_id: form.zoomId.trim() || null,
-        description: form.description.trim() || null,
-        material_to: "/clasesenvivo",
-      });
-      if (error) throw new Error(error.message);
-      setForm((f) => ({ ...f, title: "", startLocal: "" }));
+      if (editingId) {
+        const { error } = await supabase.from("calendar_events").update(payload).eq("id", editingId);
+        if (error) throw new Error(error.message);
+        resetForm();
+      } else {
+        const { error } = await supabase
+          .from("calendar_events")
+          .insert({ ...payload, material_to: "/clasesenvivo" });
+        if (error) throw new Error(error.message);
+        // Keep kind/duration/zoom so the teacher can add a series quickly.
+        setForm((f) => ({ ...f, title: "", startLocal: "" }));
+      }
       await reload();
     } catch (e2) {
-      setErr(e2 instanceof Error ? e2.message : "No se pudo crear el evento");
+      setErr(
+        e2 instanceof Error
+          ? e2.message
+          : editingId
+            ? "No se pudo guardar el evento"
+            : "No se pudo crear el evento",
+      );
     } finally {
       setBusy(false);
     }
@@ -215,6 +263,7 @@ function CalendarManager() {
   async function removeEvent(row: CalendarRow) {
     if (!window.confirm(`¿Eliminar «${row.title}»?`)) return;
     setErr("");
+    if (editingId === row.id) resetForm();
     const { error } = await supabase.from("calendar_events").delete().eq("id", row.id);
     if (error) setErr(error.message);
     await reload();
@@ -259,7 +308,10 @@ function CalendarManager() {
             {visible.map((r) => {
               const style = KIND_STYLE[(r.kind as EventKind) in KIND_STYLE ? (r.kind as EventKind) : "taller"];
               return (
-                <li key={r.id} className="flex items-center justify-between gap-3 py-2">
+                <li
+                  key={r.id}
+                  className={`flex items-center justify-between gap-3 py-2 ${editingId === r.id ? "rounded-xl bg-blue/5 ring-1 ring-blue/30" : ""}`}
+                >
                   <div className="min-w-0">
                     <span
                       className="mr-2 inline-block rounded-full px-2 py-0.5 text-[10px] font-bold text-white"
@@ -273,19 +325,33 @@ function CalendarManager() {
                       {" · "}{localTime(r.start_utc)} (tu hora) · {r.duration_min} min
                     </p>
                   </div>
-                  <button
-                    onClick={() => removeEvent(r)}
-                    aria-label="Eliminar evento"
-                    className="rounded-full p-2 text-red hover:bg-red/10"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <button
+                      onClick={() => beginEdit(r)}
+                      aria-label="Editar evento"
+                      className="rounded-full p-2 text-blue hover:bg-blue/10"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={() => removeEvent(r)}
+                      aria-label="Eliminar evento"
+                      className="rounded-full p-2 text-red hover:bg-red/10"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
                 </li>
               );
             })}
           </ul>
 
-          <form onSubmit={addEvent} className="mt-4 grid gap-2 rounded-2xl bg-ice p-3 sm:grid-cols-2">
+          <form ref={formRef} onSubmit={saveEvent} className="mt-4 grid gap-2 rounded-2xl bg-ice p-3 sm:grid-cols-2">
+            {editingId && (
+              <p className="sm:col-span-2 text-xs font-semibold text-blue">
+                ✏️ Editando un evento existente. Guarda los cambios o cancela para crear uno nuevo.
+              </p>
+            )}
             <Input
               placeholder="Título (ej. Clase EUROPA En vivo #9)"
               value={form.title}
@@ -332,10 +398,24 @@ function CalendarManager() {
               value={form.description}
               onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
             />
-            <Button type="submit" disabled={busy} className="bg-gradient-blue font-bold text-white sm:col-span-2">
-              {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CalendarPlus className="mr-2 h-4 w-4" />}
-              Añadir evento
-            </Button>
+            <div className="flex gap-2 sm:col-span-2">
+              <Button type="submit" disabled={busy} className="flex-1 bg-gradient-blue font-bold text-white">
+                {busy ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : editingId ? (
+                  <Pencil className="mr-2 h-4 w-4" />
+                ) : (
+                  <CalendarPlus className="mr-2 h-4 w-4" />
+                )}
+                {editingId ? "Guardar cambios" : "Añadir evento"}
+              </Button>
+              {editingId && (
+                <Button type="button" variant="outline" onClick={resetForm} disabled={busy}>
+                  <X className="mr-2 h-4 w-4" />
+                  Cancelar
+                </Button>
+              )}
+            </div>
           </form>
           {err && <p className="mt-2 text-xs text-red">{err}</p>}
         </>

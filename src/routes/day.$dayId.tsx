@@ -30,6 +30,9 @@ import { markDayCompleted, useDayCompletions } from "@/lib/progress";
 import {
   isDayUnlocked as isDayUnlockedRule,
   isLessonUnlocked as isLessonUnlockedRule,
+  OPEN_THROUGH_DAY,
+  REQUIRE_VIDEO_WATCHED,
+  SEQUENTIAL_LESSON_GATE,
 } from "@/lib/unlock";
 import { useAdminPreview } from "@/lib/admin-preview";
 import { AdminPreviewBanner } from "@/components/AdminPreviewBanner";
@@ -443,10 +446,17 @@ function DayPage() {
   const currentDayUnlocked = isDayUnlocked(Number(activeDay));
   const week1Done = doneDays.has(5);
 
-  // Within the day, lessons unlock one at a time as the previous is completed.
+  // Lessons within a reachable day are all navigable unless sequential gating
+  // is explicitly turned back on. This fixes the "only lesson 1 available, but
+  // the next day shows all lessons" inconsistency at the root: the sidebar lock
+  // used to render only for the active day, so non-active days always looked
+  // fully unlocked. With the gate off, every day is consistently open.
+  const dayFullyOpen = Number(activeDay) <= OPEN_THROUGH_DAY;
   const isLessonUnlocked = useCallback(
-    (idx: number) => isLessonUnlockedRule(idx, done, order, { isAdmin }),
-    [isAdmin, done, order],
+    (idx: number) =>
+      !SEQUENTIAL_LESSON_GATE ||
+      isLessonUnlockedRule(idx, done, order, { isAdmin, allOpen: dayFullyOpen }),
+    [isAdmin, done, order, dayFullyOpen],
   );
 
   useEffect(() => {
@@ -462,14 +472,21 @@ function DayPage() {
   // so that progress survives refresh and syncs across devices.
   const hydratedKeyRef = useRef<string>("");
   useEffect(() => {
-    const key = `${viewAsUserId ?? user?.id ?? "anon"}:${activeDay}`;
-    hydratedKeyRef.current = "";
+    // The key changes ONLY when the day, the user, or (while impersonating) the
+    // loaded snapshot changes. Clicking a lesson, a token refresh on tab
+    // refocus, or an admin-preview store update do NOT change it — so this
+    // effect no longer wipes the student's current lesson back to zero on every
+    // re-render. That was the "comes back to the first lesson" bug.
+    const key = `${viewAsUserId ?? user?.id ?? "anon"}:${activeDay}:${snapshot ? "snap" : "nosnap"}`;
+    if (hydratedKeyRef.current === key) return;
+
     setOpenDay(Number(activeDay));
     setLesson(order[0]);
     setDone({});
     setStars(0);
-    // Impersonating: use the snapshot instead of our own row, and never mark
-    // as hydrated so the autosave effect can't fire for someone else's data.
+
+    // Impersonating: use the snapshot instead of our own row. The autosave
+    // effect is separately guarded by `readOnly`, so it still can't write.
     if (viewAsUserId) {
       if (snapshot) {
         const st = snapshot.dayStates.find((d) => d.day_id === Number(activeDay));
@@ -483,6 +500,7 @@ function DayPage() {
           }
         }
       }
+      hydratedKeyRef.current = key;
       return;
     }
     if (!user) {
@@ -511,9 +529,6 @@ function DayPage() {
       hydratedKeyRef.current = key;
     })();
     return () => { alive = false; };
-    // Keyed on user?.id, NOT the user object: onAuthStateChange hands us a new
-    // object on every token refresh, which would otherwise reset the lesson
-    // state and cancel a pending save mid-session.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeDay, order, user?.id, viewAsUserId, snapshot]);
 
@@ -524,8 +539,10 @@ function DayPage() {
   const userId = user?.id;
   useEffect(() => {
     if (!userId || readOnly) return; // never write while impersonating
-    const key = `${userId}:${activeDay}`;
-    if (hydratedKeyRef.current !== key) return;
+    // Only save once this user+day has actually hydrated (so we never overwrite
+    // real progress with the empty initial state). Match the hydration key's
+    // user+day prefix without depending on its snapshot marker.
+    if (!hydratedKeyRef.current.startsWith(`${userId}:${activeDay}:`)) return;
     const doneArr = Object.keys(done).filter((k) => done[k]);
     const save = () => {
       pendingSaveRef.current = null;
@@ -1002,7 +1019,15 @@ function LessonView({
   // parent's, so a parent-level reset would wipe the registrations the
   // VideoBlocks just made. Each VideoBlock unregisters itself on unmount
   // instead, which handles lesson/day changes correctly.
-  const nextLocked = pendingVideos.size > 0 && !isLessonDone && !bypassLocks;
+  // Client decision: students do NOT have to watch the whole video to advance.
+  // The gate stays wired (behind REQUIRE_VIDEO_WATCHED) for easy re-enable.
+  const dayFullyOpen = Number(dayId) <= OPEN_THROUGH_DAY;
+  const nextLocked =
+    REQUIRE_VIDEO_WATCHED &&
+    pendingVideos.size > 0 &&
+    !isLessonDone &&
+    !bypassLocks &&
+    !dayFullyOpen;
   const advance = () => {
     if (nextLocked) return;
     onComplete();
