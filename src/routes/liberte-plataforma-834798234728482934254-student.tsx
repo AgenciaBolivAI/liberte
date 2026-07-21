@@ -43,6 +43,29 @@ function Home() {
   const { bypassLocks, viewAsUserId, viewAsName } = useAdminPreview();
   const [overrides, setOverrides] = useState<number[]>([]);
   const [lockedWeeks, setLockedWeeks] = useState<number[]>([]);
+  // Teacher-authored days (published): week → first authored day, so weeks 3+
+  // become reachable as soon as the teacher publishes content for them.
+  const [authoredStart, setAuthoredStart] = useState<Record<number, string>>({});
+  useEffect(() => {
+    let alive = true;
+    supabase
+      .from("authored_days")
+      .select("day_id")
+      .eq("status", "published")
+      .then(({ data, error }) => {
+        if (!alive || error) return;
+        const byWeek: Record<number, string> = {};
+        for (const r of data ?? []) {
+          const d = Number(r.day_id);
+          const w = Math.ceil(d / 5);
+          if (!byWeek[w] || d < Number(byWeek[w])) byWeek[w] = String(d);
+        }
+        setAuthoredStart(byWeek);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
   const { stars: totalStars } = useStars(viewAsUserId);
   const {
     days: completedDayIds,
@@ -54,6 +77,7 @@ function Home() {
 
   useEffect(() => {
     if (!dataUserId) return;
+    let alive = true;
     Promise.all([
       supabase.from("week_unlocks").select("week_number").eq("user_id", dataUserId),
       supabase
@@ -61,6 +85,7 @@ function Home() {
         .select("scope, target_type, target_id, access")
         .or(`scope.eq.global,user_id.eq.${dataUserId}`),
     ]).then(([wu, ca]) => {
+      if (!alive) return; // a newer viewed-student switch already superseded this
       const fromDb = (wu.data ?? []).map((r) => r.week_number);
       // Admin day/week enable-disable overrides (empty pre-migration).
       const rows = (ca.error ? [] : (ca.data ?? [])) as AccessOverride[];
@@ -82,6 +107,9 @@ function Home() {
       setOverrides(Array.from(open));
       setLockedWeeks(bypassLocks ? [] : locked);
     });
+    return () => {
+      alive = false;
+    };
   }, [dataUserId, bypassLocks]);
 
   if (loading) {
@@ -225,7 +253,13 @@ function Home() {
                 </div>
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
                   {monthWeeks.map((w) => (
-                    <WeekCard key={w.globalIndex} w={w} monthName={m.name} cover={cover} />
+                    <WeekCard
+                      key={w.globalIndex}
+                      w={w}
+                      monthName={m.name}
+                      cover={cover}
+                      authoredStart={authoredStart[w.globalIndex]}
+                    />
                   ))}
                 </div>
                 {idx < 5 && <RestWeekBar rest={vacations[idx]} nextMonth={idx + 2} />}
@@ -288,17 +322,20 @@ function WeekCard({
   w,
   monthName,
   cover,
+  authoredStart,
 }: {
   w: ReturnType<typeof getWeeks>["weeks"][number];
   monthName: string;
   cover: string;
+  /** First published teacher-authored day of this week, if any. */
+  authoredStart?: string;
 }) {
   const isCompleted = w.status === "completed";
   const isCurrent = w.isCurrent;
   const isActive = w.status === "active" && !isCurrent;
   const isLocked = w.status === "locked-time";
-  const startDay = WEEK_START_DAY[w.globalIndex] ?? "1";
-  const hasContent = w.globalIndex <= LAST_WEEK_WITH_CONTENT;
+  const startDay = WEEK_START_DAY[w.globalIndex] ?? authoredStart ?? "1";
+  const hasContent = w.globalIndex <= LAST_WEEK_WITH_CONTENT || Boolean(authoredStart);
 
   const base =
     "group relative flex aspect-[4/3] flex-col justify-between overflow-hidden rounded-2xl p-4 transition";

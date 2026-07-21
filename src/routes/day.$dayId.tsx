@@ -31,10 +31,12 @@ import {
   effectiveOverride,
   isDayUnlocked as isDayUnlockedRule,
   isLessonUnlocked as isLessonUnlockedRule,
+  LESSON_DAYS,
   OPEN_THROUGH_DAY,
   REQUIRE_VIDEO_WATCHED,
   SEQUENTIAL_LESSON_GATE,
 } from "@/lib/unlock";
+import { AuthoredDayView } from "@/components/AuthoredDayView";
 import { useContentOverrides } from "@/lib/content-access";
 import { useAdminPreview } from "@/lib/admin-preview";
 import { AdminPreviewBanner } from "@/components/AdminPreviewBanner";
@@ -207,15 +209,30 @@ const DAY_TITLES: Record<string, { title: string; desc: string }> = {
   "7": { title: "Jour 7 · Supermarché · Partie 1 — Liberté", desc: "Septième jour : orientarse en un supermercado francés y preguntar por productos." },
   "8": { title: "Jour 8 · Faire les courses — Liberté", desc: "Huitième jour : la compra semanal completa con devoir + infinitivo y partitivos." },
   "9": { title: "Jour 9 · Le métro & les transports — Liberté", desc: "Neuvième jour : moverse en el metro de París y dominar las preposiciones de transporte." },
+  "10": { title: "Jour 10 · En taxi & en ville — Liberté", desc: "Dixième jour : prendre un taxi et se déplacer en ville à pied." },
 };
 
 export const Route = createFileRoute("/day/$dayId")({
   head: ({ params }) => {
-    const info = DAY_TITLES[params.dayId] ?? DAY_TITLES["1"];
+    const info =
+      DAY_TITLES[params.dayId] ??
+      (/^\d+$/.test(params.dayId)
+        ? { title: `Jour ${params.dayId} — Liberté`, desc: `Jour ${params.dayId} du programme Liberté.` }
+        : DAY_TITLES["1"]);
     return { meta: [{ title: info.title }, { name: "description", content: info.desc }] };
   },
-  component: DayPage,
+  component: DayRouteSwitcher,
 });
+
+/** Days 1-10 are code-authored (the full lesson player below). Days 11-120 are
+ *  teacher-authored in the DB and use their own renderer — the player's
+ *  LESSONS_BY_DAY lookups would crash on unknown days. */
+function DayRouteSwitcher() {
+  const { dayId } = Route.useParams();
+  const n = Number(dayId);
+  if (Number.isInteger(n) && n > LESSON_DAYS) return <AuthoredDayView dayId={Math.min(n, 120)} />;
+  return <DayPage />;
+}
 
 /* -------------------- helpers -------------------- */
 

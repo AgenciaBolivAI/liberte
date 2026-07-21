@@ -1,5 +1,5 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { Calendar, GraduationCap, Home, LogOut, MessageCircle, Radio, Sparkles, Star, User } from "lucide-react";
+import { Calendar, GraduationCap, Home, LogOut, Mail, MessageCircle, Radio, Sparkles, Star, User } from "lucide-react";
 import logo from "@/assets/liberte-logo.png.asset.json";
 import { useAuth } from "@/lib/auth-context";
 import { supabase } from "@/integrations/supabase/client";
@@ -16,12 +16,14 @@ import { toast } from "sonner";
 
 const HOME_PATH = "/liberte-plataforma-834798234728482934254-student";
 
-// `short` is used in the mobile bottom bar, where six full labels overflow.
+// `short` is used in the mobile bottom bar, where full labels overflow. Items
+// flex-shrink with truncated labels, so the bar stays within 360px.
 const nav = [
   { to: HOME_PATH, label: "Accueil", short: "Accueil", icon: Home },
   { to: "/calendar", label: "Calendrier", short: "Agenda", icon: Calendar },
   { to: "/clasesenvivo", label: "En direct", short: "Direct", icon: Radio },
   { to: "/conversation", label: "Tutor IA", short: "Tutor", icon: MessageCircle },
+  { to: "/mensajes", label: "Mensajes", short: "Msgs", icon: Mail },
   { to: "/progress", label: "Mon progrès", short: "Progrès", icon: Sparkles },
   { to: "/profile", label: "Mon profil", short: "Profil", icon: User },
 ];

@@ -20,6 +20,7 @@ import { Route as LiberteFrances98273425Plataforma834823RouteImport } from './ro
 import { Route as LiberteLogIn983749824923465723RouteImport } from './routes/liberte-log-in-983749824923465723'
 import { Route as LibertePlataforma834798234728482934254StudentRouteImport } from './routes/liberte-plataforma-834798234728482934254-student'
 import { Route as LiberteProfesorPanel9382745AdminRouteImport } from './routes/liberte-profesor-panel-9382745-admin'
+import { Route as MensajesRouteImport } from './routes/mensajes'
 import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as ProgressRouteImport } from './routes/progress'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
@@ -36,6 +37,8 @@ import { Route as ClasesenvivoTaller1RouteImport } from './routes/clasesenvivo.t
 import { Route as DayDayIdRouteImport } from './routes/day.$dayId'
 import { Route as SemaineWeekIdRouteImport } from './routes/semaine.$weekId'
 import { Route as ApiPublicLiberteFrancesSignupRouteImport } from './routes/api/public/liberte-frances-signup'
+import { Route as ApiTelegramRemindersRouteImport } from './routes/api/telegram/reminders'
+import { Route as ApiTelegramWebhookRouteImport } from './routes/api/telegram/webhook'
 import { Route as PlusWeekIdItemIdRouteImport } from './routes/plus.$weekId.$itemId'
 import { Route as LovableEmailQueueProcessRouteImport } from './routes/lovable/email/queue/process'
 
@@ -98,6 +101,11 @@ const LiberteProfesorPanel9382745AdminRoute =
     path: '/liberte-profesor-panel-9382745-admin',
     getParentRoute: () => rootRouteImport,
   } as any)
+const MensajesRoute = MensajesRouteImport.update({
+  id: '/mensajes',
+  path: '/mensajes',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ProfileRoute = ProfileRouteImport.update({
   id: '/profile',
   path: '/profile',
@@ -179,6 +187,16 @@ const ApiPublicLiberteFrancesSignupRoute =
     path: '/api/public/liberte-frances-signup',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiTelegramRemindersRoute = ApiTelegramRemindersRouteImport.update({
+  id: '/api/telegram/reminders',
+  path: '/api/telegram/reminders',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiTelegramWebhookRoute = ApiTelegramWebhookRouteImport.update({
+  id: '/api/telegram/webhook',
+  path: '/api/telegram/webhook',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PlusWeekIdItemIdRoute = PlusWeekIdItemIdRouteImport.update({
   id: '/plus/$weekId/$itemId',
   path: '/plus/$weekId/$itemId',
@@ -203,6 +221,7 @@ export interface FileRoutesByFullPath {
   '/liberte-log-in-983749824923465723': typeof LiberteLogIn983749824923465723Route
   '/liberte-plataforma-834798234728482934254-student': typeof LibertePlataforma834798234728482934254StudentRoute
   '/liberte-profesor-panel-9382745-admin': typeof LiberteProfesorPanel9382745AdminRoute
+  '/mensajes': typeof MensajesRoute
   '/profile': typeof ProfileRoute
   '/progress': typeof ProgressRoute
   '/reset-password': typeof ResetPasswordRoute
@@ -219,6 +238,8 @@ export interface FileRoutesByFullPath {
   '/semaine/$weekId': typeof SemaineWeekIdRoute
   '/clasesenvivo/': typeof ClasesenvivoIndexRoute
   '/api/public/liberte-frances-signup': typeof ApiPublicLiberteFrancesSignupRoute
+  '/api/telegram/reminders': typeof ApiTelegramRemindersRoute
+  '/api/telegram/webhook': typeof ApiTelegramWebhookRoute
   '/plus/$weekId/$itemId': typeof PlusWeekIdItemIdRoute
   '/lovable/email/queue/process': typeof LovableEmailQueueProcessRoute
 }
@@ -234,6 +255,7 @@ export interface FileRoutesByTo {
   '/liberte-log-in-983749824923465723': typeof LiberteLogIn983749824923465723Route
   '/liberte-plataforma-834798234728482934254-student': typeof LibertePlataforma834798234728482934254StudentRoute
   '/liberte-profesor-panel-9382745-admin': typeof LiberteProfesorPanel9382745AdminRoute
+  '/mensajes': typeof MensajesRoute
   '/profile': typeof ProfileRoute
   '/progress': typeof ProgressRoute
   '/reset-password': typeof ResetPasswordRoute
@@ -250,6 +272,8 @@ export interface FileRoutesByTo {
   '/semaine/$weekId': typeof SemaineWeekIdRoute
   '/clasesenvivo': typeof ClasesenvivoIndexRoute
   '/api/public/liberte-frances-signup': typeof ApiPublicLiberteFrancesSignupRoute
+  '/api/telegram/reminders': typeof ApiTelegramRemindersRoute
+  '/api/telegram/webhook': typeof ApiTelegramWebhookRoute
   '/plus/$weekId/$itemId': typeof PlusWeekIdItemIdRoute
   '/lovable/email/queue/process': typeof LovableEmailQueueProcessRoute
 }
@@ -266,6 +290,7 @@ export interface FileRoutesById {
   '/liberte-log-in-983749824923465723': typeof LiberteLogIn983749824923465723Route
   '/liberte-plataforma-834798234728482934254-student': typeof LibertePlataforma834798234728482934254StudentRoute
   '/liberte-profesor-panel-9382745-admin': typeof LiberteProfesorPanel9382745AdminRoute
+  '/mensajes': typeof MensajesRoute
   '/profile': typeof ProfileRoute
   '/progress': typeof ProgressRoute
   '/reset-password': typeof ResetPasswordRoute
@@ -282,6 +307,8 @@ export interface FileRoutesById {
   '/semaine/$weekId': typeof SemaineWeekIdRoute
   '/clasesenvivo/': typeof ClasesenvivoIndexRoute
   '/api/public/liberte-frances-signup': typeof ApiPublicLiberteFrancesSignupRoute
+  '/api/telegram/reminders': typeof ApiTelegramRemindersRoute
+  '/api/telegram/webhook': typeof ApiTelegramWebhookRoute
   '/plus/$weekId/$itemId': typeof PlusWeekIdItemIdRoute
   '/lovable/email/queue/process': typeof LovableEmailQueueProcessRoute
 }
@@ -299,6 +326,7 @@ export interface FileRouteTypes {
     | '/liberte-log-in-983749824923465723'
     | '/liberte-plataforma-834798234728482934254-student'
     | '/liberte-profesor-panel-9382745-admin'
+    | '/mensajes'
     | '/profile'
     | '/progress'
     | '/reset-password'
@@ -315,6 +343,8 @@ export interface FileRouteTypes {
     | '/semaine/$weekId'
     | '/clasesenvivo/'
     | '/api/public/liberte-frances-signup'
+    | '/api/telegram/reminders'
+    | '/api/telegram/webhook'
     | '/plus/$weekId/$itemId'
     | '/lovable/email/queue/process'
   fileRoutesByTo: FileRoutesByTo
@@ -330,6 +360,7 @@ export interface FileRouteTypes {
     | '/liberte-log-in-983749824923465723'
     | '/liberte-plataforma-834798234728482934254-student'
     | '/liberte-profesor-panel-9382745-admin'
+    | '/mensajes'
     | '/profile'
     | '/progress'
     | '/reset-password'
@@ -346,6 +377,8 @@ export interface FileRouteTypes {
     | '/semaine/$weekId'
     | '/clasesenvivo'
     | '/api/public/liberte-frances-signup'
+    | '/api/telegram/reminders'
+    | '/api/telegram/webhook'
     | '/plus/$weekId/$itemId'
     | '/lovable/email/queue/process'
   id:
@@ -361,6 +394,7 @@ export interface FileRouteTypes {
     | '/liberte-log-in-983749824923465723'
     | '/liberte-plataforma-834798234728482934254-student'
     | '/liberte-profesor-panel-9382745-admin'
+    | '/mensajes'
     | '/profile'
     | '/progress'
     | '/reset-password'
@@ -377,6 +411,8 @@ export interface FileRouteTypes {
     | '/semaine/$weekId'
     | '/clasesenvivo/'
     | '/api/public/liberte-frances-signup'
+    | '/api/telegram/reminders'
+    | '/api/telegram/webhook'
     | '/plus/$weekId/$itemId'
     | '/lovable/email/queue/process'
   fileRoutesById: FileRoutesById
@@ -393,6 +429,7 @@ export interface RootRouteChildren {
   LiberteLogIn983749824923465723Route: typeof LiberteLogIn983749824923465723Route
   LibertePlataforma834798234728482934254StudentRoute: typeof LibertePlataforma834798234728482934254StudentRoute
   LiberteProfesorPanel9382745AdminRoute: typeof LiberteProfesorPanel9382745AdminRoute
+  MensajesRoute: typeof MensajesRoute
   ProfileRoute: typeof ProfileRoute
   ProgressRoute: typeof ProgressRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
@@ -409,6 +446,8 @@ export interface RootRouteChildren {
   SemaineWeekIdRoute: typeof SemaineWeekIdRoute
   ClasesenvivoIndexRoute: typeof ClasesenvivoIndexRoute
   ApiPublicLiberteFrancesSignupRoute: typeof ApiPublicLiberteFrancesSignupRoute
+  ApiTelegramRemindersRoute: typeof ApiTelegramRemindersRoute
+  ApiTelegramWebhookRoute: typeof ApiTelegramWebhookRoute
   PlusWeekIdItemIdRoute: typeof PlusWeekIdItemIdRoute
   LovableEmailQueueProcessRoute: typeof LovableEmailQueueProcessRoute
 }
@@ -490,6 +529,13 @@ declare module '@tanstack/react-router' {
       path: '/liberte-profesor-panel-9382745-admin'
       fullPath: '/liberte-profesor-panel-9382745-admin'
       preLoaderRoute: typeof LiberteProfesorPanel9382745AdminRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/mensajes': {
+      id: '/mensajes'
+      path: '/mensajes'
+      fullPath: '/mensajes'
+      preLoaderRoute: typeof MensajesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/profile': {
@@ -604,6 +650,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicLiberteFrancesSignupRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/telegram/reminders': {
+      id: '/api/telegram/reminders'
+      path: '/api/telegram/reminders'
+      fullPath: '/api/telegram/reminders'
+      preLoaderRoute: typeof ApiTelegramRemindersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/telegram/webhook': {
+      id: '/api/telegram/webhook'
+      path: '/api/telegram/webhook'
+      fullPath: '/api/telegram/webhook'
+      preLoaderRoute: typeof ApiTelegramWebhookRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/plus/$weekId/$itemId': {
       id: '/plus/$weekId/$itemId'
       path: '/plus/$weekId/$itemId'
@@ -635,6 +695,7 @@ const rootRouteChildren: RootRouteChildren = {
   LibertePlataforma834798234728482934254StudentRoute:
     LibertePlataforma834798234728482934254StudentRoute,
   LiberteProfesorPanel9382745AdminRoute: LiberteProfesorPanel9382745AdminRoute,
+  MensajesRoute: MensajesRoute,
   ProfileRoute: ProfileRoute,
   ProgressRoute: ProgressRoute,
   ResetPasswordRoute: ResetPasswordRoute,
@@ -651,6 +712,8 @@ const rootRouteChildren: RootRouteChildren = {
   SemaineWeekIdRoute: SemaineWeekIdRoute,
   ClasesenvivoIndexRoute: ClasesenvivoIndexRoute,
   ApiPublicLiberteFrancesSignupRoute: ApiPublicLiberteFrancesSignupRoute,
+  ApiTelegramRemindersRoute: ApiTelegramRemindersRoute,
+  ApiTelegramWebhookRoute: ApiTelegramWebhookRoute,
   PlusWeekIdItemIdRoute: PlusWeekIdItemIdRoute,
   LovableEmailQueueProcessRoute: LovableEmailQueueProcessRoute,
 }

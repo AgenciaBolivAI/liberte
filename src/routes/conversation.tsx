@@ -103,6 +103,14 @@ function ConversationPage() {
 
   useEffect(() => {
     if (authLoading || !user) return;
+    // Impersonating: getTutorState() is keyed to the CALLER (the admin), so
+    // hydrating would show the admin's own chat under the student's banner.
+    // There's no staff snapshot of a student's tutor_conversations, so preview
+    // an empty, read-only session instead.
+    if (viewAsUserId) {
+      setHydrated(true);
+      return;
+    }
     let alive = true;
     (async () => {
       try {
@@ -124,7 +132,7 @@ function ConversationPage() {
     return () => {
       alive = false;
     };
-  }, [authLoading, user]);
+  }, [authLoading, user, viewAsUserId]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
@@ -328,6 +336,7 @@ function ConversationPage() {
     setShowSuggestion(false);
     setShowTranslation(new Set());
     celebratedRef.current = false;
+    if (readOnly) return; // impersonating — browse scenes locally, never write
     try {
       await resetTutorConversation({ data: { dayId: d } });
     } catch {

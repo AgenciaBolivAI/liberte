@@ -1,5 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { supabase } from "@/integrations/supabase/client";
 import { Lock, ArrowRight, Play } from "lucide-react";
 import eiffelBg from "@/assets/paris-eiffel-bg.jpg";
 import logo from "@/assets/liberte-logo-full.png.asset.json";
@@ -352,6 +353,32 @@ function TallerTile({ item }: { item: (typeof TALLERES)[number] }) {
 
 function ClasesEnVivoHub() {
   const [month, setMonth] = useState(1);
+  // DB-managed replays (admin panel «Clases grabadas»); hardcoded list is the
+  // fallback until the table has rows.
+  const [dbClasses, setDbClasses] = useState<RecordedClass[] | null>(null);
+  useEffect(() => {
+    let alive = true;
+    supabase
+      .from("recorded_classes")
+      .select("number, title, date_label, video_url, sort")
+      .order("sort")
+      .order("number")
+      .then(({ data, error }) => {
+        if (!alive || error || !data?.length) return;
+        setDbClasses(
+          data.map((r) => ({
+            number: Number(r.number),
+            date: String(r.date_label ?? ""),
+            title: String(r.title),
+            href: r.video_url ?? undefined,
+          })),
+        );
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+  const recordedClasses = dbClasses ?? RECORDED_CLASSES;
 
   return (
     <div
@@ -485,8 +512,8 @@ function ClasesEnVivoHub() {
           </span>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
-          {RECORDED_CLASSES.map((cls) => (
-            <RecordedClassTile key={cls.number} cls={cls} />
+          {recordedClasses.map((cls, i) => (
+            <RecordedClassTile key={`${cls.number}-${cls.title}-${i}`} cls={cls} />
           ))}
         </div>
       </section>

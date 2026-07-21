@@ -624,12 +624,14 @@ g("12. Regressions (bugs found in audit — must stay fixed)");
   ok("scene picker still binds value to activeDay", conv.includes("value={activeDay}"));
   ok("scene picker still resets on change", conv.includes("void handleReset(Number(e.target.value))"));
 
-  // TEACH-2: calendar edit path wired in the coach panel.
-  const coach = readFileSync("src/routes/coach.tsx", "utf8");
-  ok("calendar has an editingId state", coach.includes("editingId"));
-  ok("calendar edit calls update().eq(id)", /\.update\(payload\)\.eq\("id", editingId\)/.test(coach));
-  ok("calendar edit pre-fills via beginEdit", coach.includes("function beginEdit("));
-  ok("calendar reload fetches description for pre-fill", coach.includes("duration_min, zoom_url, zoom_id, description"));
+  // TEACH-2: calendar edit path — now a shared component used by both panels.
+  const calMgr = readFileSync("src/components/CalendarManager.tsx", "utf8");
+  ok("calendar has an editingId state", calMgr.includes("editingId"));
+  ok("calendar edit calls update().eq(id)", /\.update\(payload\)\.eq\("id", editingId\)/.test(calMgr));
+  ok("calendar edit pre-fills via beginEdit", calMgr.includes("function beginEdit("));
+  ok("calendar reload fetches description for pre-fill", calMgr.includes("duration_min, zoom_url, zoom_id, description"));
+  ok("calendar manager is exported for reuse", calMgr.includes("export function CalendarManager"));
+  ok("calendar mounted in BOTH staff panels", readFileSync("src/routes/coach.tsx", "utf8").includes("<CalendarManager />") && readFileSync("src/routes/liberte-profesor-panel-9382745-admin.tsx", "utf8").includes("<CalendarManager />"));
 
   // Admin day/week content-access control + enforcement.
   const caFn = readFileSync("src/lib/content-access.functions.ts", "utf8");
@@ -659,8 +661,120 @@ g("12. Regressions (bugs found in audit — must stay fixed)");
   // Colibrí tutor mascot floats across the platform → /conversation.
   const mascotSrc = readFileSync("src/components/TutorMascot.tsx", "utf8");
   ok("mascot links to the tutor", mascotSrc.includes('to="/conversation"'));
-  ok("mascot hidden on the tutor page", mascotSrc.includes('HIDE_PREFIXES'));
-  ok("mascot mounted at the root", readFileSync("src/routes/__root.tsx", "utf8").includes("<TutorMascot />"));
+  ok("mascot mounted at the root (renders on every route)", readFileSync("src/routes/__root.tsx", "utf8").includes("<TutorMascot />"));
+  // It must follow the user EVERYWHERE — only the tutor page itself is excluded,
+  // and it must not be hidden inside lessons/challenges.
+  ok("mascot hidden only on the tutor page", /HIDE_PREFIXES\s*=\s*\["\/conversation"\]/.test(mascotSrc));
+  ok("mascot shows inside lessons + challenges", !mascotSrc.includes('"/day"') && !mascotSrc.includes('"/semaine"'));
+  ok("mascot sits under drawers/modals (z-30)", mascotSrc.includes("z-30"));
+
+  // Teacher <-> student messaging + document attachments.
+  const msgFn = readFileSync("src/lib/messaging.functions.ts", "utf8");
+  ok("messaging exposes send/thread/conversations/attachment", ["sendMessage", "getThread", "getConversations", "getAttachmentUrl"].every((f) => msgFn.includes(`export const ${f}`)));
+  ok("messaging validates UUIDs (no PostgREST filter injection)", msgFn.includes("UUID.test"));
+  const msgMig = readFileSync("supabase/migrations/20260720000001_messaging.sql", "utf8");
+  ok("messages migration present", msgMig.includes("CREATE TABLE IF NOT EXISTS public.messages"));
+  ok("attachments use a PRIVATE bucket", msgMig.includes("'message-attachments', false"));
+  ok("messaging RLS requires a staff participant", msgMig.includes("has_role(recipient_id, 'admin')"));
+  const mt = readFileSync("src/components/MessageThread.tsx", "utf8");
+  ok("thread uploads attachments to storage", mt.includes('storage.from("message-attachments").upload'));
+  ok("thread sends via server fn", mt.includes("sendMessage({ data:"));
+  ok("student messages route exists", readFileSync("src/routes/mensajes.tsx", "utf8").includes("getConversations()"));
+  ok("nav has a Mensajes entry", readFileSync("src/components/TopNav.tsx", "utf8").includes('to: "/mensajes"'));
+
+  // AI student report + tutor "failed attempt" logging.
+  const repFn = readFileSync("src/lib/report.functions.ts", "utf8");
+  ok("AI report aggregates every source", ["defi_results", "activity_results", "weekly_evaluations", "tutor_events", "tutor_usage", "day_completions"].every((t) => repFn.includes(t)));
+  ok("AI report is staff-gated", repFn.includes("requireStaff"));
+  ok("tutor logs corrections as durable events", tut.includes('.from("tutor_events").insert'));
+  ok("tutor_events migration present", readFileSync("supabase/migrations/20260720000002_tutor_events.sql", "utf8").includes("CREATE TABLE IF NOT EXISTS public.tutor_events"));
+  const sdp = readFileSync("src/components/StudentDetailPanel.tsx", "utf8");
+  ok("teacher panel shows AI report + message thread", sdp.includes("<StudentReportCard") && sdp.includes("<MessageThread"));
+
+  // Telegram linking + live-class reminders (token must live ONLY in env).
+  const tgHelper = readFileSync("src/lib/telegram.ts", "utf8");
+  ok("telegram reads the token from env", tgHelper.includes("process.env.TELEGRAM_BOT_TOKEN"));
+  ok("telegram exposes sendTelegram + botUsername", tgHelper.includes("export async function sendTelegram") && tgHelper.includes("export async function botUsername"));
+  ok("telegram link fns exist", ["startTelegramLink", "getTelegramStatus", "unlinkTelegram"].every((f) => readFileSync("src/lib/telegram.functions.ts", "utf8").includes(`export const ${f}`)));
+  ok("telegram migration present", readFileSync("supabase/migrations/20260720000003_telegram.sql", "utf8").includes("telegram_chat_id"));
+  const tgHook = readFileSync("src/routes/api/telegram/webhook.ts", "utf8");
+  ok("telegram webhook verifies the secret", tgHook.includes("x-telegram-bot-api-secret-token") && tgHook.includes("TELEGRAM_WEBHOOK_SECRET"));
+  ok("telegram webhook links by one-time code", tgHook.includes("telegram_link_code"));
+  ok("reminders endpoint fails closed without a secret", readFileSync("src/routes/api/telegram/reminders.ts", "utf8").includes("if (!secret) return"));
+  ok("webhook fails closed without a secret", tgHook.includes("if (!secret ||"));
+  ok("reminders claim-then-send dedupe", readFileSync("src/lib/telegram.reminders.ts", "utf8").includes("claimErr"));
+  ok("messages: only read_at is updatable by students", msgMig.includes("GRANT UPDATE (read_at)") && !/GRANT SELECT, INSERT, UPDATE ON public\.messages/.test(msgMig));
+  ok("attachment path ownership enforced", msgFn.includes('startsWith(`${context.userId}/`)') && msgFn.includes('startsWith(`${msg.sender_id}/`)'));
+  ok("defi submit blocked while impersonating", readFileSync("src/components/StagedDefi.tsx", "utf8").includes("if (readOnly) return"));
+  ok("tutor reset blocked while impersonating", conv.includes("if (readOnly) return; // impersonating"));
+  ok("AI report survives an AI failure", readFileSync("src/lib/report.functions.ts", "utf8").includes("} catch {"));
+
+  // Live-DB verified: this project's schema-wide default ACL auto-grants full
+  // CRUD (incl. TRUNCATE) to anon/authenticated on every new public table, on
+  // top of whatever a migration's own GRANT says. Applied directly to
+  // tpqoszkffdmxdyskdnyi and verified: anon had zero rows on all 7 new tables,
+  // messages' UPDATE was column-scoped to read_at only, no TRUNCATE anywhere,
+  // telegram_reminders had no grants at all. This migration is what closes it.
+  const hardening = readFileSync("supabase/migrations/20260721000000_privilege_hardening.sql", "utf8");
+  ok("privilege hardening migration revokes the default over-grant first", (hardening.match(/REVOKE ALL ON public\.\w+ FROM anon, authenticated;/g) || []).length >= 7);
+  ok("hardening re-grants messages UPDATE as read_at only", hardening.includes("GRANT UPDATE (read_at) ON public.messages"));
+  ok("hardening leaves telegram_reminders with no grants", hardening.trim().endsWith("REVOKE ALL ON public.telegram_reminders FROM anon, authenticated;"));
+  ok("reminders target upcoming live classes", readFileSync("src/lib/telegram.reminders.ts", "utf8").includes("calendar_events"));
+  ok("profile can connect telegram", readFileSync("src/routes/profile.tsx", "utf8").includes("<TelegramConnect"));
+  ok("new messages notify via telegram", msgFn.includes("sendTelegram"));
+
+  // TEACH-1 v1: content authoring (days 11-120) + recorded classes.
+  {
+    const contentSrc = ts.transpileModule(readFileSync("src/lib/content.ts", "utf8"), {
+      compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+    }).outputText;
+    const cm = {};
+    new Function("exports", "module", contentSrc)(cm, { exports: cm });
+    eq("authored day 11 -> week 3", cm.weekOfAuthoredDay(11), 3);
+    eq("authored day 120 -> week 24", cm.weekOfAuthoredDay(120), 24);
+    eq("youtube watch URL embeds", cm.toEmbedUrl("https://www.youtube.com/watch?v=kLuB1ZDjkHg").embed, "https://www.youtube.com/embed/kLuB1ZDjkHg");
+    eq("youtu.be URL embeds", cm.toEmbedUrl("https://youtu.be/abc123DEF45").kind, "youtube");
+    eq("uploaded file passes through", cm.toEmbedUrl("https://x.supabase.co/storage/v1/object/public/content-assets/a.mp4").kind, "file");
+  }
+  const authMig = readFileSync("supabase/migrations/20260720000005_authored_content.sql", "utf8");
+  ok("authored content migration present", authMig.includes("public.authored_days") && authMig.includes("public.authored_blocks"));
+  ok("authored days limited to 11-120", authMig.includes("BETWEEN 11 AND 120"));
+  ok("students read only published days", authMig.includes("status = 'published'"));
+  ok("content-assets bucket staff-only writes", authMig.includes("'content-assets', true") && authMig.includes("staff upload content assets"));
+  const dayRouteSrc = readFileSync("src/routes/day.$dayId.tsx", "utf8");
+  ok("day route switches to authored renderer past day 10", dayRouteSrc.includes("n > LESSON_DAYS") && dayRouteSrc.includes("<AuthoredDayView"));
+  const adv = readFileSync("src/components/AuthoredDayView.tsx", "utf8");
+  ok("authored view honours unlock + overrides", adv.includes("effectiveOverride(dayId, accessOverrides)"));
+  ok("authored view completion uses day_completions", adv.includes("markDayCompleted(user.id, dayId"));
+  ok("authored writing/speaking reuse AI correction", (adv.match(/correctActivity\(\{ data:/g) || []).length >= 2);
+  const cmSrc = readFileSync("src/components/ContentManager.tsx", "utf8");
+  ok("content manager uploads to content-assets", cmSrc.includes('storage.from("content-assets").upload'));
+  ok("content manager can publish/unpublish", cmSrc.includes('"published"') && cmSrc.includes("Publicar"));
+  ok("recorded classes migration present", readFileSync("supabase/migrations/20260720000004_recorded_classes.sql", "utf8").includes("public.recorded_classes"));
+  ok("recorded classes manager wired", readFileSync("src/components/RecordedClassesManager.tsx", "utf8").includes('from("recorded_classes")'));
+  const cev = readFileSync("src/routes/clasesenvivo.index.tsx", "utf8");
+  ok("replays read from DB with hardcoded fallback", cev.includes('from("recorded_classes")') && cev.includes("dbClasses ?? RECORDED_CLASSES"));
+  const adminPanelSrc = readFileSync("src/routes/liberte-profesor-panel-9382745-admin.tsx", "utf8");
+  ok("admin panel mounts content + recorded managers", adminPanelSrc.includes("<ContentManager />") && adminPanelSrc.includes("<RecordedClassesManager />"));
+  ok("dashboard reaches authored weeks", readFileSync("src/routes/liberte-plataforma-834798234728482934254-student.tsx", "utf8").includes("authoredStart"));
+
+  // SECURITY: the bot token must NEVER be committed to the repo.
+  {
+    let leak = null;
+    const walk = (dir) => {
+      for (const ent of readdirSync(dir, { withFileTypes: true })) {
+        if (leak) return;
+        const p = `${dir}/${ent.name}`;
+        if (ent.isDirectory()) {
+          if (ent.name !== "node_modules" && ent.name !== ".output" && ent.name !== ".wrangler") walk(p);
+        } else if (/\.(ts|tsx|js|mjs|sql|json|md)$/.test(ent.name)) {
+          if (/\b\d{9,10}:AA[A-Za-z0-9_-]{30,}\b/.test(readFileSync(p, "utf8"))) leak = p;
+        }
+      }
+    };
+    for (const d of ["src", "supabase", "scripts"]) walk(d);
+    ok("no Telegram bot token hardcoded in the repo", leak === null);
+  }
 
   // #7/#8 analytics.
   const adm = readFileSync("src/lib/admin.functions.ts", "utf8");

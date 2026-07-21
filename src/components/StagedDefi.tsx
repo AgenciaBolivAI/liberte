@@ -16,6 +16,7 @@ import confetti from "canvas-confetti";
 import { Button } from "@/components/ui/button";
 import { speakFr } from "@/lib/speak";
 import { evaluateDefi, transcribeStage } from "@/lib/defi.functions";
+import { useAdminPreview } from "@/lib/admin-preview";
 
 type Step = { serveur: string; hint: string; example: string };
 type StageState = {
@@ -64,6 +65,8 @@ export type StagedDefiProps = {
 
 export function StagedDefi(props: StagedDefiProps) {
   const { dayId, title, subtitle, eyebrow, steps, criteria, avatar = "🎙️", onAward, onDone } = props;
+  // While an admin previews "as student", never write/spend under their account.
+  const { readOnly } = useAdminPreview();
 
   const [stages, setStages] = useState<StageState[]>(
     () => steps.map(() => ({ blob: null, url: null, recording: false, saved: false })),
@@ -137,6 +140,7 @@ export function StagedDefi(props: StagedDefiProps) {
   };
 
   const submit = async () => {
+    if (readOnly) return; // impersonating — never write defi_results / spend AI
     setUploading(true);
     setErrorMsg("");
     setProgressMsg("Transcribiendo tus grabaciones…");
@@ -271,7 +275,7 @@ export function StagedDefi(props: StagedDefiProps) {
               <div className="mt-4 flex flex-wrap items-center gap-3">
                 <button
                   onClick={() => (isRec ? stopRec() : startRec(idx))}
-                  disabled={uploading || (!isRec && stages.some((s) => s.recording) && !st.recording)}
+                  disabled={uploading || readOnly || (!isRec && stages.some((s) => s.recording) && !st.recording)}
                   className={`grid h-14 w-14 place-items-center rounded-full text-white shadow-card transition disabled:opacity-40 ${
                     isRec ? "bg-red animate-pulse" : st.saved ? "bg-gold text-navy" : "bg-gradient-blue hover:scale-105"
                   }`}
@@ -307,7 +311,7 @@ export function StagedDefi(props: StagedDefiProps) {
           </p>
           <Button
             onClick={submit}
-            disabled={!allSaved || uploading || !!result}
+            disabled={!allSaved || uploading || !!result || readOnly}
             className="bg-gradient-to-r from-gold to-[oklch(0.78_0.14_80)] text-navy font-extrabold shadow-card"
           >
             {uploading ? (

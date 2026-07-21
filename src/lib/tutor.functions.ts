@@ -284,6 +284,25 @@ export const sendTutorMessage = createServerFn({ method: "POST" })
       { onConflict: "user_id" },
     );
 
+    // Durable "failed attempt" log for the teacher report: a correction means
+    // the student said something that needed fixing. Best-effort, service role
+    // so a student can't forge their own record; never blocks the reply.
+    if (correction) {
+      try {
+        const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+        await supabaseAdmin.from("tutor_events").insert({
+          user_id: c.userId,
+          day_id: data.dayId,
+          kind: "correction",
+          said: correction.said,
+          corrected: correction.corrected,
+          rule_es: correction.rule_es,
+        });
+      } catch {
+        /* logging is best-effort */
+      }
+    }
+
     // Voice mode: synthesise the reply in the same round trip so the student
     // hears it immediately instead of waiting for a second request.
     let audio: string | null = null;

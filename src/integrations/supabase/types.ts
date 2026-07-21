@@ -74,6 +74,60 @@ export type Database = {
         }
         Relationships: []
       }
+      authored_blocks: {
+        Row: {
+          day_id: number
+          id: string
+          payload: Json
+          sort: number
+          type: string
+          updated_at: string
+        }
+        Insert: {
+          day_id: number
+          id?: string
+          payload?: Json
+          sort?: number
+          type: string
+          updated_at?: string
+        }
+        Update: {
+          day_id?: number
+          id?: string
+          payload?: Json
+          sort?: number
+          type?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      authored_days: {
+        Row: {
+          created_by: string | null
+          day_id: number
+          status: string
+          subtitle: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          created_by?: string | null
+          day_id: number
+          status?: string
+          subtitle?: string
+          title?: string
+          updated_at?: string
+        }
+        Update: {
+          created_by?: string | null
+          day_id?: number
+          status?: string
+          subtitle?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       calendar_events: {
         Row: {
           created_at: string
@@ -374,6 +428,39 @@ export type Database = {
         }
         Relationships: []
       }
+      messages: {
+        Row: {
+          attachment_name: string | null
+          attachment_path: string | null
+          body: string
+          created_at: string
+          id: string
+          read_at: string | null
+          recipient_id: string
+          sender_id: string
+        }
+        Insert: {
+          attachment_name?: string | null
+          attachment_path?: string | null
+          body?: string
+          created_at?: string
+          id?: string
+          read_at?: string | null
+          recipient_id: string
+          sender_id: string
+        }
+        Update: {
+          attachment_name?: string | null
+          attachment_path?: string | null
+          body?: string
+          created_at?: string
+          id?: string
+          read_at?: string | null
+          recipient_id?: string
+          sender_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           approved_at: string | null
@@ -389,6 +476,10 @@ export type Database = {
           nationality: string | null
           objective: string | null
           phone: string | null
+          telegram_chat_id: string | null
+          telegram_link_code: string | null
+          telegram_linked_at: string | null
+          telegram_username: string | null
           updated_at: string
         }
         Insert: {
@@ -405,6 +496,10 @@ export type Database = {
           nationality?: string | null
           objective?: string | null
           phone?: string | null
+          telegram_chat_id?: string | null
+          telegram_link_code?: string | null
+          telegram_linked_at?: string | null
+          telegram_username?: string | null
           updated_at?: string
         }
         Update: {
@@ -421,7 +516,62 @@ export type Database = {
           nationality?: string | null
           objective?: string | null
           phone?: string | null
+          telegram_chat_id?: string | null
+          telegram_link_code?: string | null
+          telegram_linked_at?: string | null
+          telegram_username?: string | null
           updated_at?: string
+        }
+        Relationships: []
+      }
+      telegram_reminders: {
+        Row: {
+          event_id: string
+          sent_at: string
+          user_id: string
+        }
+        Insert: {
+          event_id: string
+          sent_at?: string
+          user_id: string
+        }
+        Update: {
+          event_id?: string
+          sent_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      recorded_classes: {
+        Row: {
+          created_at: string
+          date_label: string
+          id: string
+          number: number
+          sort: number
+          title: string
+          updated_at: string
+          video_url: string | null
+        }
+        Insert: {
+          created_at?: string
+          date_label?: string
+          id?: string
+          number?: number
+          sort?: number
+          title: string
+          updated_at?: string
+          video_url?: string | null
+        }
+        Update: {
+          created_at?: string
+          date_label?: string
+          id?: string
+          number?: number
+          sort?: number
+          title?: string
+          updated_at?: string
+          video_url?: string | null
         }
         Relationships: []
       }
@@ -473,6 +623,39 @@ export type Database = {
           id?: string
           metadata?: Json | null
           reason?: string
+        }
+        Relationships: []
+      }
+      tutor_events: {
+        Row: {
+          corrected: string | null
+          created_at: string
+          day_id: number
+          id: string
+          kind: string
+          rule_es: string | null
+          said: string | null
+          user_id: string
+        }
+        Insert: {
+          corrected?: string | null
+          created_at?: string
+          day_id: number
+          id?: string
+          kind: string
+          rule_es?: string | null
+          said?: string | null
+          user_id: string
+        }
+        Update: {
+          corrected?: string | null
+          created_at?: string
+          day_id?: number
+          id?: string
+          kind?: string
+          rule_es?: string | null
+          said?: string | null
+          user_id?: string
         }
         Relationships: []
       }

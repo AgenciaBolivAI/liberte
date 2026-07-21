@@ -3,6 +3,8 @@ import { Loader2, Target, AlertCircle, Sparkles, Unlock, Lock } from "lucide-rea
 import { getStudentResults } from "@/lib/defi.functions";
 import { getStudentProgress, unlockWeek, lockWeek } from "@/lib/coach.functions";
 import { getWeeks } from "@/data/program";
+import { StudentReportCard } from "@/components/StudentReportCard";
+import { MessageThread } from "@/components/MessageThread";
 
 type Detail = Awaited<ReturnType<typeof getStudentResults>>;
 
@@ -137,9 +139,18 @@ export function StudentDetailPanel({ userId }: { userId: string }) {
   const totalMisses = results.reduce((a, r) => a + (r.misses ?? 0), 0);
   const avg = results.length ? results.reduce((a, r) => a + Number(r.score_10), 0) / results.length : 0;
 
+  const studentName = detail.profile?.full_name || detail.profile?.email || "Alumno";
+
   return (
     <div className="space-y-4">
       <ProgressPanel userId={userId} />
+
+      <StudentReportCard userId={userId} />
+
+      <div>
+        <p className="mb-1 font-display text-lg font-extrabold text-navy">✉️ Mensajes</p>
+        <MessageThread otherUserId={userId} otherName={studentName} />
+      </div>
 
       <div className="rounded-3xl border border-border bg-white p-4 sm:p-5 shadow-soft">
         <p className="font-display text-lg font-extrabold text-navy">Resumen de desafíos</p>

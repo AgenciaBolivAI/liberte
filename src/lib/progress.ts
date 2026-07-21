@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
 
@@ -16,17 +16,23 @@ export function useStars(targetUserId?: string | null) {
   const { user } = useAuth();
   const [stars, setStars] = useState(0);
   const [loading, setLoading] = useState(true);
+  const reqRef = useRef(0);
 
   const refresh = useCallback(async () => {
+    // Only the latest call may commit — a slow snapshot for a previously-viewed
+    // student can't overwrite the current one.
+    const req = ++reqRef.current;
+    const alive = () => reqRef.current === req;
     if (targetUserId) {
       try {
         const { getStudentSnapshot } = await import("@/lib/admin.functions");
         const snap = await getStudentSnapshot({ data: { userId: targetUserId } });
+        if (!alive()) return;
         setStars(snap.stars);
       } catch {
-        setStars(0);
+        if (alive()) setStars(0);
       }
-      setLoading(false);
+      if (alive()) setLoading(false);
       return;
     }
     if (!user) {
@@ -38,6 +44,7 @@ export function useStars(targetUserId?: string | null) {
       .from("star_awards")
       .select("amount")
       .eq("user_id", user.id);
+    if (!alive()) return;
     setStars((data ?? []).reduce((s, r) => s + (r.amount ?? 0), 0));
     setLoading(false);
   }, [user, targetUserId]);
@@ -55,12 +62,16 @@ export function useDayCompletions(targetUserId?: string | null) {
   const [defiDays, setDefiDays] = useState<number[]>([]);
   const [enrolledAt, setEnrolledAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const reqRef = useRef(0);
 
   const refresh = useCallback(async () => {
+    const req = ++reqRef.current;
+    const alive = () => reqRef.current === req;
     if (targetUserId) {
       try {
         const { getStudentSnapshot } = await import("@/lib/admin.functions");
         const snap = await getStudentSnapshot({ data: { userId: targetUserId } });
+        if (!alive()) return;
         setRows(
           snap.completions.map((c) => ({
             day_id: c.day_id,
@@ -71,11 +82,13 @@ export function useDayCompletions(targetUserId?: string | null) {
         setDefiDays(snap.defiDays);
         setEnrolledAt(snap.createdAt);
       } catch {
-        setRows([]);
-        setDefiDays([]);
-        setEnrolledAt(null);
+        if (alive()) {
+          setRows([]);
+          setDefiDays([]);
+          setEnrolledAt(null);
+        }
       }
-      setLoading(false);
+      if (alive()) setLoading(false);
       return;
     }
     if (!user) {
@@ -93,6 +106,7 @@ export function useDayCompletions(targetUserId?: string | null) {
         .order("completed_at", { ascending: true }),
       supabase.from("defi_results").select("day_id").eq("user_id", user.id),
     ]);
+    if (!alive()) return;
     setRows((dc.data as DayCompletion[]) ?? []);
     setDefiDays(Array.from(new Set((dr.data ?? []).map((r) => Number(r.day_id)))));
     setEnrolledAt(user.created_at ?? null);

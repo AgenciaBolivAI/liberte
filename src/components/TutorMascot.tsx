@@ -2,11 +2,12 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import mascot from "@/assets/liberte-mascot.png.asset.json";
 
-// Lib the colibrí — the AI tutor's persona — floats on every page and flies you
-// to the conversation tutor on tap. Hidden on the tutor itself (you're there)
-// and inside the focused lesson player (its own sidebar/drawer + challenge flow
-// own the corner, and a floating overlay would poke through the mobile drawer).
-const HIDE_PREFIXES = ["/conversation", "/day", "/semaine", "/defi-semaine2"];
+// Lib the colibrí — the AI tutor's persona — follows you across the ENTIRE app
+// (landing, dashboard, lessons, everywhere) and flies you to the conversation
+// tutor on tap. Hidden only on the tutor page itself, where it is redundant and
+// would sit on top of the chat composer. Its z-index sits BELOW drawers (z-40)
+// and modals (z-50) so it never pokes through them.
+const HIDE_PREFIXES = ["/conversation"];
 
 export function TutorMascot() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
@@ -23,7 +24,7 @@ export function TutorMascot() {
     <Link
       to="/conversation"
       aria-label="Habla con Lib, tu tutor de IA"
-      className="group fixed bottom-5 right-4 z-40 flex items-center gap-2 sm:bottom-6 sm:right-6"
+      className="group fixed bottom-5 right-4 z-30 flex items-center gap-2 sm:bottom-6 sm:right-6"
     >
       <span
         className={`pointer-events-none hidden max-w-[200px] rounded-2xl bg-white px-3 py-2 text-xs font-semibold text-navy shadow-card transition-opacity duration-300 sm:block ${

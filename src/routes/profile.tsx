@@ -10,6 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { TelegramConnect } from "@/components/TelegramConnect";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
@@ -251,6 +252,8 @@ function ProfilePage() {
             )}
           </div>
         </div>
+
+        <TelegramConnect />
       </main>
     </div>
   );
