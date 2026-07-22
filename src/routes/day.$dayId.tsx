@@ -199,6 +199,8 @@ import vocabVideo from "@/assets/vocabulario-dia1.mp4.asset.json";
 import cuadernilloSemana1 from "@/assets/cuadernillo-semana1.pdf.asset.json";
 import { speakFr, stopFr } from "@/lib/speak";
 import { WEEK34, type WeekDay } from "@/data/week34";
+import { WEEK34_META, type RichDay, type Week34Meta } from "@/data/week34.meta";
+import { useRichDay } from "@/lib/rich-content";
 
 const DAY_TITLES: Record<string, { title: string; desc: string }> = {
   "1": { title: "Jour 1 · Le Café — Liberté", desc: "Premier jour : commander un café à Paris avec politesse." },
@@ -225,15 +227,57 @@ export const Route = createFileRoute("/day/$dayId")({
   component: DayRouteSwitcher,
 });
 
-/** Days 1-20 are code-authored (the full lesson player below — days 1-10 bespoke,
- *  days 11-20 generic wrappers fed by WEEK34). Days 21-120 are teacher-authored in
- *  the DB and use their own renderer — the player's LESSONS_BY_DAY lookups would
- *  crash on unknown days, so anything not registered there falls to AuthoredDayView. */
+/** Days 1-20 are code-registered (the full lesson player below — days 1-10 bespoke,
+ *  days 11-20 generic wrappers fed by WEEK34/DB). Days 21-120 are teacher-authored:
+ *  if the teacher built a full "rich" lesson it renders through the SAME shell (via
+ *  DynamicDayGate, which registers its DB meta first); a legacy block day falls to
+ *  AuthoredDayView. */
 function DayRouteSwitcher() {
   const { dayId } = Route.useParams();
   const n = Number(dayId);
-  if (Number.isInteger(n) && n > LESSON_DAYS && !(dayId in LESSONS_BY_DAY))
-    return <AuthoredDayView dayId={Math.min(n, 120)} />;
+  if (dayId in LESSONS_BY_DAY) return <DayPage />;
+  if (Number.isInteger(n) && n >= 21 && n <= 120) return <DynamicDayGate dayId={dayId} />;
+  return <DayPage />;
+}
+
+/** For days 21+ not known at build time: fetch the day's rich content, and if it
+ *  exists, register its meta into the shell maps and render the real DayPage;
+ *  otherwise fall back to the legacy block renderer. A brief spinner avoids the
+ *  "flash of day 1" that a synchronous decision would cause. */
+function DynamicDayGate({ dayId }: { dayId: string }) {
+  const [phase, setPhase] = useState<"loading" | "rich" | "blocks">("loading");
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      const { data } = await supabase
+        .from("authored_days")
+        .select("rich")
+        .eq("day_id", Number(dayId))
+        .maybeSingle();
+      if (!alive) return;
+      const rich = data?.rich as unknown as RichDay | null;
+      if (rich?.meta) {
+        registerDay(dayId, rich.meta);
+        setPhase("rich");
+      } else {
+        setPhase("blocks");
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [dayId]);
+
+  if (phase === "loading") {
+    return (
+      <div className="grid min-h-[60vh] place-items-center">
+        <div className="flex items-center gap-2 text-navy/70">
+          <PlayCircle className="h-5 w-5 animate-pulse text-blue" /> Cargando el día…
+        </div>
+      </div>
+    );
+  }
+  if (phase === "blocks") return <AuthoredDayView dayId={Math.min(Number(dayId), 120)} />;
   return <DayPage />;
 }
 
@@ -389,152 +433,18 @@ const WEEK_TITLE_BY_DAY: Record<string, string> = {
 };
 
 /* ============================================================
-   WEEKS 3-4 · Days 11-20 — UI metadata (labels/titles only).
-   All lesson CONTENT (vocab, games, grammar, défi) comes from
-   WEEK34 (src/data/week34.ts). This table only names things.
-   The loop below registers these days into the same static maps
-   days 1-10 use, so they render through the real DayPage shell.
+   WEEKS 3-4 · Days 11-20 — register into the SAME static maps days 1-10
+   use, so they render through the real DayPage shell. UI metadata comes
+   from WEEK34_META (src/data/week34.meta.ts, shared with the seed script);
+   lesson CONTENT comes from WEEK34 (code) or the DB `authored_days.rich`
+   column at runtime (teacher-editable — see useRichDay below).
    ============================================================ */
-type Week34Meta = {
-  label: string;      // sidebar accordion + DAYS_META
-  headTitle: string;  // <head> title
-  headDesc: string;   // <head> description
-  week: 3 | 4;
-  weekEmoji: string;  // WEEK_TITLE_BY_DAY suffix
-  intro: string;      // LiberteSpeak welcome (intro lesson)
-  introSub: string;   // sidebar intro subtitle
-  clesSub: string;    // sidebar "Les clés" subtitle (grammar theme)
-  defiTitle: string;
-  defiSubtitle: string;
-  defiAvatar: string;
-};
-
-const WEEK34_META: Record<string, Week34Meta> = {
-  "11": {
-    label: "Jour 11 · Demander son chemin",
-    headTitle: "Jour 11 · Demander son chemin — Liberté",
-    headDesc: "Onzième jour : demander son chemin et comprendre les indications dans la rue.",
-    week: 3, weekEmoji: "🧭",
-    intro: "Bienvenue au Jour 11 ! Aujourd'hui tu apprends à demander ton chemin dans les rues de Paris : où se trouve la station, la pharmacie, le musée. Respire, tu es prêt.",
-    introSub: "Demander son chemin.",
-    clesSub: "Où est… ? · Prépositions de lieu.",
-    defiTitle: "Demander son chemin",
-    defiSubtitle: "Dans la rue : demande comment aller à un lieu et comprends les indications.",
-    defiAvatar: "🧭",
-  },
-  "12": {
-    label: "Jour 12 · Donner des directions",
-    headTitle: "Jour 12 · Donner des directions — Liberté",
-    headDesc: "Douzième jour : donner des directions claires avec l'impératif.",
-    week: 3, weekEmoji: "🗺️",
-    intro: "Bienvenue au Jour 12 ! Aujourd'hui c'est toi qui guides : tourne à gauche, continue tout droit, c'est en face. Respire, tu es prêt.",
-    introSub: "Donner des directions.",
-    clesSub: "Impératif : tournez, continuez, allez.",
-    defiTitle: "Donner des directions",
-    defiSubtitle: "Guía a alguien paso a paso hasta su destino.",
-    defiAvatar: "🗺️",
-  },
-  "13": {
-    label: "Jour 13 · À la pharmacie",
-    headTitle: "Jour 13 · À la pharmacie — Liberté",
-    headDesc: "Treizième jour : acheter un médicament et comprendre la posologie.",
-    week: 3, weekEmoji: "💊",
-    intro: "Bienvenue au Jour 13 ! Aujourd'hui tu vas à la pharmacie acheter un médicament et comprendre comment le prendre. Respire, tu es prêt.",
-    introSub: "À la pharmacie.",
-    clesSub: "Il me faut… · La posologie.",
-    defiTitle: "À la pharmacie",
-    defiSubtitle: "Compra un medicamento y entiende cómo y cuándo tomarlo.",
-    defiAvatar: "💊",
-  },
-  "14": {
-    label: "Jour 14 · Décrire un symptôme",
-    headTitle: "Jour 14 · Décrire un symptôme — Liberté",
-    headDesc: "Quatorzième jour : décrire un symptôme et demander conseil.",
-    week: 3, weekEmoji: "🤒",
-    intro: "Bienvenue au Jour 14 ! Aujourd'hui tu apprends à dire où tu as mal : j'ai mal à la tête, à la gorge, au ventre. Respire, tu es prêt.",
-    introSub: "Décrire un symptôme.",
-    clesSub: "Avoir mal à… · Depuis…",
-    defiTitle: "Décrire un symptôme",
-    defiSubtitle: "Explica cómo te sientes desde cuándo y pide un consejo.",
-    defiAvatar: "🤒",
-  },
-  "15": {
-    label: "Jour 15 · Comparer & choisir",
-    headTitle: "Jour 15 · Comparer & choisir — Liberté",
-    headDesc: "Quinzième jour : comparer des produits et choisir le meilleur.",
-    week: 3, weekEmoji: "🛍️",
-    intro: "Bienvenue au Jour 15 ! Aujourd'hui tu compares : plus cher, moins cher, meilleur, aussi grand que. Respire, tu es prêt.",
-    introSub: "Comparer & choisir.",
-    clesSub: "Comparatifs : plus / moins / aussi… que.",
-    defiTitle: "Comparer & choisir",
-    defiSubtitle: "Compara dos productos y explica cuál eliges y por qué.",
-    defiAvatar: "🛍️",
-  },
-  "16": {
-    label: "Jour 16 · Essayer des vêtements",
-    headTitle: "Jour 16 · Essayer des vêtements — Liberté",
-    headDesc: "Seizième jour : essayer des vêtements et parler de tailles et de couleurs.",
-    week: 4, weekEmoji: "👗",
-    intro: "Bienvenue au Jour 16 ! Aujourd'hui tu essaies des vêtements : la taille, la couleur, ça me va bien. Respire, tu es prêt.",
-    introSub: "Au probador.",
-    clesSub: "Ça me va · Les tailles · Pronoms COD.",
-    defiTitle: "Essayer des vêtements",
-    defiSubtitle: "En el probador: pide otra talla, otro color y decide si te lo llevas.",
-    defiAvatar: "👗",
-  },
-  "17": {
-    label: "Jour 17 · Au marché · Les fruits",
-    headTitle: "Jour 17 · Au marché · Les fruits — Liberté",
-    headDesc: "Dix-septième jour : acheter des fruits au marché et parler de quantités.",
-    week: 4, weekEmoji: "🍓",
-    intro: "Bienvenue au Jour 17 ! Aujourd'hui tu vas au marché acheter des fruits : un kilo de pommes, une barquette de fraises. Respire, tu es prêt.",
-    introSub: "Les fruits au marché.",
-    clesSub: "Quantités : un kilo de, une barquette de.",
-    defiTitle: "Au marché · Les fruits",
-    defiSubtitle: "Compra fruta en el mercado indicando cantidades y precios.",
-    defiAvatar: "🍓",
-  },
-  "18": {
-    label: "Jour 18 · Au marché · Les légumes",
-    headTitle: "Jour 18 · Au marché · Les légumes — Liberté",
-    headDesc: "Dix-huitième jour : acheter des légumes et utiliser les articles partitifs.",
-    week: 4, weekEmoji: "🥕",
-    intro: "Bienvenue au Jour 18 ! Aujourd'hui tu achètes des légumes au marché : du, de la, des. Respire, tu es prêt.",
-    introSub: "Les légumes au marché.",
-    clesSub: "Articles partitifs : du / de la / des.",
-    defiTitle: "Au marché · Les légumes",
-    defiSubtitle: "Compra verduras usando los artículos partitivos.",
-    defiAvatar: "🥕",
-  },
-  "19": {
-    label: "Jour 19 · S'inscrire au gymnase",
-    headTitle: "Jour 19 · S'inscrire au gymnase — Liberté",
-    headDesc: "Dix-neuvième jour : s'inscrire à une activité et parler de sa routine.",
-    week: 4, weekEmoji: "🏋️",
-    intro: "Bienvenue au Jour 19 ! Aujourd'hui tu t'inscris au gymnase : les horaires, les tarifs, ta routine. Respire, tu es prêt.",
-    introSub: "S'inscrire au gymnase.",
-    clesSub: "Verbes pronominaux : s'inscrire, se lever.",
-    defiTitle: "S'inscrire au gymnase",
-    defiSubtitle: "Inscríbete a una actividad: pregunta horarios, precios y apúntate.",
-    defiAvatar: "🏋️",
-  },
-  "20": {
-    label: "Jour 20 · Défi final J'OSE",
-    headTitle: "Jour 20 · Défi final J'OSE — Liberté",
-    headDesc: "Vingtième jour : le grand défi J'OSE qui réunit tout le mois.",
-    week: 4, weekEmoji: "🏅",
-    intro: "Bienvenue au Jour 20 ! Aujourd'hui, le grand défi : tu réunis tout ce que tu as appris ce mois-ci. Respire, tu es prêt — tu OSES.",
-    introSub: "Le grand défi J'OSE.",
-    clesSub: "Révision intégrée du mois J'OSE.",
-    defiTitle: "Défi final J'OSE",
-    defiSubtitle: "El reto final del mes: combina direcciones, farmacia, compras y rutina en una sola conversación.",
-    defiAvatar: "🏅",
-  },
-};
-
-// Register days 11-20 into the same maps days 1-10 use, so the real
-// DayPage renders them identically. Content stays in WEEK34.
-for (const [id, m] of Object.entries(WEEK34_META)) {
+/** Register a day (11+) into the static maps that drive the DayPage shell —
+ *  idempotent. Called at module load for the code-seeded days 11-20, and at
+ *  runtime by DynamicDayGate for teacher-authored days 21+ (whose meta lives in
+ *  the DB, not the code), so brand-new weeks render in the same design. */
+function registerDay(id: string, m: Week34Meta) {
+  if (id in LESSONS_BY_DAY) return;
   DAY_TITLES[id] = { title: m.headTitle, desc: m.headDesc };
   DAYS_META.push({ id: Number(id), label: m.label, week: m.week });
   WEEK_OF_DAY[id] = m.week;
@@ -547,6 +457,8 @@ for (const [id, m] of Object.entries(WEEK34_META)) {
     { key: "defi", emoji: "🏆", title: "Défi final", subtitle: m.defiSubtitle, duration: "14 min" },
   ];
 }
+
+for (const [id, m] of Object.entries(WEEK34_META)) registerDay(id, m);
 
 function DayPage() {
   const { dayId } = Route.useParams();
@@ -1224,6 +1136,15 @@ function LessonView({
   // Use the preview-aware flag so "Ver como alumno" actually exercises the gate.
   const { bypassLocks, readOnly } = useAdminPreview();
 
+  // Weeks 3+ lesson content: a published DB row (teacher-edited) overrides the
+  // WEEK34 code seed; the code stays as an always-available fallback so the day
+  // renders instantly and never breaks if the DB is empty/unreachable.
+  const richDay = useRichDay(dayId);
+  const week34Data: RichDay | null = WEEK34[dayId]
+    ? { ...WEEK34[dayId], meta: WEEK34_META[dayId] }
+    : null;
+  const richData = richDay ?? week34Data;
+
   // Video gate: every native video in this lesson must be watched to the end
   // before "Suivant" unlocks. Already-completed lessons aren't re-gated.
   const [pendingVideos, setPendingVideos] = useState<Set<string>>(new Set());
@@ -1344,13 +1265,14 @@ function LessonView({
           {dayId === "10" && lesson === "cles" && <ClesLessonDay10 onAward={onAward} />}
           {dayId === "10" && lesson === "defi" && <DefiLessonDay10 onAward={onAward} onDone={onComplete} />}
 
-          {/* Days 11-20 · Weeks 3-4 — generic wrappers fed by WEEK34, same design as 1-10. */}
-          {Number(dayId) >= 11 && Number(dayId) <= 20 && WEEK34[dayId] && (
+          {/* Days 11-20 · Weeks 3-4 — generic wrappers fed by the DB rich content
+              (teacher-editable) or the WEEK34 code fallback; same design as 1-10. */}
+          {Number(dayId) >= 11 && Number(dayId) <= 20 && richData && (
             <>
-              {lesson === "intro" && <IntroLessonG dayId={dayId} />}
-              {lesson === "vocab" && <VocabLessonG dayId={dayId} onAward={onAward} />}
-              {lesson === "cles" && <ClesLessonG dayId={dayId} onAward={onAward} />}
-              {lesson === "defi" && <DefiLessonG dayId={dayId} onAward={onAward} onDone={onComplete} />}
+              {lesson === "intro" && <IntroLessonG data={richData} />}
+              {lesson === "vocab" && <VocabLessonG data={richData} dayId={dayId} onAward={onAward} />}
+              {lesson === "cles" && <ClesLessonG data={richData} dayId={dayId} onAward={onAward} />}
+              {lesson === "defi" && <DefiLessonG data={richData} dayId={dayId} onAward={onAward} onDone={onComplete} />}
             </>
           )}
         </div>
@@ -3431,18 +3353,15 @@ function FlashQuizG({ items, onAward }: { items: WeekDay["flashQuiz"]; onAward: 
   );
 }
 
-function IntroLessonG({ dayId }: { dayId: string }) {
-  const m = WEEK34_META[dayId];
+function IntroLessonG({ data }: { data: RichDay }) {
   return (
     <div className="space-y-5">
-      <LiberteSpeak message={m?.intro ?? "Bienvenue ! On commence ensemble ?"} />
+      <LiberteSpeak message={data.meta?.intro ?? "Bienvenue ! On commence ensemble ?"} />
     </div>
   );
 }
 
-function VocabLessonG({ dayId, onAward }: { dayId: string; onAward: (n?: number) => void }) {
-  const data = WEEK34[dayId];
-  if (!data) return null;
+function VocabLessonG({ data, dayId, onAward }: { data: RichDay; dayId: string; onAward: (n?: number) => void }) {
   return (
     <div className="space-y-6">
       <LiberteSpeak message="30 mots pour la situation du jour. Explore les cartes, puis les 4 mini-jeux." />
@@ -3472,16 +3391,13 @@ function VocabLessonG({ dayId, onAward }: { dayId: string; onAward: (n?: number)
   );
 }
 
-function ClesLessonG({ dayId, onAward }: { dayId: string; onAward: (n?: number) => void }) {
-  const data = WEEK34[dayId];
-  const m = WEEK34_META[dayId];
-  if (!data) return null;
+function ClesLessonG({ data, dayId, onAward }: { data: RichDay; dayId: string; onAward: (n?: number) => void }) {
   return (
     <div className="space-y-6">
       <div className="rounded-2xl border-2 border-gold/40 bg-gradient-to-br from-ice to-white p-5 shadow-card">
         <div className="flex items-center gap-2">
           <Star className="h-5 w-5 fill-gold text-gold" />
-          <p className="text-xs font-bold tracking-widest text-navy uppercase">Las estructuras del {m?.label.replace(/ · .*/, "") ?? `Jour ${dayId}`}</p>
+          <p className="text-xs font-bold tracking-widest text-navy uppercase">Las estructuras del {data.meta?.label.replace(/ · .*/, "") ?? `Jour ${dayId}`}</p>
         </div>
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
           {data.grammar.map((s, i) => (
@@ -3509,17 +3425,14 @@ function ClesLessonG({ dayId, onAward }: { dayId: string; onAward: (n?: number) 
   );
 }
 
-function DefiLessonG({ dayId, onAward, onDone }: { dayId: string; onAward: (n?: number) => void; onDone: () => void }) {
-  const data = WEEK34[dayId];
-  const m = WEEK34_META[dayId];
-  if (!data || !m) return null;
+function DefiLessonG({ data, dayId, onAward, onDone }: { data: RichDay; dayId: string; onAward: (n?: number) => void; onDone: () => void }) {
   return (
     <StagedDefi
       dayId={Number(dayId)}
-      title={m.defiTitle}
-      subtitle={m.defiSubtitle}
+      title={data.meta.defiTitle}
+      subtitle={data.meta.defiSubtitle}
       eyebrow="Défi final · Reto entregable"
-      avatar={m.defiAvatar}
+      avatar={data.meta.defiAvatar}
       steps={data.defiSteps}
       criteria={data.defiCriteria}
       onAward={onAward}

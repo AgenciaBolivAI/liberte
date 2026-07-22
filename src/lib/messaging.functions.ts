@@ -112,16 +112,46 @@ export const getThread = createServerFn({ method: "POST" })
     return { messages: (rows ?? []) as MessageRow[] };
   });
 
+/** Staff directory (admins + coaches) so a student can start a conversation.
+ *  Students can't read other profiles via RLS, so names come from the service
+ *  role. Returns everyone except the caller. */
+export const getStaffContacts = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: roles, error } = await supabaseAdmin
+      .from("user_roles")
+      .select("user_id, role")
+      .in("role", ["admin", "coach"]);
+    if (error) throw new Error(error.message);
+    const ids = [...new Set((roles ?? []).map((r) => r.user_id as string))].filter(
+      (id) => id !== context.userId,
+    );
+    if (!ids.length) return [];
+    const { data: profs } = await supabaseAdmin
+      .from("profiles")
+      .select("id, full_name, email")
+      .in("id", ids);
+    const names = new Map(
+      (profs ?? []).map((p) => [p.id as string, (p.full_name || p.email || "Equipo Liberté") as string]),
+    );
+    const roleOf = new Map((roles ?? []).map((r) => [r.user_id as string, r.role as string]));
+    return ids.map((id) => ({ id, name: names.get(id) ?? "Equipo Liberté", role: roleOf.get(id) ?? "admin" }));
+  });
+
 /** Thread list for the current user: other participant, last message, unread. */
 export const getConversations = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const me = context.userId;
-    const { data: rows } = await (context as Ctx).supabase
+    // Surface query errors to the caller — silently returning [] would render
+    // as a fake "no messages yet" empty state and hide real failures.
+    const { data: rows, error } = await (context as Ctx).supabase
       .from("messages")
       .select("sender_id, recipient_id, body, attachment_name, created_at, read_at")
       .or(`sender_id.eq.${me},recipient_id.eq.${me}`)
       .order("created_at", { ascending: false });
+    if (error) throw new Error(error.message);
     type Thread = { otherId: string; last: MessageRow; unread: number };
     const threads = new Map<string, Thread>();
     for (const m of (rows ?? []) as MessageRow[]) {

@@ -13,7 +13,9 @@ import {
   type CalendarEvent,
 } from "@/lib/calendarEvents";
 import { useIsStaff } from "@/lib/use-staff";
-import { CalendarManager } from "@/components/CalendarManager";
+import { CalendarEventEditor } from "@/components/CalendarEventEditor";
+import { Plus, Pencil, Trash2 } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/calendar")({
   head: () => ({ meta: [{ title: "Calendario — Liberté" }] }),
@@ -22,8 +24,29 @@ export const Route = createFileRoute("/calendar")({
 
 export default function CalendarPage() {
   const [open, setOpen] = useState<CalendarEvent | null>(null);
-  const { events } = useCalendarEvents();
+  const { events, refresh } = useCalendarEvents();
   const isStaff = useIsStaff();
+  // Inline editing (staff only). Clicking a day opens its agenda (all events for
+  // that day + "add"); the editor modal opens on top for a single create/edit and
+  // returns to the agenda on save, so several events can be added to one day.
+  const [dayPanel, setDayPanel] = useState<{ year: number; month: number; day: number } | null>(null);
+  const [editor, setEditor] = useState<
+    | { mode: "create"; presetDateISO: string }
+    | { mode: "edit"; event: CalendarEvent }
+    | null
+  >(null);
+  const pad2 = (n: number) => String(n).padStart(2, "0");
+  // Click an event: staff jump to that day's agenda; students see its details.
+  const onEventClick = (ev: CalendarEvent) => {
+    if (!isStaff) { setOpen(ev); return; }
+    const d = new Date(ev.startUtc);
+    setDayPanel({ year: d.getFullYear(), month: d.getMonth(), day: d.getDate() });
+  };
+  async function deleteEvent(ev: CalendarEvent) {
+    if (!window.confirm(`¿Eliminar «${ev.title}»?`)) return;
+    await supabase.from("calendar_events").delete().eq("id", ev.id);
+    await refresh();
+  }
   const today = new Date();
   const [view, setView] = useState({ year: today.getFullYear(), month: today.getMonth() });
 
@@ -82,9 +105,9 @@ export default function CalendarPage() {
         </div>
 
         {isStaff && (
-          <div className="mt-6">
-            <CalendarManager />
-          </div>
+          <p className="mt-4 inline-flex items-center gap-2 rounded-full bg-white/90 px-4 py-1.5 text-xs font-semibold text-navy shadow-soft sm:bg-blue/10 sm:text-navy">
+            <Plus className="h-3.5 w-3.5 text-blue" /> Toca un día para ver, añadir o editar sus clases.
+          </p>
         )}
 
         <div className="mt-8 overflow-hidden rounded-3xl border border-white/15 bg-card shadow-card">
@@ -108,14 +131,26 @@ export default function CalendarPage() {
                 view.month === today.getMonth() &&
                 view.year === today.getFullYear();
               return (
-                <div key={day} className="relative h-20 border-b border-r border-border p-1.5 sm:h-24 sm:p-2">
+                <div
+                  key={day}
+                  onClick={isStaff ? () => setDayPanel({ year: view.year, month: view.month, day }) : undefined}
+                  className={`group relative h-20 border-b border-r border-border p-1.5 sm:h-24 sm:p-2 ${isStaff ? "cursor-pointer transition hover:bg-blue/5" : ""}`}
+                >
                   <div className={`text-[11px] font-semibold sm:text-xs ${isToday ? "inline-flex h-6 w-6 items-center justify-center rounded-full bg-blue text-white" : "text-navy/70"}`}>
                     {day}
                   </div>
+                  {isStaff && (
+                    <span
+                      aria-hidden
+                      className="pointer-events-none absolute right-1 top-1 hidden h-4 w-4 items-center justify-center rounded-full bg-blue text-white opacity-0 transition group-hover:flex group-hover:opacity-100"
+                    >
+                      <Plus className="h-3 w-3" />
+                    </span>
+                  )}
                   <div className="mt-1 space-y-1">
                     {reposEv && (
                       <button
-                        onClick={() => setOpen(reposEv)}
+                        onClick={(e) => { e.stopPropagation(); onEventClick(reposEv); }}
                         aria-label={reposEv.title}
                         className={`block w-full truncate rounded-md px-1.5 py-0.5 text-left text-[10px] font-semibold ${KIND_STYLE.repos.bg}`}
                       >
@@ -130,7 +165,7 @@ export default function CalendarPage() {
                         return (
                           <button
                             key={p.ev.id}
-                            onClick={() => setOpen(p.ev)}
+                            onClick={(e) => { e.stopPropagation(); onEventClick(p.ev); }}
                             aria-label={`${style.label} ${localTime(p.ev.startUtc)}`}
                             className="grid h-7 w-7 place-items-center"
                           >
@@ -146,7 +181,7 @@ export default function CalendarPage() {
                         return (
                           <button
                             key={p.ev.id}
-                            onClick={() => setOpen(p.ev)}
+                            onClick={(e) => { e.stopPropagation(); onEventClick(p.ev); }}
                             className={`block w-full truncate rounded-md px-1.5 py-0.5 text-left text-[10px] font-semibold ${style.bg}`}
                           >
                             {style.label} · {localTime(p.ev.startUtc)}
@@ -169,7 +204,7 @@ export default function CalendarPage() {
             return (
               <button
                 key={e.id}
-                onClick={() => setOpen(e)}
+                onClick={() => onEventClick(e)}
                 className="flex items-center gap-4 rounded-2xl border border-white/15 bg-card p-4 text-left shadow-soft transition hover:translate-y-[-1px]"
               >
                 <div className={`flex h-12 w-12 items-center justify-center rounded-2xl ${style.bg}`}>
@@ -248,6 +283,81 @@ export default function CalendarPage() {
             )}
           </div>
         </div>
+      )}
+
+      {dayPanel && (() => {
+        const key = `${dayPanel.year}-${dayPanel.month}-${dayPanel.day}`;
+        const reposEv = reposByDay.get(key);
+        const dayEvents = pointEvents
+          .filter((p) => p.year === dayPanel.year && p.month === dayPanel.month && p.day === dayPanel.day)
+          .map((p) => p.ev);
+        const list = reposEv ? [reposEv, ...dayEvents] : dayEvents;
+        const presetDateISO = `${dayPanel.year}-${pad2(dayPanel.month + 1)}-${pad2(dayPanel.day)}`;
+        const labelDate = new Date(dayPanel.year, dayPanel.month, dayPanel.day);
+        return (
+          <div className="fixed inset-0 z-40 flex items-center justify-center bg-navy/60 p-4 backdrop-blur-sm" onClick={() => setDayPanel(null)}>
+            <div className="max-h-[85dvh] w-full max-w-md overflow-y-auto rounded-3xl bg-card p-6 shadow-card" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-xs font-bold tracking-widest text-blue uppercase">Clases del día</p>
+                  <h3 className="font-display text-xl font-extrabold text-navy first-letter:uppercase">
+                    {labelDate.toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" })}
+                  </h3>
+                </div>
+                <button onClick={() => setDayPanel(null)} aria-label="Cerrar" className="rounded-full p-1 hover:bg-muted">
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              <ul className="mt-4 space-y-2">
+                {list.length === 0 && (
+                  <li className="rounded-2xl border border-dashed border-border p-4 text-center text-sm text-muted-foreground">
+                    No hay clases este día todavía.
+                  </li>
+                )}
+                {list.map((ev) => {
+                  const style = KIND_STYLE[ev.kind];
+                  return (
+                    <li key={ev.id} className="flex items-center gap-3 rounded-2xl border border-border bg-white p-3">
+                      <span className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: style.dot }} />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-semibold text-navy">{ev.title}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {style.label}
+                          {ev.kind !== "repos" && ` · ${localTime(ev.startUtc)}`}
+                        </p>
+                      </div>
+                      <button onClick={() => setEditor({ mode: "edit", event: ev })} aria-label="Editar" className="rounded-full p-2 text-blue hover:bg-blue/10">
+                        <Pencil className="h-4 w-4" />
+                      </button>
+                      <button onClick={() => void deleteEvent(ev)} aria-label="Eliminar" className="rounded-full p-2 text-red hover:bg-red/10">
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+
+              <Button
+                onClick={() => setEditor({ mode: "create", presetDateISO })}
+                className="mt-4 w-full gap-2 bg-gradient-blue font-bold text-white"
+              >
+                <Plus className="h-4 w-4" /> Añadir una clase
+              </Button>
+            </div>
+          </div>
+        );
+      })()}
+
+      {editor && (
+        <CalendarEventEditor
+          init={editor}
+          onClose={() => setEditor(null)}
+          onSaved={async () => {
+            await refresh();
+            setEditor(null);
+          }}
+        />
       )}
     </div>
   );

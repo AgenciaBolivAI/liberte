@@ -445,7 +445,7 @@ g("9b. Hands-free voice tutor");
   ok("playback can't hang the loop", aud.includes("setTimeout(finish, 20_000)"));
   ok("max turn shortened for mobile uploads", aud.includes("MAX_TURN_MS = 15_000"));
   // Voice turns request a compact payload (measured 3.3s -> 1.4s).
-  ok("voice mode uses a trimmed JSON schema", tut.includes("buildTutorSystem(data.dayId, data.withAudio)"));
+  ok("voice mode uses a trimmed JSON schema", tut.includes("buildTutorSystem(tutorCtx, data.withAudio)"));
   ok("trimmed schema documented with the measurement", tut.includes("3.3s → 1.4s"));
 
   // Audit H1(a)/H2: AI cost guards.
@@ -636,11 +636,33 @@ g("12. Regressions (bugs found in audit — must stay fixed)");
   // Client request: calendar editing lives IN the Calendar tab (staff-gated), so
   // the teacher edits where the calendar is — not buried in the admin panel.
   {
+    // Client request: edit the calendar INLINE — click a day to add, click an
+    // event to edit/delete — right in the Calendar tab, staff-gated.
     const calTab = readFileSync("src/routes/calendar.tsx", "utf8");
-    ok("calendar editor lives in the Calendar tab (staff-gated)",
-       calTab.includes("<CalendarManager />") && calTab.includes("useIsStaff") && calTab.includes("isStaff &&"));
+    ok("calendar edits inline in the Calendar tab (click day = agenda, add/edit events)",
+       calTab.includes("<CalendarEventEditor") && calTab.includes("useIsStaff") &&
+       calTab.includes('mode: "create"') && calTab.includes('mode: "edit"'));
+    ok("clicking a day opens its agenda (staff-gated)",
+       calTab.includes("isStaff ? () => setDayPanel") && calTab.includes("onEventClick"));
+    // A day can hold MANY events: the agenda lists them all + an "add" button,
+    // and the editor returns to the agenda on save so several can be added.
+    ok("day agenda lists all events + an add button for multiple per day",
+       calTab.includes("Clases del día") && calTab.includes("Añadir una clase") && calTab.includes("dayPanel"));
+    ok("no separate calendar-manager panel in the Calendar tab", !calTab.includes("<CalendarManager"));
     ok("calendar editor no longer in the admin panel (single home)",
        !readFileSync("src/routes/liberte-profesor-panel-9382745-admin.tsx", "utf8").includes("CalendarManager"));
+    const cee = readFileSync("src/components/CalendarEventEditor.tsx", "utf8");
+    ok("inline editor does insert/update/delete on calendar_events",
+       cee.includes('.from("calendar_events").update') && cee.includes('.from("calendar_events").insert') && cee.includes('.from("calendar_events").delete'));
+    // The staff gate must respect admin "Ver como alumno" preview, so a teacher
+    // previewing as a student sees NO staff editors (looked like students could edit).
+    const useStaff = readFileSync("src/lib/use-staff.ts", "utf8");
+    ok("useIsStaff hides staff UI while previewing as a student",
+       useStaff.includes("useAdminPreview") && useStaff.includes('mode !== "teacher"'));
+    // Defence in depth: only coach/admin can write calendar_events (RLS).
+    const calMig = readFileSync("supabase/migrations/20260718000001_calendar_events.sql", "utf8");
+    ok("calendar_events writes are coach/admin-only (RLS)",
+       /INSERT[\s\S]*has_role/.test(calMig) && /UPDATE[\s\S]*has_role/.test(calMig) && /DELETE[\s\S]*has_role/.test(calMig));
   }
 
   // Admin day/week content-access control + enforcement.
@@ -752,7 +774,7 @@ g("12. Regressions (bugs found in audit — must stay fixed)");
   ok("students read only published days", authMig.includes("status = 'published'"));
   ok("content-assets bucket staff-only writes", authMig.includes("'content-assets', true") && authMig.includes("staff upload content assets"));
   const dayRouteSrc = readFileSync("src/routes/day.$dayId.tsx", "utf8");
-  ok("day route switches to authored renderer past day 10", dayRouteSrc.includes("n > LESSON_DAYS") && dayRouteSrc.includes("<AuthoredDayView"));
+  ok("day route falls to the authored block renderer for non-rich days past the code days", dayRouteSrc.includes("DynamicDayGate") && dayRouteSrc.includes("<AuthoredDayView"));
   const adv = readFileSync("src/components/AuthoredDayView.tsx", "utf8");
   ok("authored view honours unlock + overrides", adv.includes("effectiveOverride(dayId, accessOverrides)"));
   ok("authored view completion uses day_completions", adv.includes("markDayCompleted(user.id, dayId"));
@@ -858,8 +880,8 @@ g("12c. Weeks 3-4 · days 11-20 render through the REAL lesson player");
      ["IntroLessonG", "VocabLessonG", "ClesLessonG", "DefiLessonG"].every((w) => day.includes(`function ${w}`)));
   ok("LessonView dispatches days 11-20 to the generic wrappers",
      day.includes("Number(dayId) >= 11 && Number(dayId) <= 20"));
-  ok("router sends registered days (1-20) to DayPage, authored renderer only past that",
-     day.includes("!(dayId in LESSONS_BY_DAY)") && day.includes("<AuthoredDayView"));
+  ok("router sends registered days (1-20) to DayPage",
+     day.includes("if (dayId in LESSONS_BY_DAY) return <DayPage") && day.includes("<AuthoredDayView"));
   ok("gym video wired for weeks 3-4", day.includes("WEEK34[dayId]?.gym"));
 
   // The generated content module must be complete and in the day-6 shape.
@@ -904,6 +926,52 @@ g("12c. Weeks 3-4 · days 11-20 render through the REAL lesson player");
      dashW.includes("LAST_WEEK_WITH_CONTENT = WEEKS_WITH_CONTENT") && dashW.includes('3: "11"') && dashW.includes('4: "16"'));
   ok("admin content-access 'con contenido' badge uses the shared constant",
      readFileSync("src/components/ContentAccessManager.tsx", "utf8").includes("w <= WEEKS_WITH_CONTENT"));
+
+  // Teacher-editable rich content: weeks 3-4 live in authored_days.rich, render
+  // through the SAME wrappers, and are edited from the content manager. The code
+  // WEEK34 stays as an always-available fallback.
+  ok("authored_days.rich migration present",
+     readFileSync("supabase/migrations/20260723000000_authored_days_rich.sql", "utf8").includes("ADD COLUMN IF NOT EXISTS rich JSONB"));
+  const richSeed = readFileSync("supabase/migrations/20260723000001_seed_week34_rich.sql", "utf8");
+  ok("rich seed publishes all 10 days 11-20",
+     (richSeed.match(/INSERT INTO public\.authored_days/g) || []).length === 10 && richSeed.includes("'published'"));
+  ok("rich seed is idempotent", richSeed.includes("DELETE FROM public.authored_days WHERE day_id BETWEEN 11 AND 20"));
+  const rc = readFileSync("src/lib/rich-content.ts", "utf8");
+  ok("rich-content layer exports the hook + CRUD",
+     ["useRichDay", "listRichDays", "getRichDay", "saveRichDay", "deleteRichDay"].every((f) => rc.includes(f)));
+  ok("player renders DB rich with a WEEK34 fallback",
+     day.includes("useRichDay(dayId)") && day.includes("richDay ?? week34Data"));
+  const rde = readFileSync("src/components/RichDayEditor.tsx", "utf8");
+  ok("rich editor covers every lesson section",
+     ["Vocabulario", "Flashcards", "Gramática", "Juegos de Vocabulario", "Juegos de Les clés", "Défi final"].every((s) => rde.includes(s)));
+  ok("rich editor saves to authored_days.rich", rde.includes("saveRichDay"));
+  const cmSrc2 = readFileSync("src/components/ContentManager.tsx", "utf8");
+  ok("content manager routes rich days to the rich editor",
+     cmSrc2.includes("richIds.has(editingDay)") && cmSrc2.includes("<RichDayEditor"));
+  ok("week34 meta is shared by the renderer and the seed script",
+     readFileSync("src/data/week34.meta.ts", "utf8").includes("export const WEEK34_META") &&
+     readFileSync("scripts/gen-week34-seed.mjs", "utf8").includes("week34.meta.ts"));
+
+  // Brand-new weeks (days 21+): teacher-authored full lessons render through the
+  // SAME shell (DynamicDayGate registers their DB meta first), and are creatable
+  // from the content manager.
+  ok("router sends 21+ through the dynamic rich gate",
+     day.includes("DynamicDayGate") && day.includes("n >= 21 && n <= 120"));
+  ok("gate registers DB meta into the shell maps before rendering",
+     day.includes("registerDay(dayId, rich.meta)") && day.includes("function registerDay"));
+  ok("content manager can create a full rich lesson (any day 11-120)",
+     cmSrc2.includes("createRichDay") && cmSrc2.includes("Crear lección completa"));
+  ok("content manager lists built-in days 1-10 (read-only, so the list runs from day 1)",
+     cmSrc2.includes("BUILTIN_DAYS") && cmSrc2.includes("Integrado") && /day_id: 1,/.test(cmSrc2));
+  ok("blank rich-day factory is shared", readFileSync("src/lib/rich-content.ts", "utf8").includes("export function blankRichDay"));
+
+  // Tutor teaches the teacher-edited content: days 11+ override code vocab/grammar
+  // from authored_days.rich (falls back to code when there's no DB row).
+  const tutSrc = readFileSync("src/lib/tutor.functions.ts", "utf8");
+  ok("tutor resolves day context from the DB for weeks 3+",
+     tutSrc.includes("resolveTutorContext") && tutSrc.includes('.from("authored_days")') && tutSrc.includes("rich.vocabulary"));
+  ok("tutor falls back to code content when no DB row",
+     tutSrc.includes("if (dayId < 11) return base") && /return base/.test(tutSrc));
 }
 
 /* ---------------- build output ---------------- */

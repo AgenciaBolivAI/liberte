@@ -19,11 +19,21 @@ type Msg = {
 };
 
 /** A two-way message thread between the signed-in user and `otherUserId`, with
- *  document attachments. Used by the teacher (per student) and the student. */
-export function MessageThread({ otherUserId, otherName }: { otherUserId: string; otherName: string }) {
+ *  document attachments. Used by the teacher (per student) and the student.
+ *  `onSent` fires after a successful send so the host can refresh its list. */
+export function MessageThread({
+  otherUserId,
+  otherName,
+  onSent,
+}: {
+  otherUserId: string;
+  otherName: string;
+  onSent?: () => void;
+}) {
   const { user } = useAuth();
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadErr, setLoadErr] = useState("");
   const [text, setText] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [sending, setSending] = useState(false);
@@ -34,8 +44,9 @@ export function MessageThread({ otherUserId, otherName }: { otherUserId: string;
     try {
       const res = await getThread({ data: { otherUserId } });
       setMsgs(res.messages as Msg[]);
-    } catch {
-      /* leave the thread empty on error */
+      setLoadErr("");
+    } catch (e) {
+      setLoadErr(e instanceof Error ? e.message : "No se pudo cargar la conversación");
     }
     setLoading(false);
   }, [otherUserId]);
@@ -44,6 +55,28 @@ export function MessageThread({ otherUserId, otherName }: { otherUserId: string;
     setLoading(true);
     void load();
   }, [load]);
+
+  // Realtime: reload the thread when the other person sends a message.
+  // Requires migration 20260724000000_messages_realtime (messages table in the
+  // supabase_realtime publication); without it the subscription just stays
+  // silent and the thread refreshes on send/navigation as before. RLS confines
+  // the stream to rows this user can read.
+  useEffect(() => {
+    if (!user) return;
+    const channel = supabase
+      .channel(`messages-thread-${otherUserId}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "messages", filter: `recipient_id=eq.${user.id}` },
+        (payload) => {
+          if ((payload.new as Msg).sender_id === otherUserId) void load();
+        },
+      )
+      .subscribe();
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [user, otherUserId, load]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -72,6 +105,7 @@ export function MessageThread({ otherUserId, otherName }: { otherUserId: string;
       setFile(null);
       if (fileRef.current) fileRef.current.value = "";
       await load();
+      onSent?.();
     } catch (e2) {
       toast.error(e2 instanceof Error ? e2.message : "No se pudo enviar el mensaje");
     } finally {
@@ -94,6 +128,8 @@ export function MessageThread({ otherUserId, otherName }: { otherUserId: string;
       <div className="flex max-h-80 min-h-40 flex-col gap-2 overflow-y-auto p-3">
         {loading ? (
           <Loader2 className="mx-auto my-6 h-5 w-5 animate-spin text-blue" />
+        ) : loadErr ? (
+          <p className="py-6 text-center text-xs text-red">{loadErr}</p>
         ) : msgs.length === 0 ? (
           <p className="py-6 text-center text-xs text-muted-foreground">Aún no hay mensajes. Escribe el primero.</p>
         ) : (

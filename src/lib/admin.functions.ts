@@ -142,6 +142,90 @@ export const getStudentSnapshot = createServerFn({ method: "POST" })
     };
   });
 
+/* ---------------- Staff roles (coach assignment) ---------------- */
+
+export type StaffMember = {
+  id: string;
+  full_name: string;
+  email: string | null;
+  roles: string[];
+};
+
+/** Everyone holding a staff role (coach/admin), for the role manager UI. */
+export const getStaffList = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    await requireAdmin(context as Ctx);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: roleRows, error } = await supabaseAdmin
+      .from("user_roles")
+      .select("user_id, role")
+      .in("role", ["coach", "admin"]);
+    if (error) throw new Error(error.message);
+    const ids = [...new Set((roleRows ?? []).map((r) => r.user_id as string))];
+    if (!ids.length) return [] as StaffMember[];
+    const { data: profs } = await supabaseAdmin
+      .from("profiles")
+      .select("id, full_name, email")
+      .in("id", ids);
+    const nameOf = new Map(
+      (profs ?? []).map((p) => [p.id as string, (p.full_name || p.email || "Usuario") as string]),
+    );
+    const emailOf = new Map(
+      (profs ?? []).map((p) => [p.id as string, (p.email ?? null) as string | null]),
+    );
+    const byUser = new Map<string, string[]>();
+    for (const r of roleRows ?? []) {
+      const list = byUser.get(r.user_id as string) ?? [];
+      list.push(r.role as string);
+      byUser.set(r.user_id as string, list);
+    }
+    return ids.map((id) => ({
+      id,
+      full_name: nameOf.get(id) ?? "Usuario",
+      email: emailOf.get(id) ?? null,
+      roles: byUser.get(id) ?? [],
+    })) as StaffMember[];
+  });
+
+/** Grant or revoke the coach (teacher) role for an account, looked up by
+ *  email. Writes go through the service role; the caller must be an admin.
+ *  The admin role itself is intentionally NOT manageable here — it stays a
+ *  migration/console operation. */
+export const setCoachRole = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => {
+    const d = input as { email?: string; assign?: boolean };
+    const email = String(d?.email ?? "").trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("Email inválido");
+    return { email, assign: d?.assign !== false };
+  })
+  .handler(async ({ data, context }) => {
+    await requireAdmin(context as Ctx);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: profile } = await supabaseAdmin
+      .from("profiles")
+      .select("id, full_name, email")
+      .ilike("email", data.email)
+      .maybeSingle();
+    if (!profile) throw new Error("No hay ninguna cuenta registrada con ese email");
+    const userId = profile.id as string;
+    if (data.assign) {
+      const { error } = await supabaseAdmin
+        .from("user_roles")
+        .upsert({ user_id: userId, role: "coach" }, { onConflict: "user_id,role" });
+      if (error) throw new Error(error.message);
+    } else {
+      const { error } = await supabaseAdmin
+        .from("user_roles")
+        .delete()
+        .eq("user_id", userId)
+        .eq("role", "coach");
+      if (error) throw new Error(error.message);
+    }
+    return { ok: true, name: (profile.full_name || profile.email) as string };
+  });
+
 /* ---------------- Live analytics ---------------- */
 
 export type Range = "today" | "7d" | "30d" | "all";

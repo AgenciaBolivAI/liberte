@@ -13,6 +13,7 @@ import { AdminAnalytics } from "@/components/AdminAnalytics";
 import { ApprovalQueue } from "@/components/ApprovalQueue";
 import { ContentAccessManager } from "@/components/ContentAccessManager";
 import { TelegramBroadcast } from "@/components/TelegramBroadcast";
+import { StaffManager } from "@/components/StaffManager";
 import { ContentManager } from "@/components/ContentManager";
 import { Toaster } from "@/components/ui/sonner";
 
@@ -214,6 +215,8 @@ function TeacherPanel() {
         <ContentManager />
 
         <TelegramBroadcast />
+
+        <StaffManager />
 
         <div className="mb-4 flex flex-wrap gap-3">
           <input

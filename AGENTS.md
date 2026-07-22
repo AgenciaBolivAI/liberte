@@ -74,6 +74,11 @@ see `.lovable/project.json`). Some files carry a "do not edit" generated header.
   - `src/routes/lovable/email/queue/process.ts` — pgmq email queue worker
     (Bearer token must equal `SUPABASE_SERVICE_ROLE_KEY`, compared
     timing-safe; retries, TTL, DLQ).
+  - `src/routes/api/telegram/webhook.ts` — Telegram bot webhook (gated by the
+    `TELEGRAM_WEBHOOK_SECRET` header) linking `profiles.telegram_chat_id` via
+    `/start <code>`; `src/routes/api/telegram/reminders.ts` — cron-called
+    live-class reminders (gated by `CRON_SECRET`). Bot sends live in
+    `src/lib/telegram.ts` (best-effort, never throws).
 - **Auth flow**: Supabase Auth. `src/lib/auth-context.tsx` loads session,
   profile, admin role (`user_roles` + `has_role` RPC) and approval state.
   `src/components/AuthGate.tsx` (mounted in `__root.tsx`) redirects
@@ -151,8 +156,10 @@ see `.lovable/project.json`). Some files carry a "do not edit" generated header.
 - Key tables: `profiles` (+ `approved_at`/`approved_by`), `user_roles`,
   `day_completions`, `day_state`, `week_state`, `star_awards`, `defi_results`,
   `activity_results`, `weekly_evaluations`, `week_unlocks`, `leads`,
-  `calendar_events`, `tutor_conversations`, `tutor_usage`, plus email-infra
-  tables (`email_send_log`, `email_send_state`, …).
+  `calendar_events`, `tutor_conversations`, `tutor_usage`, `messages`
+  (teacher↔student DMs; the table is in the `supabase_realtime` publication so
+  the inbox and threads update live — RLS confines the stream), plus
+  email-infra tables (`email_send_log`, `email_send_state`, …).
 
 ## Commands
 
@@ -212,7 +219,10 @@ guard — many existing checks are regression tests for real production bugs.
 
 - **Secrets**: `.env` (gitignored) holds `SUPABASE_URL`,
   `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `OPENAI_API_KEY`,
-  `RESEND_API_KEY` (+ `VITE_*` mirrors, `LOVABLE_API_KEY` for the email worker).
+  `RESEND_API_KEY` (+ `VITE_*` mirrors, `LOVABLE_API_KEY` and `LOVABLE_SEND_URL`
+  for the email worker), plus the Telegram integration
+  (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET`) and `CRON_SECRET` for the
+  reminders cron endpoint. `.env.example` documents every variable.
   `VITE_*` vars are inlined into the client bundle at build time — never put
   secrets behind `VITE_*`. The service-role key and OpenAI key must never reach
   client code; the test suite verifies this against the built bundle.

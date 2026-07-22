@@ -105,6 +105,7 @@ export type Database = {
         Row: {
           created_by: string | null
           day_id: number
+          rich: Json | null
           status: string
           subtitle: string
           title: string
@@ -113,6 +114,7 @@ export type Database = {
         Insert: {
           created_by?: string | null
           day_id: number
+          rich?: Json | null
           status?: string
           subtitle?: string
           title?: string
@@ -121,6 +123,7 @@ export type Database = {
         Update: {
           created_by?: string | null
           day_id?: number
+          rich?: Json | null
           status?: string
           subtitle?: string
           title?: string
@@ -862,6 +865,10 @@ export type Database = {
           msg_id: number
           read_ct: number
         }[]
+      }
+      tutor_consume_message: {
+        Args: { _limit: number }
+        Returns: number
       }
     }
     Enums: {

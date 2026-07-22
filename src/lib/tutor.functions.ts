@@ -1,7 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { callChat, speakFrenchBase64 } from "@/lib/ai";
-import { getTutorDayContext, TUTOR_MAX_DAY } from "@/lib/tutorContext";
+import { getTutorDayContext, TUTOR_MAX_DAY, type TutorDayContext } from "@/lib/tutorContext";
+import type { RichDay } from "@/data/week34.meta";
 import { effectiveOverride, OPEN_THROUGH_DAY } from "@/lib/unlock";
 import { loadUserOverrides } from "@/lib/content-access.functions";
 
@@ -92,8 +93,50 @@ async function requireApprovedStudent(context: Ctx): Promise<void> {
   }
 }
 
-function buildTutorSystem(dayId: number, voice = false): string {
-  const ctx = getTutorDayContext(dayId);
+/**
+ * Resolve the tutor's day context. Days 11+ can be teacher-edited (their lesson
+ * lives in `authored_days.rich`), so a published rich row OVERRIDES the code seed:
+ * the tutor then teaches the exact vocabulary/grammar/scene the teacher edited.
+ * Falls back to the code context (`getTutorDayContext`) when there's no DB row.
+ */
+async function resolveTutorContext(c: Ctx, dayId: number): Promise<TutorDayContext> {
+  const base = getTutorDayContext(dayId);
+  if (dayId < 11) return base;
+  try {
+    const { data } = await c.supabase
+      .from("authored_days")
+      .select("rich")
+      .eq("day_id", dayId)
+      .maybeSingle();
+    const rich = data?.rich as unknown as RichDay | null;
+    if (!rich) return base;
+    const t = rich.tutor;
+    const scenario =
+      t && t.role && t.opener_fr
+        ? {
+            role: t.role,
+            opener_fr: t.opener_fr,
+            opener_es: t.opener_es,
+            objectives: (t.objectives ?? []).slice(0, 3),
+          }
+        : base.scenario;
+    return {
+      dayId: base.dayId,
+      topic: t?.topic || base.topic,
+      scenario,
+      vocab: Array.isArray(rich.vocabulary) && rich.vocabulary.length
+        ? rich.vocabulary.map((v) => ({ fr: v.fr, es: v.es }))
+        : base.vocab,
+      grammar: Array.isArray(rich.grammar) && rich.grammar.length
+        ? rich.grammar.map((g) => `${g.formula} — ${g.use}`)
+        : base.grammar,
+    };
+  } catch {
+    return base; // DB unreachable / column missing → code content
+  }
+}
+
+function buildTutorSystem(ctx: TutorDayContext, voice = false): string {
   const vocab = ctx.vocab
     .slice(0, MAX_VOCAB_IN_PROMPT)
     .map((v) => `${v.fr} (${v.es})`)
@@ -238,7 +281,8 @@ export const sendTutorMessage = createServerFn({ method: "POST" })
       }
     }
 
-    const out = await callChat(buildTutorSystem(data.dayId, data.withAudio), [
+    const tutorCtx = await resolveTutorContext(c, data.dayId);
+    const out = await callChat(buildTutorSystem(tutorCtx, data.withAudio), [
       ...history,
       { role: "user", content: data.text },
     ]);

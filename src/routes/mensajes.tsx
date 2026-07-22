@@ -1,9 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { TopNav } from "@/components/TopNav";
 import parisBg from "@/assets/paris-map-bg.jpg";
-import { getConversations } from "@/lib/messaging.functions";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/lib/auth-context";
+import { getConversations, getStaffContacts } from "@/lib/messaging.functions";
 import { MessageThread } from "@/components/MessageThread";
 
 export const Route = createFileRoute("/mensajes")({
@@ -12,20 +14,59 @@ export const Route = createFileRoute("/mensajes")({
 });
 
 type Conv = { otherId: string; name: string; lastBody: string; lastAt: string; unread: number };
+type Staff = { id: string; name: string; role: string };
 
 function MessagesPage() {
+  const { user } = useAuth();
   const [convs, setConvs] = useState<Conv[] | null>(null);
-  const [active, setActive] = useState<Conv | null>(null);
+  const [staff, setStaff] = useState<Staff[]>([]);
+  const [active, setActive] = useState<{ otherId: string; name: string } | null>(null);
+  const [error, setError] = useState("");
 
-  useEffect(() => {
+  const load = useCallback(() => {
     getConversations()
       .then((c) => {
         const list = c as Conv[];
         setConvs(list);
-        setActive(list[0] ?? null);
+        setError("");
+        setActive((a) => a ?? (list[0] ? { otherId: list[0].otherId, name: list[0].name } : null));
       })
-      .catch(() => setConvs([]));
+      .catch((e) =>
+        setError(e instanceof Error ? e.message : "No se pudieron cargar los mensajes"),
+      );
   }, []);
+
+  useEffect(() => {
+    load();
+    // Staff directory so the student can start a conversation (previously the
+    // page stayed empty forever unless the teacher wrote first).
+    getStaffContacts()
+      .then((s) => setStaff(s as Staff[]))
+      .catch(() => {
+        /* the directory is a convenience; threads still load without it */
+      });
+  }, [load]);
+
+  // Realtime inbox: refresh the list (new threads, unread badges) when a
+  // message arrives. Needs migration 20260724000000_messages_realtime applied;
+  // without it the subscription stays silent and the list updates on send/load.
+  useEffect(() => {
+    if (!user) return;
+    const channel = supabase
+      .channel("messages-inbox")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "messages", filter: `recipient_id=eq.${user.id}` },
+        () => load(),
+      )
+      .subscribe();
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [user, load]);
+
+  // Staff members the user has no thread with yet.
+  const newContacts = staff.filter((s) => !(convs ?? []).some((c) => c.otherId === s.id));
 
   return (
     <div
@@ -39,21 +80,41 @@ function MessagesPage() {
         <h1 className="font-display text-3xl font-extrabold text-white">✉️ Mensajes</h1>
         <p className="mt-1 text-sm text-white/80">Conversaciones con tu equipo de Liberté.</p>
 
-        {convs === null ? (
+        {convs === null && !error ? (
           <div className="mt-8 grid place-items-center">
             <Loader2 className="h-7 w-7 animate-spin text-white" />
           </div>
-        ) : convs.length === 0 ? (
+        ) : error ? (
+          <div className="mt-6 rounded-2xl border border-red/40 bg-white p-6 text-center text-sm text-red">
+            {error}{" "}
+            <button onClick={load} className="font-bold underline">
+              Reintentar
+            </button>
+          </div>
+        ) : convs !== null && convs.length === 0 && !active ? (
           <div className="mt-6 rounded-2xl border border-white/15 bg-white p-6 text-center text-sm text-muted-foreground">
-            Aún no tienes mensajes. Tu profesor te escribirá por aquí. 💌
+            Aún no tienes mensajes. Escribe a tu equipo aquí abajo. 💌
+            {newContacts.length > 0 && (
+              <div className="mt-4 flex flex-wrap justify-center gap-2">
+                {newContacts.map((s) => (
+                  <button
+                    key={s.id}
+                    onClick={() => setActive({ otherId: s.id, name: s.name })}
+                    className="rounded-full bg-gradient-blue px-4 py-2 text-xs font-bold text-white transition hover:opacity-90"
+                  >
+                    💬 {s.name}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         ) : (
           <div className="mt-6 grid gap-4 md:grid-cols-[240px_1fr]">
             <ul className="space-y-1">
-              {convs.map((c) => (
+              {(convs ?? []).map((c) => (
                 <li key={c.otherId}>
                   <button
-                    onClick={() => setActive(c)}
+                    onClick={() => setActive({ otherId: c.otherId, name: c.name })}
                     className={`w-full rounded-2xl border p-3 text-left transition ${
                       active?.otherId === c.otherId
                         ? "border-blue bg-white"
@@ -72,8 +133,25 @@ function MessagesPage() {
                   </button>
                 </li>
               ))}
+              {newContacts.map((s) => (
+                <li key={s.id}>
+                  <button
+                    onClick={() => setActive({ otherId: s.id, name: s.name })}
+                    className={`w-full rounded-2xl border border-dashed p-3 text-left transition ${
+                      active?.otherId === s.id
+                        ? "border-blue bg-white"
+                        : "border-white/30 bg-white/60 hover:bg-white"
+                    }`}
+                  >
+                    <span className="truncate text-sm font-bold text-navy">＋ {s.name}</span>
+                    <p className="mt-0.5 truncate text-xs text-muted-foreground">Nuevo mensaje</p>
+                  </button>
+                </li>
+              ))}
             </ul>
-            {active && <MessageThread otherUserId={active.otherId} otherName={active.name} />}
+            {active && (
+              <MessageThread otherUserId={active.otherId} otherName={active.name} onSent={load} />
+            )}
           </div>
         )}
       </main>

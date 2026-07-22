@@ -13,6 +13,9 @@ import {
 } from "@/lib/content";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { RichDayEditor } from "@/components/RichDayEditor";
+import { blankRichDay } from "@/lib/rich-content";
+import type { Json } from "@/integrations/supabase/types";
 import { toast } from "sonner";
 
 // Teacher content authoring: create days 11-120 from typed blocks, upload any
@@ -32,9 +35,27 @@ async function uploadAsset(file: File, userId: string): Promise<{ url: string; n
   return { url: data.publicUrl, name: file.name };
 }
 
+// Days 1-10 are bespoke, hand-built lessons in the app code (café welcome, the
+// bonus lesson, PDF download, special grammar callouts) — not in the DB, so they
+// can't be broken by editing. They're listed here read-only so the teacher sees
+// the whole program from day 1; their design is changed in code by the developer.
+const BUILTIN_DAYS: { day_id: number; label: string }[] = [
+  { day_id: 1, label: "Le Café" },
+  { day_id: 2, label: "Retour au café" },
+  { day_id: 3, label: "La Boulangerie" },
+  { day_id: 4, label: "La Vitrine des Douceurs" },
+  { day_id: 5, label: "Le Bistrot Liberté" },
+  { day_id: 6, label: "Restaurant · Partie 2" },
+  { day_id: 7, label: "Supermarché · Partie 1" },
+  { day_id: 8, label: "Faire les courses" },
+  { day_id: 9, label: "Le métro & les transports" },
+  { day_id: 10, label: "Taxi & ville à pied" },
+];
+
 export function ContentManager() {
   const { user } = useAuth();
   const [days, setDays] = useState<AuthoredDay[] | null>(null);
+  const [richIds, setRichIds] = useState<Set<number>>(new Set());
   const [tableMissing, setTableMissing] = useState(false);
   const [editingDay, setEditingDay] = useState<number | null>(null);
   const [newDayId, setNewDayId] = useState("");
@@ -50,18 +71,54 @@ export function ContentManager() {
       return;
     }
     setDays((data ?? []) as AuthoredDay[]);
+    // Which days carry a full "rich" lesson → edited with the rich editor
+    // (weeks 1-2 design) rather than the generic block editor.
+    const { data: rich } = await supabase
+      .from("authored_days")
+      .select("day_id")
+      .not("rich", "is", null);
+    setRichIds(new Set((rich ?? []).map((r) => r.day_id)));
   }, []);
 
   useEffect(() => {
     void reload();
   }, [reload]);
 
-  async function createDay() {
+  function validNewId(): number | null {
     const id = Number(newDayId);
     if (!Number.isInteger(id) || id < 11 || id > 120) {
       toast.error("Elige un número de día entre 11 y 120 (los días 1-10 ya existen en la plataforma).");
+      return null;
+    }
+    return id;
+  }
+
+  // Full lesson (weeks-1-2 design) — the recommended way to add a day.
+  async function createRichDay() {
+    const id = validNewId();
+    if (id === null) return;
+    const blank = blankRichDay(id);
+    const { error } = await supabase.from("authored_days").insert({
+      day_id: id,
+      title: blank.meta.label,
+      subtitle: blank.meta.clesSub,
+      status: "draft",
+      rich: blank as unknown as Json,
+      created_by: user?.id ?? null,
+    });
+    if (error) {
+      toast.error(/duplicate/i.test(error.message) ? `El día ${id} ya existe.` : error.message);
       return;
     }
+    setNewDayId("");
+    await reload();
+    setEditingDay(id);
+  }
+
+  // Legacy block-based day (video/text/quiz/files) for simple pages.
+  async function createDay() {
+    const id = validNewId();
+    if (id === null) return;
     const { error } = await supabase
       .from("authored_days")
       .insert({ day_id: id, title: `Jour ${id}`, created_by: user?.id ?? null });
@@ -78,10 +135,11 @@ export function ContentManager() {
     <div className="mb-6 rounded-3xl border border-border bg-white p-5 shadow-soft">
       <p className="font-display text-lg font-extrabold text-navy">🛠️ Contenido del curso</p>
       <p className="mt-1 text-xs text-muted-foreground">
-        Crea y edita los días del programa (11-120) con bloques: video, texto, vocabulario, quiz,
-        escritura y oral con corrección IA, archivos (PDF/diapositivas) y enlaces. Los días 1-10
-        están construidos en la plataforma. Un día es visible para los alumnos al <b>publicarlo</b>
-        {" "}(y su semana se habilita en «Control de acceso»).
+        Los días <b>11-20</b> (semanas 3-4) son <b>lecciones completas</b> con el mismo diseño que las
+        semanas 1-2: pulsa «Editar» para cambiar vocabulario, gramática, juegos y el défi. Los días
+        21-120 se crean con bloques (video, texto, quiz, archivos…). Los días 1-10 están construidos
+        en la plataforma. Un día es visible para los alumnos al <b>publicarlo</b>{" "}
+        (y su semana se habilita en «Control de acceso»).
       </p>
 
       {tableMissing && (
@@ -93,20 +151,50 @@ export function ContentManager() {
       {days === null ? (
         <Loader2 className="mt-3 h-5 w-5 animate-spin text-blue" />
       ) : editingDay !== null ? (
-        <DayEditor
-          dayId={editingDay}
-          day={days.find((d) => d.day_id === editingDay) ?? null}
-          onBack={() => {
-            setEditingDay(null);
-            void reload();
-          }}
-        />
+        richIds.has(editingDay) ? (
+          <RichDayEditor
+            dayId={editingDay}
+            onBack={() => {
+              setEditingDay(null);
+              void reload();
+            }}
+          />
+        ) : (
+          <DayEditor
+            dayId={editingDay}
+            day={days.find((d) => d.day_id === editingDay) ?? null}
+            onBack={() => {
+              setEditingDay(null);
+              void reload();
+            }}
+          />
+        )
       ) : (
         <>
           <ul className="mt-3 divide-y divide-border">
-            {days.length === 0 && (
-              <li className="py-3 text-sm text-muted-foreground">Aún no hay días creados por el equipo.</li>
-            )}
+            {/* Days 1-10: built-in (code), read-only here but visible + previewable. */}
+            {BUILTIN_DAYS.map((d) => (
+              <li key={`builtin-${d.day_id}`} className="flex items-center justify-between gap-3 py-2">
+                <div className="min-w-0">
+                  <span className="text-sm font-bold text-navy">
+                    Día {d.day_id} · Jour {d.day_id} · {d.label}
+                  </span>
+                  <span className="ml-2 rounded-full bg-success/15 px-2 py-0.5 text-[10px] font-bold text-success">Publicado</span>
+                  <span className="ml-1.5 rounded-full bg-navy/10 px-2 py-0.5 text-[10px] font-bold text-navy/70">Integrado</span>
+                  <p className="text-xs text-muted-foreground">Semana {weekOfAuthoredDay(d.day_id)} · diseño fijo (se edita en código)</p>
+                </div>
+                <div className="flex shrink-0 items-center gap-1">
+                  <Link
+                    to="/day/$dayId"
+                    params={{ dayId: String(d.day_id) }}
+                    aria-label="Ver como alumno"
+                    className="rounded-full p-2 text-navy/70 hover:bg-ice"
+                  >
+                    <Eye className="h-4 w-4" />
+                  </Link>
+                </div>
+              </li>
+            ))}
             {days.map((d) => (
               <li key={d.day_id} className="flex items-center justify-between gap-3 py-2">
                 <div className="min-w-0">
@@ -120,6 +208,11 @@ export function ContentManager() {
                   >
                     {d.status === "published" ? "Publicado" : "Borrador"}
                   </span>
+                  {richIds.has(d.day_id) && (
+                    <span className="ml-1.5 rounded-full bg-blue/10 px-2 py-0.5 text-[10px] font-bold text-blue">
+                      Lección completa
+                    </span>
+                  )}
                   <p className="text-xs text-muted-foreground">Semana {weekOfAuthoredDay(d.day_id)}</p>
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
@@ -148,10 +241,17 @@ export function ContentManager() {
               placeholder="Nº de día (11-120)"
               className="w-40"
             />
-            <Button onClick={() => void createDay()} className="gap-2 bg-gradient-blue text-white">
-              <Plus className="h-4 w-4" /> Crear día
+            <Button onClick={() => void createRichDay()} className="gap-2 bg-gradient-blue text-white">
+              <Plus className="h-4 w-4" /> Crear lección completa
+            </Button>
+            <Button onClick={() => void createDay()} variant="outline" className="gap-2">
+              <Plus className="h-4 w-4" /> Crear con bloques
             </Button>
           </div>
+          <p className="mt-1.5 text-[11px] text-muted-foreground">
+            «Lección completa» usa el mismo diseño que las semanas 1-2 (vocabulario, juegos, défi).
+            «Bloques» es para páginas sencillas (video, texto, archivos).
+          </p>
         </>
       )}
     </div>
