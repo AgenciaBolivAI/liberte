@@ -105,7 +105,9 @@ for (const d of [1, 2, 5, 6, 9, 10]) {
 }
 eq("furthest day, fresh student", mod.furthestUnlockedDay(S()), 1);
 eq("furthest day, days 1-4 done", mod.furthestUnlockedDay(S(1, 2, 3, 4)), 5);
-eq("furthest day caps at 10", mod.furthestUnlockedDay(S(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)), 10);
+// Weeks 3-4 are now real content (LESSON_DAYS=20): finishing day 10 points at day 11.
+eq("furthest day, days 1-10 done -> 11", mod.furthestUnlockedDay(S(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)), 11);
+eq("furthest day caps at 20 (weeks 1-4)", mod.furthestUnlockedDay(S(...Array.from({ length: 20 }, (_, i) => i + 1))), 20);
 
 // Admin content_access overrides — most specific wins, and locks beat the window.
 const ovr = (scope, target_type, target_id, access) => ({ scope, target_type, target_id, access });
@@ -631,7 +633,15 @@ g("12. Regressions (bugs found in audit — must stay fixed)");
   ok("calendar edit pre-fills via beginEdit", calMgr.includes("function beginEdit("));
   ok("calendar reload fetches description for pre-fill", calMgr.includes("duration_min, zoom_url, zoom_id, description"));
   ok("calendar manager is exported for reuse", calMgr.includes("export function CalendarManager"));
-  ok("calendar mounted in BOTH staff panels", readFileSync("src/routes/coach.tsx", "utf8").includes("<CalendarManager />") && readFileSync("src/routes/liberte-profesor-panel-9382745-admin.tsx", "utf8").includes("<CalendarManager />"));
+  // Client request: calendar editing lives IN the Calendar tab (staff-gated), so
+  // the teacher edits where the calendar is — not buried in the admin panel.
+  {
+    const calTab = readFileSync("src/routes/calendar.tsx", "utf8");
+    ok("calendar editor lives in the Calendar tab (staff-gated)",
+       calTab.includes("<CalendarManager />") && calTab.includes("useIsStaff") && calTab.includes("isStaff &&"));
+    ok("calendar editor no longer in the admin panel (single home)",
+       !readFileSync("src/routes/liberte-profesor-panel-9382745-admin.tsx", "utf8").includes("CalendarManager"));
+  }
 
   // Admin day/week content-access control + enforcement.
   const caFn = readFileSync("src/lib/content-access.functions.ts", "utf8");
@@ -755,8 +765,31 @@ g("12. Regressions (bugs found in audit — must stay fixed)");
   const cev = readFileSync("src/routes/clasesenvivo.index.tsx", "utf8");
   ok("replays read from DB with hardcoded fallback", cev.includes('from("recorded_classes")') && cev.includes("dbClasses ?? RECORDED_CLASSES"));
   const adminPanelSrc = readFileSync("src/routes/liberte-profesor-panel-9382745-admin.tsx", "utf8");
-  ok("admin panel mounts content + recorded managers", adminPanelSrc.includes("<ContentManager />") && adminPanelSrc.includes("<RecordedClassesManager />"));
+  // Day authoring (ContentManager) stays in the admin panel; the recorded-class
+  // editor moved into the Live tab so staff add/edit tiles where they live.
+  ok("admin panel still mounts the content manager", adminPanelSrc.includes("<ContentManager />"));
+  {
+    const liveTab = readFileSync("src/routes/clasesenvivo.index.tsx", "utf8");
+    ok("recorded-class editor lives in the Live tab (staff-gated)",
+       liveTab.includes("<RecordedClassesManager") && liveTab.includes("useIsStaff") && liveTab.includes("isStaff &&"));
+  }
   ok("dashboard reaches authored weeks", readFileSync("src/routes/liberte-plataforma-834798234728482934254-student.tsx", "utf8").includes("authoredStart"));
+
+  // Week-3 content seed (days 11-15) — authored days published into the DB.
+  ok("week-3 seed generator present", existsSync("scripts/seed-week3.mjs"));
+  const seedSql = readFileSync("supabase/migrations/20260722000000_seed_week3_content.sql", "utf8");
+  ok("week-3 seed publishes 5 days", (seedSql.match(/INSERT INTO public\.authored_days/g) || []).length === 5 && seedSql.includes("'published'"));
+  ok("week-3 seed covers days 11-15", [11, 12, 13, 14, 15].every((d) => seedSql.includes(`VALUES (${d}, 'Jour ${d}`)));
+  ok("week-3 seed is idempotent", seedSql.includes("DELETE FROM public.authored_days WHERE day_id BETWEEN 11 AND 15"));
+  ok("week-3 seed has vocab/quiz/writing/speaking blocks", ["'vocab'", "'quiz'", "'writing'", "'speaking'"].every((t) => seedSql.includes(t)));
+
+  // Week-4 content seed (days 16-20); day 16 from the Lovable spec.
+  ok("week-4 seed generator present", existsSync("scripts/seed-week4.mjs"));
+  const seed4 = readFileSync("supabase/migrations/20260722000001_seed_week4_content.sql", "utf8");
+  ok("week-4 seed publishes 5 days", (seed4.match(/INSERT INTO public\.authored_days/g) || []).length === 5 && seed4.includes("'published'"));
+  ok("week-4 seed covers days 16-20", [16, 17, 18, 19, 20].every((d) => seed4.includes(`VALUES (${d}, 'Jour ${d}`)));
+  ok("week-4 seed is idempotent", seed4.includes("DELETE FROM public.authored_days WHERE day_id BETWEEN 16 AND 20"));
+  ok("day 16 carries the Lovable spec (pronoms COD + ça me va)", seed4.includes("Pronoms COD") && seed4.includes("Ça me va"));
 
   // SECURITY: the bot token must NEVER be committed to the repo.
   {
@@ -812,6 +845,65 @@ g("12. Regressions (bugs found in audit — must stay fixed)");
     const s = readFileSync(`src/routes/${f}.tsx`, "utf8");
     ok(`${f}: bg-fixed gated to md+ (iOS Safari)`, !/[^:]bg-fixed/.test(s) || s.includes("md:bg-fixed"));
   }
+}
+
+/* ---------------- weeks 3-4 (days 11-20) ---------------- */
+g("12c. Weeks 3-4 · days 11-20 render through the REAL lesson player");
+{
+  const day = readFileSync("src/routes/day.$dayId.tsx", "utf8");
+  ok("day player imports the WEEK34 code data", day.includes('from "@/data/week34"'));
+  ok("days 11-20 registered into the same lesson maps as 1-10",
+     day.includes("Object.entries(WEEK34_META)") && day.includes("LESSONS_BY_DAY[id]") && day.includes("WEEK_TITLE_BY_DAY[id]"));
+  ok("generic wrappers reuse the day-1-10 games",
+     ["IntroLessonG", "VocabLessonG", "ClesLessonG", "DefiLessonG"].every((w) => day.includes(`function ${w}`)));
+  ok("LessonView dispatches days 11-20 to the generic wrappers",
+     day.includes("Number(dayId) >= 11 && Number(dayId) <= 20"));
+  ok("router sends registered days (1-20) to DayPage, authored renderer only past that",
+     day.includes("!(dayId in LESSONS_BY_DAY)") && day.includes("<AuthoredDayView"));
+  ok("gym video wired for weeks 3-4", day.includes("WEEK34[dayId]?.gym"));
+
+  // The generated content module must be complete and in the day-6 shape.
+  const w34src = readFileSync("src/data/week34.ts", "utf8");
+  const jsonStart = w34src.indexOf("= {", w34src.indexOf("export const WEEK34"));
+  const W34 = JSON.parse(w34src.slice(jsonStart + 2).replace(/;\s*$/, "").trim());
+  const days34 = Object.keys(W34).map(Number).sort((a, b) => a - b);
+  eq("WEEK34 covers days 11-20", days34.join(","), "11,12,13,14,15,16,17,18,19,20");
+  ok("each day has 30 vocab words", days34.every((d) => W34[d].vocabulary.length === 30));
+  ok("each day has flashcards + 4 grammar structures",
+     days34.every((d) => W34[d].flashQuiz.length >= 5 && W34[d].grammar.length >= 1));
+  ok("each day has the 4 vocab games (reading/listening/speaking/writing)",
+     days34.every((d) => { const gm = W34[d].vocabGames; return gm.reading.length >= 1 && gm.listening.length >= 1 && gm.speaking.length >= 1 && gm.writing.length >= 1; }));
+  ok("each day has a clés reading (with questions) + 3 clés games",
+     days34.every((d) => (W34[d].clesReading?.questions?.length ?? 0) >= 1 && W34[d].clesGames.listening.length >= 1 && W34[d].clesGames.speaking.length >= 1 && W34[d].clesGames.writing.length >= 1));
+  ok("each day has a staged défi (steps + criteria)",
+     days34.every((d) => W34[d].defiSteps.length >= 1 && W34[d].defiCriteria.length >= 1));
+
+  // Unlock: weeks 3-4 are real content days now, still sequentially gated.
+  eq("LESSON_DAYS covers weeks 1-4", mod.LESSON_DAYS, 20);
+  eq("weeks 3-4 stay sequentially gated (OPEN_THROUGH_DAY unchanged)", mod.OPEN_THROUGH_DAY, 10);
+  ok("day 11 LOCKED until day 10 done", !mod.isDayUnlocked(11, S()));
+  ok("day 11 opens once day 10 done", mod.isDayUnlocked(11, S(10)));
+  ok("day 20 opens once day 19 done", mod.isDayUnlocked(20, S(19)));
+
+  // Tutor now covers weeks 3-4, driven by the same WEEK34 data.
+  const tc = readFileSync("src/lib/tutorContext.ts", "utf8");
+  ok("TUTOR_MAX_DAY raised to 20", /TUTOR_MAX_DAY\s*=\s*20/.test(tc));
+  ok("tutor pulls scenes 11-20 from WEEK34",
+     tc.includes("Object.entries(WEEK34)") && tc.includes("TUTOR_SCENARIOS[id]") && tc.includes("CONTEXTS[id]"));
+  ok("each WEEK34 day carries a complete 3-objective tutor scene",
+     days34.every((d) => W34[d].tutor && W34[d].tutor.objectives.length === 3 && W34[d].tutor.opener_fr && W34[d].tutor.opener_es && W34[d].tutor.topic && W34[d].tutor.role));
+  ok("scene picker lists all 20 scenes", readFileSync("src/routes/conversation.tsx", "utf8").includes("tutorDayGroups(20)"));
+  ok("tutor day-group helper defaults to 20", readFileSync("src/data/program.ts", "utf8").includes("tutorDayGroups(maxDay = 20)"));
+
+  // "Weeks with content" is a single source of truth (derived from LESSON_DAYS),
+  // shared by the student dashboard AND the admin content-access panel, so the
+  // "con contenido" badge can't drift (bug: it used to be hardcoded to weeks 1-2).
+  eq("WEEKS_WITH_CONTENT derives 4 from LESSON_DAYS", mod.WEEKS_WITH_CONTENT, 4);
+  const dashW = readFileSync("src/routes/liberte-plataforma-834798234728482934254-student.tsx", "utf8");
+  ok("dashboard content-week count derives from the shared constant",
+     dashW.includes("LAST_WEEK_WITH_CONTENT = WEEKS_WITH_CONTENT") && dashW.includes('3: "11"') && dashW.includes('4: "16"'));
+  ok("admin content-access 'con contenido' badge uses the shared constant",
+     readFileSync("src/components/ContentAccessManager.tsx", "utf8").includes("w <= WEEKS_WITH_CONTENT"));
 }
 
 /* ---------------- build output ---------------- */

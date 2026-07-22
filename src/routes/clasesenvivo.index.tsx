@@ -1,6 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { useIsStaff } from "@/lib/use-staff";
+import { RecordedClassesManager } from "@/components/RecordedClassesManager";
 import { Lock, ArrowRight, Play } from "lucide-react";
 import eiffelBg from "@/assets/paris-eiffel-bg.jpg";
 import logo from "@/assets/liberte-logo-full.png.asset.json";
@@ -356,15 +358,15 @@ function ClasesEnVivoHub() {
   // DB-managed replays (admin panel «Clases grabadas»); hardcoded list is the
   // fallback until the table has rows.
   const [dbClasses, setDbClasses] = useState<RecordedClass[] | null>(null);
-  useEffect(() => {
-    let alive = true;
+  const isStaff = useIsStaff();
+  const loadRecorded = useCallback(() => {
     supabase
       .from("recorded_classes")
       .select("number, title, date_label, video_url, sort")
       .order("sort")
       .order("number")
       .then(({ data, error }) => {
-        if (!alive || error || !data?.length) return;
+        if (error || !data?.length) return;
         setDbClasses(
           data.map((r) => ({
             number: Number(r.number),
@@ -374,10 +376,10 @@ function ClasesEnVivoHub() {
           })),
         );
       });
-    return () => {
-      alive = false;
-    };
   }, []);
+  useEffect(() => {
+    loadRecorded();
+  }, [loadRecorded]);
   const recordedClasses = dbClasses ?? RECORDED_CLASSES;
 
   return (
@@ -511,6 +513,11 @@ function ClasesEnVivoHub() {
             Replay
           </span>
         </div>
+        {isStaff && (
+          <div className="mb-6">
+            <RecordedClassesManager onChanged={loadRecorded} />
+          </div>
+        )}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
           {recordedClasses.map((cls, i) => (
             <RecordedClassTile key={`${cls.number}-${cls.title}-${i}`} cls={cls} />

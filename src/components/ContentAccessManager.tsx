@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ChevronDown, ChevronRight, Loader2, Lock, Unlock, RotateCcw } from "lucide-react";
 import { getContentAccess, setContentAccess } from "@/lib/content-access.functions";
 import { TOTAL_WEEKS } from "@/lib/progress";
+import { WEEKS_WITH_CONTENT } from "@/lib/unlock";
 import { toast } from "sonner";
 
 type AccessValue = "open" | "locked";
@@ -218,7 +219,7 @@ export function ContentAccessManager({ students }: { students: Student[] }) {
                       <ChevronRight className="h-4 w-4 shrink-0 text-navy/60" />
                     )}
                     <span className="text-sm font-bold text-navy">Semana {w}</span>
-                    {w <= 2 && (
+                    {w <= WEEKS_WITH_CONTENT && (
                       <span className="rounded-full bg-blue/10 px-2 py-0.5 text-[10px] font-bold text-blue">
                         con contenido
                       </span>

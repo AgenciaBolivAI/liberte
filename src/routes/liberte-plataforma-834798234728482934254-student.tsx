@@ -19,7 +19,7 @@ import mascot from "@/assets/liberte-mascot.png.asset.json";
 import { useAuth } from "@/lib/auth-context";
 import { supabase } from "@/integrations/supabase/client";
 import { weekOverride } from "@/lib/content-access";
-import type { AccessOverride } from "@/lib/unlock";
+import { WEEKS_WITH_CONTENT, type AccessOverride } from "@/lib/unlock";
 import { useDayCompletions, useStars, TOTAL_WEEKS, DAYS_PER_WEEK, TOTAL_DAYS } from "@/lib/progress";
 import { UpcomingClassPopup } from "@/components/UpcomingClassPopup";
 
@@ -315,8 +315,12 @@ function Home() {
 const WEEK_START_DAY: Record<number, string> = {
   1: "1",
   2: "6",
+  3: "11",
+  4: "16",
 };
-const LAST_WEEK_WITH_CONTENT = 2;
+// Derived from LESSON_DAYS so this never drifts from the real content count
+// (see also the admin "content access" panel, which uses the same constant).
+const LAST_WEEK_WITH_CONTENT = WEEKS_WITH_CONTENT;
 
 function WeekCard({
   w,

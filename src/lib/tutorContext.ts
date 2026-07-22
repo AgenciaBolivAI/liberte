@@ -12,6 +12,7 @@ import { day7Vocabulary, day7GrammarStructures } from "@/data/day7";
 import { day8Vocabulary, day8GrammarStructures } from "@/data/day8";
 import { day9Vocabulary, day9GrammarStructures } from "@/data/day9";
 import { day10Vocabulary, day10GrammarStructures } from "@/data/day10";
+import { WEEK34 } from "@/data/week34";
 
 export type TutorScenario = {
   // Who Lib plays in this day's scene + where it happens (fed to the prompt).
@@ -170,7 +171,27 @@ const CONTEXTS: Record<number, { vocab: VocabRow[]; grammar: string[] }> = {
   10: { vocab: asVocab(day10Vocabulary), grammar: asGrammar(day10GrammarStructures) },
 };
 
-export const TUTOR_MAX_DAY = 10;
+// Days 11-20 (weeks 3-4): topics, scenarios and learning context all come from
+// the WEEK34 code data (each day carries a `tutor` block generated alongside its
+// lesson content). Registered into the same maps days 1-10 use, so the tutor
+// treats them identically. Objectives are capped at 3 (the scene UI's model filter
+// only renders the first three).
+for (const [key, d] of Object.entries(WEEK34)) {
+  const id = Number(key);
+  TUTOR_DAY_TOPICS[id] = d.tutor.topic;
+  TUTOR_SCENARIOS[id] = {
+    role: d.tutor.role,
+    opener_fr: d.tutor.opener_fr,
+    opener_es: d.tutor.opener_es,
+    objectives: d.tutor.objectives.slice(0, 3),
+  };
+  CONTEXTS[id] = {
+    vocab: asVocab(d.vocabulary),
+    grammar: asGrammar(d.grammar),
+  };
+}
+
+export const TUTOR_MAX_DAY = 20;
 
 export function getTutorDayContext(dayId: number): TutorDayContext {
   const id = Math.max(1, Math.min(TUTOR_MAX_DAY, Math.round(dayId) || 1));

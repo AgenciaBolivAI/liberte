@@ -198,6 +198,7 @@ import {
 import vocabVideo from "@/assets/vocabulario-dia1.mp4.asset.json";
 import cuadernilloSemana1 from "@/assets/cuadernillo-semana1.pdf.asset.json";
 import { speakFr, stopFr } from "@/lib/speak";
+import { WEEK34, type WeekDay } from "@/data/week34";
 
 const DAY_TITLES: Record<string, { title: string; desc: string }> = {
   "1": { title: "Jour 1 · Le Café — Liberté", desc: "Premier jour : commander un café à Paris avec politesse." },
@@ -224,13 +225,15 @@ export const Route = createFileRoute("/day/$dayId")({
   component: DayRouteSwitcher,
 });
 
-/** Days 1-10 are code-authored (the full lesson player below). Days 11-120 are
- *  teacher-authored in the DB and use their own renderer — the player's
- *  LESSONS_BY_DAY lookups would crash on unknown days. */
+/** Days 1-20 are code-authored (the full lesson player below — days 1-10 bespoke,
+ *  days 11-20 generic wrappers fed by WEEK34). Days 21-120 are teacher-authored in
+ *  the DB and use their own renderer — the player's LESSONS_BY_DAY lookups would
+ *  crash on unknown days, so anything not registered there falls to AuthoredDayView. */
 function DayRouteSwitcher() {
   const { dayId } = Route.useParams();
   const n = Number(dayId);
-  if (Number.isInteger(n) && n > LESSON_DAYS) return <AuthoredDayView dayId={Math.min(n, 120)} />;
+  if (Number.isInteger(n) && n > LESSON_DAYS && !(dayId in LESSONS_BY_DAY))
+    return <AuthoredDayView dayId={Math.min(n, 120)} />;
   return <DayPage />;
 }
 
@@ -385,6 +388,165 @@ const WEEK_TITLE_BY_DAY: Record<string, string> = {
   "10": "Semaine 2 · J'OSE 🚕",
 };
 
+/* ============================================================
+   WEEKS 3-4 · Days 11-20 — UI metadata (labels/titles only).
+   All lesson CONTENT (vocab, games, grammar, défi) comes from
+   WEEK34 (src/data/week34.ts). This table only names things.
+   The loop below registers these days into the same static maps
+   days 1-10 use, so they render through the real DayPage shell.
+   ============================================================ */
+type Week34Meta = {
+  label: string;      // sidebar accordion + DAYS_META
+  headTitle: string;  // <head> title
+  headDesc: string;   // <head> description
+  week: 3 | 4;
+  weekEmoji: string;  // WEEK_TITLE_BY_DAY suffix
+  intro: string;      // LiberteSpeak welcome (intro lesson)
+  introSub: string;   // sidebar intro subtitle
+  clesSub: string;    // sidebar "Les clés" subtitle (grammar theme)
+  defiTitle: string;
+  defiSubtitle: string;
+  defiAvatar: string;
+};
+
+const WEEK34_META: Record<string, Week34Meta> = {
+  "11": {
+    label: "Jour 11 · Demander son chemin",
+    headTitle: "Jour 11 · Demander son chemin — Liberté",
+    headDesc: "Onzième jour : demander son chemin et comprendre les indications dans la rue.",
+    week: 3, weekEmoji: "🧭",
+    intro: "Bienvenue au Jour 11 ! Aujourd'hui tu apprends à demander ton chemin dans les rues de Paris : où se trouve la station, la pharmacie, le musée. Respire, tu es prêt.",
+    introSub: "Demander son chemin.",
+    clesSub: "Où est… ? · Prépositions de lieu.",
+    defiTitle: "Demander son chemin",
+    defiSubtitle: "Dans la rue : demande comment aller à un lieu et comprends les indications.",
+    defiAvatar: "🧭",
+  },
+  "12": {
+    label: "Jour 12 · Donner des directions",
+    headTitle: "Jour 12 · Donner des directions — Liberté",
+    headDesc: "Douzième jour : donner des directions claires avec l'impératif.",
+    week: 3, weekEmoji: "🗺️",
+    intro: "Bienvenue au Jour 12 ! Aujourd'hui c'est toi qui guides : tourne à gauche, continue tout droit, c'est en face. Respire, tu es prêt.",
+    introSub: "Donner des directions.",
+    clesSub: "Impératif : tournez, continuez, allez.",
+    defiTitle: "Donner des directions",
+    defiSubtitle: "Guía a alguien paso a paso hasta su destino.",
+    defiAvatar: "🗺️",
+  },
+  "13": {
+    label: "Jour 13 · À la pharmacie",
+    headTitle: "Jour 13 · À la pharmacie — Liberté",
+    headDesc: "Treizième jour : acheter un médicament et comprendre la posologie.",
+    week: 3, weekEmoji: "💊",
+    intro: "Bienvenue au Jour 13 ! Aujourd'hui tu vas à la pharmacie acheter un médicament et comprendre comment le prendre. Respire, tu es prêt.",
+    introSub: "À la pharmacie.",
+    clesSub: "Il me faut… · La posologie.",
+    defiTitle: "À la pharmacie",
+    defiSubtitle: "Compra un medicamento y entiende cómo y cuándo tomarlo.",
+    defiAvatar: "💊",
+  },
+  "14": {
+    label: "Jour 14 · Décrire un symptôme",
+    headTitle: "Jour 14 · Décrire un symptôme — Liberté",
+    headDesc: "Quatorzième jour : décrire un symptôme et demander conseil.",
+    week: 3, weekEmoji: "🤒",
+    intro: "Bienvenue au Jour 14 ! Aujourd'hui tu apprends à dire où tu as mal : j'ai mal à la tête, à la gorge, au ventre. Respire, tu es prêt.",
+    introSub: "Décrire un symptôme.",
+    clesSub: "Avoir mal à… · Depuis…",
+    defiTitle: "Décrire un symptôme",
+    defiSubtitle: "Explica cómo te sientes desde cuándo y pide un consejo.",
+    defiAvatar: "🤒",
+  },
+  "15": {
+    label: "Jour 15 · Comparer & choisir",
+    headTitle: "Jour 15 · Comparer & choisir — Liberté",
+    headDesc: "Quinzième jour : comparer des produits et choisir le meilleur.",
+    week: 3, weekEmoji: "🛍️",
+    intro: "Bienvenue au Jour 15 ! Aujourd'hui tu compares : plus cher, moins cher, meilleur, aussi grand que. Respire, tu es prêt.",
+    introSub: "Comparer & choisir.",
+    clesSub: "Comparatifs : plus / moins / aussi… que.",
+    defiTitle: "Comparer & choisir",
+    defiSubtitle: "Compara dos productos y explica cuál eliges y por qué.",
+    defiAvatar: "🛍️",
+  },
+  "16": {
+    label: "Jour 16 · Essayer des vêtements",
+    headTitle: "Jour 16 · Essayer des vêtements — Liberté",
+    headDesc: "Seizième jour : essayer des vêtements et parler de tailles et de couleurs.",
+    week: 4, weekEmoji: "👗",
+    intro: "Bienvenue au Jour 16 ! Aujourd'hui tu essaies des vêtements : la taille, la couleur, ça me va bien. Respire, tu es prêt.",
+    introSub: "Au probador.",
+    clesSub: "Ça me va · Les tailles · Pronoms COD.",
+    defiTitle: "Essayer des vêtements",
+    defiSubtitle: "En el probador: pide otra talla, otro color y decide si te lo llevas.",
+    defiAvatar: "👗",
+  },
+  "17": {
+    label: "Jour 17 · Au marché · Les fruits",
+    headTitle: "Jour 17 · Au marché · Les fruits — Liberté",
+    headDesc: "Dix-septième jour : acheter des fruits au marché et parler de quantités.",
+    week: 4, weekEmoji: "🍓",
+    intro: "Bienvenue au Jour 17 ! Aujourd'hui tu vas au marché acheter des fruits : un kilo de pommes, une barquette de fraises. Respire, tu es prêt.",
+    introSub: "Les fruits au marché.",
+    clesSub: "Quantités : un kilo de, une barquette de.",
+    defiTitle: "Au marché · Les fruits",
+    defiSubtitle: "Compra fruta en el mercado indicando cantidades y precios.",
+    defiAvatar: "🍓",
+  },
+  "18": {
+    label: "Jour 18 · Au marché · Les légumes",
+    headTitle: "Jour 18 · Au marché · Les légumes — Liberté",
+    headDesc: "Dix-huitième jour : acheter des légumes et utiliser les articles partitifs.",
+    week: 4, weekEmoji: "🥕",
+    intro: "Bienvenue au Jour 18 ! Aujourd'hui tu achètes des légumes au marché : du, de la, des. Respire, tu es prêt.",
+    introSub: "Les légumes au marché.",
+    clesSub: "Articles partitifs : du / de la / des.",
+    defiTitle: "Au marché · Les légumes",
+    defiSubtitle: "Compra verduras usando los artículos partitivos.",
+    defiAvatar: "🥕",
+  },
+  "19": {
+    label: "Jour 19 · S'inscrire au gymnase",
+    headTitle: "Jour 19 · S'inscrire au gymnase — Liberté",
+    headDesc: "Dix-neuvième jour : s'inscrire à une activité et parler de sa routine.",
+    week: 4, weekEmoji: "🏋️",
+    intro: "Bienvenue au Jour 19 ! Aujourd'hui tu t'inscris au gymnase : les horaires, les tarifs, ta routine. Respire, tu es prêt.",
+    introSub: "S'inscrire au gymnase.",
+    clesSub: "Verbes pronominaux : s'inscrire, se lever.",
+    defiTitle: "S'inscrire au gymnase",
+    defiSubtitle: "Inscríbete a una actividad: pregunta horarios, precios y apúntate.",
+    defiAvatar: "🏋️",
+  },
+  "20": {
+    label: "Jour 20 · Défi final J'OSE",
+    headTitle: "Jour 20 · Défi final J'OSE — Liberté",
+    headDesc: "Vingtième jour : le grand défi J'OSE qui réunit tout le mois.",
+    week: 4, weekEmoji: "🏅",
+    intro: "Bienvenue au Jour 20 ! Aujourd'hui, le grand défi : tu réunis tout ce que tu as appris ce mois-ci. Respire, tu es prêt — tu OSES.",
+    introSub: "Le grand défi J'OSE.",
+    clesSub: "Révision intégrée du mois J'OSE.",
+    defiTitle: "Défi final J'OSE",
+    defiSubtitle: "El reto final del mes: combina direcciones, farmacia, compras y rutina en una sola conversación.",
+    defiAvatar: "🏅",
+  },
+};
+
+// Register days 11-20 into the same maps days 1-10 use, so the real
+// DayPage renders them identically. Content stays in WEEK34.
+for (const [id, m] of Object.entries(WEEK34_META)) {
+  DAY_TITLES[id] = { title: m.headTitle, desc: m.headDesc };
+  DAYS_META.push({ id: Number(id), label: m.label, week: m.week });
+  WEEK_OF_DAY[id] = m.week;
+  WEEK_TITLE_BY_DAY[id] = `Semaine ${m.week} · J'OSE ${m.weekEmoji}`;
+  LESSONS_BY_DAY[id] = [
+    { key: "gym", emoji: "🧠", title: "Gym cérébral", subtitle: "Réveille ton cerveau.", duration: "3 min" },
+    { key: "intro", emoji: "🎬", title: `Intro · Jour ${id}`, subtitle: m.introSub, duration: "3 min" },
+    { key: "vocab", emoji: "📚", title: "Vocabulaire", subtitle: "30 mots + pratique.", duration: "18 min" },
+    { key: "cles", emoji: "🗝️", title: "Les clés de la Liberté", subtitle: m.clesSub, duration: "20 min" },
+    { key: "defi", emoji: "🏆", title: "Défi final", subtitle: m.defiSubtitle, duration: "14 min" },
+  ];
+}
 
 function DayPage() {
   const { dayId } = Route.useParams();
@@ -1181,6 +1343,16 @@ function LessonView({
           {dayId === "10" && lesson === "vocab" && <VocabLessonDay10 onAward={onAward} />}
           {dayId === "10" && lesson === "cles" && <ClesLessonDay10 onAward={onAward} />}
           {dayId === "10" && lesson === "defi" && <DefiLessonDay10 onAward={onAward} onDone={onComplete} />}
+
+          {/* Days 11-20 · Weeks 3-4 — generic wrappers fed by WEEK34, same design as 1-10. */}
+          {Number(dayId) >= 11 && Number(dayId) <= 20 && WEEK34[dayId] && (
+            <>
+              {lesson === "intro" && <IntroLessonG dayId={dayId} />}
+              {lesson === "vocab" && <VocabLessonG dayId={dayId} onAward={onAward} />}
+              {lesson === "cles" && <ClesLessonG dayId={dayId} onAward={onAward} />}
+              {lesson === "defi" && <DefiLessonG dayId={dayId} onAward={onAward} onDone={onComplete} />}
+            </>
+          )}
         </div>
       </div>
 
@@ -1475,6 +1647,7 @@ function GymCerebral({ dayId }: { dayId?: string }) {
     dayId === "8" ? day8Videos.gym :
     dayId === "7" ? day7Videos.gym :
     dayId === "6" ? day6Videos.gym :
+    (dayId && WEEK34[dayId]?.gym) ? WEEK34[dayId].gym :
     videos.gymCerebral;
   return (
     <div className="space-y-5">
@@ -3143,6 +3316,212 @@ function DefiLessonDay6({ onAward, onDone }: { onAward: (n?: number) => void; on
       avatar="🍽️"
       steps={day6DefiSteps}
       criteria={DAY6_CRITERIA}
+      onAward={onAward}
+      onDone={onDone}
+    />
+  );
+}
+
+/* ============================================================
+   WEEKS 3-4 · Days 11-20 — generic, data-driven lesson wrappers.
+   Reuse the EXACT day-1-10 leaf components + design; fed by WEEK34
+   (src/data/week34.ts). Rendered through the real DayPage shell, so
+   the navy sidebar / progress / lesson steps are identical to weeks 1-2.
+   Only the two flashcard widgets needed prop-driven twins (FlashGridG /
+   FlashQuizG) — every other game already took props.
+   ============================================================ */
+
+function FlashGridG({ items }: { items: WeekDay["vocabulary"] }) {
+  const [index, setIndex] = useState(0);
+  const [flipped, setFlipped] = useState(false);
+  const total = items.length;
+  const v = items[index];
+  const go = (delta: number) => { setFlipped(false); setIndex((i) => (i + delta + total) % total); };
+  if (!v) return null;
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between text-xs font-semibold text-navy/70">
+        <span>Carte {index + 1} / {total}</span>
+        <button onClick={() => { setFlipped(false); setIndex(0); }} className="text-blue hover:underline">Recommencer</button>
+      </div>
+      <div className="flex items-center gap-2 sm:gap-4">
+        <button onClick={() => go(-1)} className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-sky/40 bg-white text-navy shadow-soft hover:bg-ice" aria-label="Précédent"><ArrowLeft className="h-5 w-5" /></button>
+        <button onClick={() => setFlipped((f) => !f)} className="relative h-56 flex-1 perspective-[1000px]" aria-label={`Carte ${v.fr}`}>
+          <div className={`absolute inset-0 transition-transform duration-500 [transform-style:preserve-3d] ${flipped ? "[transform:rotateY(180deg)]" : ""}`}>
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 rounded-3xl border border-border bg-card p-6 shadow-card [backface-visibility:hidden]">
+              <span className="text-5xl">{v.emoji}</span>
+              <p className="text-center font-display text-2xl font-extrabold text-navy sm:text-3xl">{v.fr}</p>
+              <p className="text-sm text-muted-foreground">{v.es}</p>
+              <button onClick={(e) => { e.stopPropagation(); speakFr(v.fr); }} className="inline-flex items-center gap-2 rounded-full bg-blue/10 px-4 py-2 text-sm font-semibold text-blue hover:bg-blue/20"><Volume2 className="h-4 w-4" /> Écouter</button>
+              <p className="text-[11px] text-muted-foreground">Touche la carte pour la retourner</p>
+            </div>
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 rounded-3xl bg-gradient-blue p-6 text-white shadow-card [backface-visibility:hidden] [transform:rotateY(180deg)]">
+              <p className="text-center font-display text-lg font-bold italic sm:text-2xl">"{v.example}"</p>
+              <button onClick={(e) => { e.stopPropagation(); speakFr(v.example); }} className="inline-flex items-center gap-2 rounded-full bg-white/20 px-4 py-2 text-sm font-semibold text-white hover:bg-white/30"><Volume2 className="h-4 w-4" /> Écouter</button>
+            </div>
+          </div>
+        </button>
+        <button onClick={() => go(1)} className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-sky/40 bg-white text-navy shadow-soft hover:bg-ice" aria-label="Suivant"><ArrowRight className="h-5 w-5" /></button>
+      </div>
+    </div>
+  );
+}
+
+function FlashQuizG({ items, onAward }: { items: WeekDay["flashQuiz"]; onAward: (n?: number) => void }) {
+  const [i, setI] = useState(0);
+  const [picked, setPicked] = useState<number | null>(null);
+  const [score, setScore] = useState(0);
+  const [done, setDone] = useState(false);
+  const total = items.length;
+  const cur = items[i];
+
+  if (done)
+    return <ResultCard title="Flashcards terminées !" score={`${score} / ${total}`} message="Étoile débloquée." />;
+  if (!cur) return null;
+
+  const choose = (idx: number) => {
+    if (picked !== null) return;
+    setPicked(idx);
+    const ok = idx === cur.answer;
+    playTone(ok ? "ok" : "no");
+    if (ok) setScore((s) => s + 1);
+    setTimeout(() => {
+      setPicked(null);
+      if (i + 1 < total) setI(i + 1);
+      else { setDone(true); onAward(1); }
+    }, 1000);
+  };
+
+  return (
+    <div className="rounded-3xl border border-border bg-card p-6 shadow-soft">
+      <div className="flex items-center justify-between text-xs font-semibold text-navy/70">
+        <span>🃏 Flashcard {i + 1} / {total}</span>
+        <span className="inline-flex items-center gap-1 text-navy">
+          <Star className="h-3.5 w-3.5 fill-gold text-gold" /> {score}
+        </span>
+      </div>
+      <div className="mt-4 flex flex-col items-center gap-2 rounded-2xl bg-gradient-blue p-8 text-white">
+        <span className="text-6xl">{cur.emoji}</span>
+        <p className="font-display text-lg font-bold">{cur.concept}</p>
+        <p className="text-xs text-white/70">¿Cómo se dice en français ?</p>
+      </div>
+      <div className="mt-4 grid gap-2 sm:grid-cols-3">
+        {cur.options.map((o, idx) => {
+          const isPicked = picked === idx;
+          const isRight = picked !== null && idx === cur.answer;
+          const isWrong = isPicked && idx !== cur.answer;
+          return (
+            <button
+              key={idx}
+              onClick={() => choose(idx)}
+              disabled={picked !== null}
+              className={`rounded-xl border-2 bg-white p-3 text-center text-sm font-semibold text-navy transition ${
+                isRight ? "border-success bg-success/10" : isWrong ? "border-red bg-red/10" : "border-border hover:border-blue"
+              }`}
+            >
+              {o}
+              {isRight && <Check className="ml-1 inline h-4 w-4 text-success" />}
+              {isWrong && <X className="ml-1 inline h-4 w-4 text-red" />}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function IntroLessonG({ dayId }: { dayId: string }) {
+  const m = WEEK34_META[dayId];
+  return (
+    <div className="space-y-5">
+      <LiberteSpeak message={m?.intro ?? "Bienvenue ! On commence ensemble ?"} />
+    </div>
+  );
+}
+
+function VocabLessonG({ dayId, onAward }: { dayId: string; onAward: (n?: number) => void }) {
+  const data = WEEK34[dayId];
+  if (!data) return null;
+  return (
+    <div className="space-y-6">
+      <LiberteSpeak message="30 mots pour la situation du jour. Explore les cartes, puis les 4 mini-jeux." />
+
+      <FlashGridG items={data.vocabulary} />
+
+      <FlashQuizG items={data.flashQuiz} onAward={onAward} />
+
+      <div className="rounded-2xl border-2 border-dashed border-blue/30 bg-ice p-5">
+        <p className="font-display text-lg font-extrabold text-navy">🎯 Pratique — 4 mini-jeux</p>
+        <p className="text-sm text-muted-foreground">Lecture, écoute, parler, écriture. Une étoile par jeu.</p>
+      </div>
+
+      <Tabs defaultValue="read" className="w-full">
+        <TabsList className="grid h-auto w-full grid-cols-2 gap-1 bg-muted p-1 sm:grid-cols-4">
+          <TabsTrigger value="read" className="flex flex-col gap-1 py-2 text-xs sm:flex-row sm:text-sm"><BookOpen className="h-4 w-4" /> Lecture</TabsTrigger>
+          <TabsTrigger value="listen" className="flex flex-col gap-1 py-2 text-xs sm:flex-row sm:text-sm"><Volume2 className="h-4 w-4" /> Écoute</TabsTrigger>
+          <TabsTrigger value="speak" className="flex flex-col gap-1 py-2 text-xs sm:flex-row sm:text-sm"><Mic className="h-4 w-4" /> Parler</TabsTrigger>
+          <TabsTrigger value="write" className="flex flex-col gap-1 py-2 text-xs sm:flex-row sm:text-sm"><Pencil className="h-4 w-4" /> Écriture</TabsTrigger>
+        </TabsList>
+        <TabsContent value="read" className="mt-4"><ReadingComprehension texts={data.vocabGames.reading} onAward={onAward} /></TabsContent>
+        <TabsContent value="listen" className="mt-4"><ListeningMCGame items={data.vocabGames.listening} onAward={onAward} /></TabsContent>
+        <TabsContent value="speak" className="mt-4"><SpeakingGame items={data.vocabGames.speaking} dayId={Number(dayId)} section="vocab" onAward={onAward} /></TabsContent>
+        <TabsContent value="write" className="mt-4"><WritingGame items={data.vocabGames.writing} dayId={Number(dayId)} section="vocab" onAward={onAward} /></TabsContent>
+      </Tabs>
+    </div>
+  );
+}
+
+function ClesLessonG({ dayId, onAward }: { dayId: string; onAward: (n?: number) => void }) {
+  const data = WEEK34[dayId];
+  const m = WEEK34_META[dayId];
+  if (!data) return null;
+  return (
+    <div className="space-y-6">
+      <div className="rounded-2xl border-2 border-gold/40 bg-gradient-to-br from-ice to-white p-5 shadow-card">
+        <div className="flex items-center gap-2">
+          <Star className="h-5 w-5 fill-gold text-gold" />
+          <p className="text-xs font-bold tracking-widest text-navy uppercase">Las estructuras del {m?.label.replace(/ · .*/, "") ?? `Jour ${dayId}`}</p>
+        </div>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          {data.grammar.map((s, i) => (
+            <div key={i} className="rounded-xl border border-blue/20 bg-white p-4">
+              <p className="font-display text-sm font-extrabold text-blue">{s.formula}</p>
+              <p className="mt-1 text-xs text-navy/80">{s.use}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <Tabs defaultValue="read" className="w-full">
+        <TabsList className="grid h-auto w-full grid-cols-2 gap-1 bg-muted p-1 sm:grid-cols-4">
+          <TabsTrigger value="read" className="flex flex-col gap-1 py-2 text-xs sm:flex-row sm:text-sm"><BookOpen className="h-4 w-4" /> Lecture</TabsTrigger>
+          <TabsTrigger value="listen" className="flex flex-col gap-1 py-2 text-xs sm:flex-row sm:text-sm"><Volume2 className="h-4 w-4" /> Écoute</TabsTrigger>
+          <TabsTrigger value="speak" className="flex flex-col gap-1 py-2 text-xs sm:flex-row sm:text-sm"><Mic className="h-4 w-4" /> Parler</TabsTrigger>
+          <TabsTrigger value="write" className="flex flex-col gap-1 py-2 text-xs sm:flex-row sm:text-sm"><Pencil className="h-4 w-4" /> Écriture</TabsTrigger>
+        </TabsList>
+        <TabsContent value="read" className="mt-4"><ReadingComprehension texts={[data.clesReading]} onAward={onAward} /></TabsContent>
+        <TabsContent value="listen" className="mt-4"><ListeningMCGame items={data.clesGames.listening} onAward={onAward} /></TabsContent>
+        <TabsContent value="speak" className="mt-4"><SpeakingGame items={data.clesGames.speaking} dayId={Number(dayId)} section="cles" onAward={onAward} /></TabsContent>
+        <TabsContent value="write" className="mt-4"><WritingGame items={data.clesGames.writing} dayId={Number(dayId)} section="cles" onAward={onAward} /></TabsContent>
+      </Tabs>
+    </div>
+  );
+}
+
+function DefiLessonG({ dayId, onAward, onDone }: { dayId: string; onAward: (n?: number) => void; onDone: () => void }) {
+  const data = WEEK34[dayId];
+  const m = WEEK34_META[dayId];
+  if (!data || !m) return null;
+  return (
+    <StagedDefi
+      dayId={Number(dayId)}
+      title={m.defiTitle}
+      subtitle={m.defiSubtitle}
+      eyebrow="Défi final · Reto entregable"
+      avatar={m.defiAvatar}
+      steps={data.defiSteps}
+      criteria={data.defiCriteria}
       onAward={onAward}
       onDone={onDone}
     />

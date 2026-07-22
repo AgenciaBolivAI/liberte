@@ -5,14 +5,23 @@
 // A "done day" means the student either marked the day complete
 // (day_completions) or submitted its défi (defi_results).
 
-export const LESSON_DAYS = 10;
+export const LESSON_DAYS = 20;
+
+/** Weeks that have real lesson content, derived from LESSON_DAYS (5 days/week).
+ *  Single source of truth so the student dashboard, the admin "content access"
+ *  panel, and the unlock rules can't drift apart on "which weeks have content". */
+export const WEEKS_WITH_CONTENT = Math.ceil(LESSON_DAYS / 5);
 
 /**
  * Launch setting: weeks 1-2 (days 1-10) are open to every student from day
  * one — no time gate, no coach grant, no "finish the previous day first".
- * Only these two weeks have content today, and the cohort was migrated
- * mid-programme, so gating them would lock existing students out of work
- * they had already reached.
+ * The cohort was migrated mid-programme, so gating these would lock existing
+ * students out of work they had already reached.
+ *
+ * Weeks 3-4 (days 11-20) now also have full content, but they stay
+ * SEQUENTIALLY GATED (open once the previous day is done) rather than
+ * open-from-day-one — so keep this at 10, not 20. Admins still open them
+ * early via the content_access panel.
  *
  * Lesson-by-lesson progression and the watch-the-video gate INSIDE each day
  * still apply. To re-enable day-by-day gating later, lower this to 0.

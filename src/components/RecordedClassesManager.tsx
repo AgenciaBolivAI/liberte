@@ -17,8 +17,9 @@ type Row = {
 const EMPTY = { number: 1, title: "", dateLabel: "", videoUrl: "" };
 
 /** Staff: manage the recorded live-class replay links students see in
- *  "En direct" — no more hardcoded list. */
-export function RecordedClassesManager() {
+ *  "En direct" — no more hardcoded list. `onChanged` lets the host tab refresh
+ *  its student-facing tiles after an add/edit/delete. */
+export function RecordedClassesManager({ onChanged }: { onChanged?: () => void } = {}) {
   const [rows, setRows] = useState<Row[] | null>(null);
   const [tableMissing, setTableMissing] = useState(false);
   const [form, setForm] = useState(EMPTY);
@@ -72,6 +73,7 @@ export function RecordedClassesManager() {
     setForm(EMPTY);
     setEditingId(null);
     await reload();
+    onChanged?.();
   }
 
   async function remove(r: Row) {
@@ -82,6 +84,7 @@ export function RecordedClassesManager() {
       setForm(EMPTY);
     }
     await reload();
+    onChanged?.();
   }
 
   return (

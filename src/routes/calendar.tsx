@@ -12,6 +12,8 @@ import {
   useCalendarEvents,
   type CalendarEvent,
 } from "@/lib/calendarEvents";
+import { useIsStaff } from "@/lib/use-staff";
+import { CalendarManager } from "@/components/CalendarManager";
 
 export const Route = createFileRoute("/calendar")({
   head: () => ({ meta: [{ title: "Calendario — Liberté" }] }),
@@ -21,6 +23,7 @@ export const Route = createFileRoute("/calendar")({
 export default function CalendarPage() {
   const [open, setOpen] = useState<CalendarEvent | null>(null);
   const { events } = useCalendarEvents();
+  const isStaff = useIsStaff();
   const today = new Date();
   const [view, setView] = useState({ year: today.getFullYear(), month: today.getMonth() });
 
@@ -77,6 +80,12 @@ export default function CalendarPage() {
             </button>
           </div>
         </div>
+
+        {isStaff && (
+          <div className="mt-6">
+            <CalendarManager />
+          </div>
+        )}
 
         <div className="mt-8 overflow-hidden rounded-3xl border border-white/15 bg-card shadow-card">
           <div className="grid grid-cols-7 border-b border-border bg-ice text-center text-xs font-bold tracking-widest text-navy uppercase">

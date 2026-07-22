@@ -14,8 +14,6 @@ import { ApprovalQueue } from "@/components/ApprovalQueue";
 import { ContentAccessManager } from "@/components/ContentAccessManager";
 import { TelegramBroadcast } from "@/components/TelegramBroadcast";
 import { ContentManager } from "@/components/ContentManager";
-import { RecordedClassesManager } from "@/components/RecordedClassesManager";
-import { CalendarManager } from "@/components/CalendarManager";
 import { Toaster } from "@/components/ui/sonner";
 
 export const Route = createFileRoute("/liberte-profesor-panel-9382745-admin")({
@@ -214,10 +212,6 @@ function TeacherPanel() {
         <ContentAccessManager students={students} />
 
         <ContentManager />
-
-        <CalendarManager />
-
-        <RecordedClassesManager />
 
         <TelegramBroadcast />
 

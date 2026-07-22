@@ -111,7 +111,7 @@ export const dayLabels = Array.from({ length: 20 }, (_, i) => `Día ${i + 1}`);
  * With only weeks 1-2 of content today this yields two groups under month 1, and
  * it generalizes automatically as more days are added.
  */
-export function tutorDayGroups(maxDay = 10): { label: string; days: number[] }[] {
+export function tutorDayGroups(maxDay = 20): { label: string; days: number[] }[] {
   const groups: { label: string; days: number[] }[] = [];
   const byKey = new Map<string, { label: string; days: number[] }>();
   for (let day = 1; day <= maxDay; day++) {
