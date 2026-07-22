@@ -21,7 +21,7 @@ import { toast } from "sonner";
 // Teacher content authoring: create days 11-120 from typed blocks, upload any
 // asset (PDF, slides, images, audio, video), and publish when ready. Days 1-10
 // are code-authored and shown as read-only here. Writes go through RLS
-// (staff-only policies) exactly like CalendarManager.
+// (staff-only policies) exactly like the other staff editors.
 
 const MAX_UPLOAD = 50 * 1024 * 1024;
 

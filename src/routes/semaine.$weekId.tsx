@@ -4,6 +4,7 @@ import {
   ArrowLeft, ArrowRight, Check, Loader2, Mic, PartyPopper, Square, Volume2, Download, AlertCircle,
 } from "lucide-react";
 import confetti from "canvas-confetti";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/lib/auth-context";
@@ -11,7 +12,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { evaluateWeek, getCompletedDays, transcribeAudio, markWeeklyPdfGenerated, getMyWeeklyEvaluation } from "@/lib/week.functions";
 import { generateWeeklyPdf, type WeeklyReportData } from "@/lib/weekPdf";
 import { speakFr, stopFr } from "@/lib/speak";
-import logo from "@/assets/liberte-logo.png.asset.json";
+import { TopNav } from "@/components/TopNav";
 
 export const Route = createFileRoute("/semaine/$weekId")({
   head: ({ params }) => ({
@@ -104,7 +105,73 @@ const VARIANTS: Variant[] = [
   },
 ];
 
-function pickVariantIdx(weekNumber: number): number {
+/* ===== Semaine 3 (jours 11-15) — directions, pharmacie, symptômes, comparer ===== */
+const WEEK3_VARIANTS: Variant[] = [
+  {
+    co: [
+      { audio: "Pardon monsieur, où est la pharmacie ? — Tournez à gauche, puis allez tout droit. C'est en face du parc.", question: "¿Dónde está la farmacia?", options: ["enfrente del parque", "a la derecha del metro", "al lado del café"], correct: 0 },
+      { audio: "Bonjour, j'ai mal à la tête depuis hier. — Prenez ce médicament deux fois par jour, après les repas.", question: "¿Cuántas veces al día debe tomar el medicamento?", options: ["una vez", "dos veces", "tres veces"], correct: 1 },
+      { audio: "Ce manteau-ci est plus cher que l'autre, mais il est de meilleure qualité.", question: "¿Cómo es este abrigo comparado con el otro?", options: ["más barato", "más caro pero de mejor calidad", "igual de caro"], correct: 1 },
+    ],
+    ce: {
+      text: "PHARMACIE DU CENTRE — Ouverte du lundi au samedi, de 8h30 à 19h30. Fermée le dimanche. Pour une urgence la nuit, appelez la pharmacie de garde. À côté de la station de métro « République ».",
+      items: [
+        { question: "¿A qué hora abre la farmacia?", options: ["a las 8h", "a las 8h30", "a las 9h"], correct: 1 },
+        { question: "¿Está abierta el domingo?", options: ["sí, todo el día", "no", "solo por la mañana"], correct: 1 },
+        { question: "¿Qué hay al lado de la farmacia?", options: ["un parque", "la estación de metro République", "un supermercado"], correct: 1 },
+      ],
+    },
+    pe: [
+      { prompt: "Escribe en francés cómo preguntar, con cortesía, por dónde se va a la estación de metro más cercana." },
+      { prompt: "Escribe una frase para decir que te duele la garganta y pedir un medicamento en la farmacia." },
+    ],
+    po: [
+      { prompt: "Lectura en voz alta (diagnóstico de pronunciación). Lee tal cual:", expected: "Pardon, madame. Où est la pharmacie, s'il vous plaît ? Je vais tout droit, puis je tourne à droite ? Merci beaucoup !" },
+      { prompt: "Mini situación (30-45 seg): estás perdido en París. Pregunta a alguien cómo llegar a la estación de metro más cercana, confirma la dirección y da las gracias." },
+    ],
+  },
+];
+
+/* ===== Semaine 4 (jours 16-20) — vêtements, marché, salle de sport ===== */
+const WEEK4_VARIANTS: Variant[] = [
+  {
+    co: [
+      { audio: "Bonjour, je cherche ce pull en taille M. — Désolé, il ne reste que du L. Vous voulez l'essayer ?", question: "¿Qué talla queda disponible?", options: ["la M", "la L", "la S"], correct: 1 },
+      { audio: "Je voudrais un kilo de pommes et une barquette de fraises. — Très bien, ça fait cinq euros cinquante.", question: "¿Cuánto debe pagar?", options: ["5,15 €", "5,50 €", "15 €"], correct: 1 },
+      { audio: "Pour vous inscrire à la salle de sport, remplissez ce formulaire. Les cours commencent à sept heures.", question: "¿A qué hora empiezan las clases?", options: ["a las 6h", "a las 7h", "a las 8h"], correct: 1 },
+    ],
+    ce: {
+      text: "MARCHÉ BIO — Fruits et légumes de saison. Pommes : 2 € le kilo. Fraises : 3 € la barquette. Ouvert mardi, jeudi et samedi, de 8h à 13h. Paiement en espèces uniquement.",
+      items: [
+        { question: "¿Cuánto cuesta el kilo de manzanas?", options: ["2 €", "3 €", "5 €"], correct: 0 },
+        { question: "¿Qué días abre el mercado?", options: ["lunes, miércoles y viernes", "martes, jueves y sábado", "todos los días"], correct: 1 },
+        { question: "¿Cómo se puede pagar?", options: ["con tarjeta", "solo en efectivo", "con cheque"], correct: 1 },
+      ],
+    },
+    pe: [
+      { prompt: "Escribe en francés cómo pedir, con cortesía, otra talla y otro color de una camiseta en una tienda." },
+      { prompt: "Escribe una frase para comprar medio kilo de tomates en el mercado (usa « un demi-kilo de »)." },
+    ],
+    po: [
+      { prompt: "Lectura en voz alta (diagnóstico de pronunciación). Lee tal cual:", expected: "Bonjour ! Je voudrais un kilo de pommes et une barquette de fraises, s'il vous plaît. C'est combien ? Merci, bonne journée !" },
+      { prompt: "Mini situación (30-45 seg): estás en una tienda de ropa. Saluda, pide probarte un pantalón, pide otra talla y pregunta el precio." },
+    ],
+  },
+];
+
+// Weekly-test content per week. Week 2 has its own bespoke route (/defi-semaine2);
+// weeks without a bank fall back to week 1's so the route never crashes.
+const VARIANTS_BY_WEEK: Record<number, Variant[]> = {
+  1: VARIANTS,
+  3: WEEK3_VARIANTS,
+  4: WEEK4_VARIANTS,
+};
+
+function variantsForWeek(weekNumber: number): Variant[] {
+  return VARIANTS_BY_WEEK[weekNumber] ?? VARIANTS;
+}
+
+function pickVariantIdx(weekNumber: number, bankLen: number): number {
   const key = `liberte_week${weekNumber}_variant`;
   let idx = 0;
   if (typeof window !== "undefined") {
@@ -112,11 +179,11 @@ function pickVariantIdx(weekNumber: number): number {
     if (stored !== null) {
       idx = Number(stored);
     } else {
-      idx = Math.floor(Math.random() * VARIANTS.length);
+      idx = Math.floor(Math.random() * bankLen);
       window.sessionStorage.setItem(key, String(idx));
     }
   }
-  return idx % VARIANTS.length;
+  return ((idx % bankLen) + bankLen) % bankLen;
 }
 
 
@@ -132,6 +199,13 @@ function WeekPage() {
   const [unlocked, setUnlocked] = useState(false);
   const [existing, setExisting] = useState<Awaited<ReturnType<typeof getMyWeeklyEvaluation>> | null>(null);
 
+  // Week 2's challenge lives on its own richer route (/defi-semaine2). There is
+  // no week-2 test bank here, so serving /semaine/2 would fall back to the week-1
+  // content and, on submit, overwrite the real week-2 weekly_evaluations row.
+  useEffect(() => {
+    if (weekNumber === 2) navigate({ to: "/defi-semaine2", replace: true });
+  }, [weekNumber, navigate]);
+
   useEffect(() => {
     if (loading || !user) return;
     (async () => {
@@ -140,8 +214,9 @@ function WeekPage() {
           getCompletedDays(),
           getMyWeeklyEvaluation({ data: { weekNumber } }),
         ]);
-        const need = weekNumber === 1 ? 5 : 5;
-        const ok = isAdmin || (weekNumber === 1 ? days.includes(need) : false);
+        // Unlocks once the LAST day of the week is complete (week N → day N*5).
+        // Week 2 has its own /defi-semaine2 route; this covers weeks 1, 3 and 4.
+        const ok = isAdmin || days.includes(weekNumber * 5);
         setUnlocked(ok);
         setExisting(prev);
       } catch {
@@ -152,7 +227,7 @@ function WeekPage() {
     })();
   }, [loading, user, weekNumber, isAdmin]);
 
-  if (loading || gateLoading) {
+  if (loading || gateLoading || weekNumber === 2) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#0d1b3a]">
         <Loader2 className="h-8 w-8 animate-spin text-white" />
@@ -175,10 +250,10 @@ function WeekPage() {
           <div className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-navy text-white">🎉</div>
           <h1 className="mt-4 font-display text-2xl font-extrabold text-navy">Le défi de la semaine te espera</h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            Termina el <strong>Défi Final del Día 5</strong> para abrir <strong>Le défi de la semaine 1</strong> y celebrar tu progreso.
+            Termina el <strong>Défi Final del Día {weekNumber * 5}</strong> para abrir <strong>Le défi de la semaine {weekNumber}</strong> y celebrar tu progreso.
           </p>
-          <Button onClick={() => navigate({ to: "/day/$dayId", params: { dayId: "5" } })} className="mt-6 bg-gradient-blue text-white">
-            Ir al Día 5
+          <Button onClick={() => navigate({ to: "/day/$dayId", params: { dayId: String(weekNumber * 5) } })} className="mt-6 bg-gradient-blue text-white">
+            Ir al Día {weekNumber * 5}
           </Button>
         </div>
       </div>
@@ -198,8 +273,9 @@ type Block = "intro" | "CO" | "CE" | "PE" | "PO" | "eval" | "result";
 
 function WeekTest({ weekNumber, studentName, previous }: { weekNumber: number; studentName: string; previous: Awaited<ReturnType<typeof getMyWeeklyEvaluation>> | null }) {
   const { user } = useAuth();
-  const [variantIdx, setVariantIdx] = useState(() => pickVariantIdx(weekNumber));
-  const V = VARIANTS[variantIdx % VARIANTS.length];
+  const banks = variantsForWeek(weekNumber);
+  const [variantIdx, setVariantIdx] = useState(() => pickVariantIdx(weekNumber, banks.length));
+  const V = banks[variantIdx % banks.length];
   const [block, setBlock] = useState<Block>(previous ? "result" : "intro");
   const [coAnswers, setCoAnswers] = useState<number[]>(Array(V.co.length).fill(-1));
   const [ceAnswers, setCeAnswers] = useState<number[]>(Array(V.ce.items.length).fill(-1));
@@ -234,8 +310,8 @@ function WeekTest({ weekNumber, studentName, previous }: { weekNumber: number; s
         if (!alive) return;
         const s = (data?.state ?? null) as Record<string, unknown> | null;
         if (s && typeof s === "object") {
-          const savedIdx = typeof s.variantIdx === "number" ? s.variantIdx % VARIANTS.length : variantIdx;
-          const NV = VARIANTS[savedIdx];
+          const savedIdx = typeof s.variantIdx === "number" ? s.variantIdx % banks.length : variantIdx;
+          const NV = banks[savedIdx];
           const fitNum = (arr: unknown, len: number) =>
             Array.from({ length: len }, (_, i) => (Array.isArray(arr) && typeof arr[i] === "number" ? (arr[i] as number) : -1));
           const fitStr = (arr: unknown, len: number) =>
@@ -364,12 +440,14 @@ function WeekTest({ weekNumber, studentName, previous }: { weekNumber: number; s
 
   return (
     <div className="min-h-screen bg-ice pb-20">
-      <header className="sticky top-0 z-30 border-b border-border bg-white">
+      <TopNav />
+      {/* Not sticky: TopNav owns the persistent header; this row only carries
+          the block progress bar. */}
+      <header className="border-b border-border bg-white">
         <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-3">
           <Link to="/liberte-plataforma-834798234728482934254-student" className="inline-flex items-center gap-1 text-xs font-semibold text-navy/70 hover:text-navy">
             <ArrowLeft className="h-4 w-4" /> Dashboard
           </Link>
-          <img src={logo.url} alt="Liberté" className="h-9 w-auto" />
           <div className="text-xs font-bold text-navy">Semaine {weekNumber}</div>
         </div>
         <div className="h-1 w-full bg-ice">
@@ -593,20 +671,25 @@ function SpeakingItem({ index, prompt, expected, blob, onBlob }: {
   useEffect(() => () => { if (url) URL.revokeObjectURL(url); }, [url]);
 
   const start = async () => {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    const r = new MediaRecorder(stream);
-    chunksRef.current = [];
-    r.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
-    r.onstop = () => {
-      const b = new Blob(chunksRef.current, { type: r.mimeType || "audio/webm" });
-      onBlob(b);
-      stream.getTracks().forEach((t) => t.stop());
-      setRec(false);
-      recRef.current = null;
-    };
-    recRef.current = r;
-    r.start();
-    setRec(true);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const r = new MediaRecorder(stream);
+      chunksRef.current = [];
+      r.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
+      r.onstop = () => {
+        const b = new Blob(chunksRef.current, { type: r.mimeType || "audio/webm" });
+        onBlob(b);
+        stream.getTracks().forEach((t) => t.stop());
+        setRec(false);
+        recRef.current = null;
+      };
+      recRef.current = r;
+      r.start();
+      setRec(true);
+    } catch {
+      // Denied/unavailable mic used to reject silently — the button did nothing.
+      toast.error("No pudimos acceder al micrófono. Revisa los permisos del navegador.");
+    }
   };
   const stop = () => recRef.current?.stop();
 

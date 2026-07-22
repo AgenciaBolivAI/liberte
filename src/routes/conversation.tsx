@@ -4,7 +4,6 @@ import { Check, Languages, Lightbulb, Loader2, Mic, Phone, PhoneOff, RotateCcw, 
 import { toast } from "sonner";
 import confetti from "canvas-confetti";
 import { TopNav } from "@/components/TopNav";
-import { Toaster } from "@/components/ui/sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import mascot from "@/assets/liberte-mascot.png.asset.json";
@@ -363,7 +362,6 @@ function ConversationPage() {
       }}
     >
       <TopNav />
-      <Toaster position="top-center" richColors />
       <main className="mx-auto max-w-5xl px-4 py-6 sm:px-6">
         <AdminPreviewBanner />
         <div className="grid gap-4 md:grid-cols-[1fr_280px]">

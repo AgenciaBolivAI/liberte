@@ -1,5 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { ArrowLeft, ArrowRight, Sparkles } from "lucide-react";
+import { TopNav } from "@/components/TopNav";
 
 export type PlusResource = {
   id: string;
@@ -102,11 +103,13 @@ function PlusItemPage() {
 
   return (
     <div className="min-h-screen bg-ice pb-20">
-      <header className="sticky top-0 z-30 border-b border-border bg-white">
+      <TopNav />
+      {/* Not sticky: TopNav owns the persistent header. */}
+      <header className="border-b border-border bg-white">
         <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-3">
           <Link
             to="/day/$dayId"
-            params={{ dayId: "1" }}
+            params={{ dayId: String((Number(weekId) - 1) * 5 + 1) }}
             className="inline-flex items-center gap-1 text-xs font-semibold text-navy/70 hover:text-navy"
           >
             <ArrowLeft className="h-4 w-4" /> Volver al programa

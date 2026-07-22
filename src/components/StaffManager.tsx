@@ -39,7 +39,7 @@ export function StaffManager() {
   async function revoke(member: StaffMember) {
     if (!window.confirm(`¿Quitar el rol de profesor/a a ${member.full_name}?`)) return;
     try {
-      await setCoachRole({ data: { email: member.email ?? "", assign: false } });
+      await setCoachRole({ data: { userId: member.id, assign: false } });
       toast.success(`Rol de profesor/a retirado a ${member.full_name}`);
       load();
     } catch (e2) {

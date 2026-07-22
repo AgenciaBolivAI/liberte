@@ -626,29 +626,23 @@ g("12. Regressions (bugs found in audit — must stay fixed)");
   ok("scene picker still binds value to activeDay", conv.includes("value={activeDay}"));
   ok("scene picker still resets on change", conv.includes("void handleReset(Number(e.target.value))"));
 
-  // TEACH-2: calendar edit path — now a shared component used by both panels.
-  const calMgr = readFileSync("src/components/CalendarManager.tsx", "utf8");
-  ok("calendar has an editingId state", calMgr.includes("editingId"));
-  ok("calendar edit calls update().eq(id)", /\.update\(payload\)\.eq\("id", editingId\)/.test(calMgr));
-  ok("calendar edit pre-fills via beginEdit", calMgr.includes("function beginEdit("));
-  ok("calendar reload fetches description for pre-fill", calMgr.includes("duration_min, zoom_url, zoom_id, description"));
-  ok("calendar manager is exported for reuse", calMgr.includes("export function CalendarManager"));
-  // Client request: calendar editing lives IN the Calendar tab (staff-gated), so
-  // the teacher edits where the calendar is — not buried in the admin panel.
+  // Calendar editing is ONE shared inline board (CalendarBoard), used by BOTH the
+  // Calendar tab AND the coach panel — click a day to open its agenda (all its
+  // events + edit/delete each + add), so a day can hold many classes.
+  const board = readFileSync("src/components/CalendarBoard.tsx", "utf8");
+  ok("shared calendar board exists + is staff-gated",
+     board.includes("export function CalendarBoard") && board.includes("useIsStaff"));
+  ok("clicking a day opens its agenda (staff only)", board.includes("isStaff ? () => setDayPanel"));
+  ok("day agenda lists all its events + an add button (multiple per day)",
+     board.includes("Clases del día") && board.includes("Añadir una clase"));
+  ok("board opens the inline editor for create + edit",
+     board.includes("<CalendarEventEditor") && board.includes('mode: "create"') && board.includes('mode: "edit"'));
   {
-    // Client request: edit the calendar INLINE — click a day to add, click an
-    // event to edit/delete — right in the Calendar tab, staff-gated.
     const calTab = readFileSync("src/routes/calendar.tsx", "utf8");
-    ok("calendar edits inline in the Calendar tab (click day = agenda, add/edit events)",
-       calTab.includes("<CalendarEventEditor") && calTab.includes("useIsStaff") &&
-       calTab.includes('mode: "create"') && calTab.includes('mode: "edit"'));
-    ok("clicking a day opens its agenda (staff-gated)",
-       calTab.includes("isStaff ? () => setDayPanel") && calTab.includes("onEventClick"));
-    // A day can hold MANY events: the agenda lists them all + an "add" button,
-    // and the editor returns to the agenda on save so several can be added.
-    ok("day agenda lists all events + an add button for multiple per day",
-       calTab.includes("Clases del día") && calTab.includes("Añadir una clase") && calTab.includes("dayPanel"));
-    ok("no separate calendar-manager panel in the Calendar tab", !calTab.includes("<CalendarManager"));
+    ok("Calendar tab renders the shared board", calTab.includes("<CalendarBoard"));
+    ok("coach panel renders the SAME shared board",
+       readFileSync("src/routes/coach.tsx", "utf8").includes("<CalendarBoard"));
+    ok("no old calendar-manager panel in the Calendar tab", !calTab.includes("<CalendarManager"));
     ok("calendar editor no longer in the admin panel (single home)",
        !readFileSync("src/routes/liberte-profesor-panel-9382745-admin.tsx", "utf8").includes("CalendarManager"));
     const cee = readFileSync("src/components/CalendarEventEditor.tsx", "utf8");
@@ -858,7 +852,7 @@ g("12. Regressions (bugs found in audit — must stay fixed)");
   ok("no invalid comma grid-cols", !d2.includes("grid-cols-[1fr,"));
   ok("textareas are 16px on mobile (no iOS zoom)", d2.includes("p-3 text-base sm:text-sm"));
   const cal = readFileSync("src/routes/calendar.tsx", "utf8");
-  ok("calendar dots have 28px tap targets", cal.includes('className="grid h-7 w-7 place-items-center"'));
+  ok("calendar dots have 28px tap targets", readFileSync("src/components/CalendarBoard.tsx", "utf8").includes('className="grid h-7 w-7 place-items-center"'));
   ok("calendar modal scrolls on short screens", cal.includes("max-h-[85dvh]"));
   const ban = readFileSync("src/components/AdminPreviewBanner.tsx", "utf8");
   ok("preview select can't overflow", ban.includes("w-full max-w-full"));
@@ -972,6 +966,94 @@ g("12c. Weeks 3-4 · days 11-20 render through the REAL lesson player");
      tutSrc.includes("resolveTutorContext") && tutSrc.includes('.from("authored_days")') && tutSrc.includes("rich.vocabulary"));
   ok("tutor falls back to code content when no DB row",
      tutSrc.includes("if (dayId < 11) return base") && /return base/.test(tutSrc));
+}
+
+/* ---------------- audit fixes (Kimi findings) ---------------- */
+g("12d. Audit fixes: security hardening, weekly eval, coach unlock, cleanup");
+{
+  // #3 — the ~17 older tables lose the RLS-bypassing TRUNCATE (+ TRIGGER/REFERENCES).
+  const h2 = readFileSync("supabase/migrations/20260722000002_privilege_hardening_older_tables.sql", "utf8");
+  eq("older-table hardening revokes TRUNCATE on all 17 tables",
+     (h2.match(/REVOKE TRUNCATE, REFERENCES, TRIGGER ON public\.\w+ FROM anon, authenticated;/g) || []).length, 17);
+  for (const t of ["profiles", "user_roles", "star_awards", "weekly_evaluations"]) {
+    ok(`hardening covers ${t}`, h2.includes(`ON public.${t} FROM anon, authenticated`));
+  }
+
+  // #4 — coach week unlock now writes the ENFORCED content_access, not the
+  // display-only week_unlocks (which the server never checked).
+  const coach = readFileSync("src/lib/coach.functions.ts", "utf8");
+  ok("coach unlock/lock write content_access (enforced), not week_unlocks",
+     coach.includes('.from("content_access")') && !coach.includes('.from("week_unlocks")'));
+  ok("coach unlock grants a per-user week override",
+     coach.includes('target_type: "week"') && coach.includes('access: "open"'));
+
+  // #2 — weekly evaluation generalized to weeks 3-4 (was week-1-only).
+  const sem = readFileSync("src/routes/semaine.$weekId.tsx", "utf8");
+  ok("weekly test has real content for weeks 3 and 4",
+     sem.includes("WEEK3_VARIANTS") && sem.includes("WEEK4_VARIANTS") && sem.includes("VARIANTS_BY_WEEK"));
+  ok("weekly unlock generalized to any week (day N*5)", sem.includes("days.includes(weekNumber * 5)"));
+  const wk = readFileSync("src/lib/week.functions.ts", "utf8");
+  ok("evaluateWeek reads the correct days for any week (not just week 1)",
+     wk.includes("(data.weekNumber - 1) * 5 + i + 1") && !wk.includes("weekNumber === 1 ? [1, 2, 3, 4, 5] : []"));
+
+  // Cleanup: single Toaster host, Spanish <html lang>, no stray migration image.
+  const root = readFileSync("src/routes/__root.tsx", "utf8");
+  ok("single app-wide Toaster host (root only)",
+     root.includes("<Toaster") &&
+     !readFileSync("src/components/AuthPage.tsx", "utf8").includes("<Toaster") &&
+     !readFileSync("src/routes/conversation.tsx", "utf8").includes("<Toaster") &&
+     !readFileSync("src/routes/reset-password.tsx", "utf8").includes("<Toaster"));
+  ok("<html> lang is Spanish (matches the UI)", root.includes('<html lang="es">'));
+  ok("no stray image.png committed in migrations", !existsSync("supabase/migrations/image.png"));
+}
+
+/* ---------------- re-audit fixes (Kimi round 2) ---------------- */
+g("12e. Re-audit fixes: paid-AI gates, star-minting, wildcard injection, misc");
+{
+  // Shared approval gate, applied to EVERY paid-AI + staff-directory endpoint.
+  ok("shared requireApprovedStudent helper exists",
+     readFileSync("src/lib/approval.ts", "utf8").includes("export async function requireApprovedStudent"));
+  const defi = readFileSync("src/lib/defi.functions.ts", "utf8");
+  eq("defi endpoints all gate on approval (correctActivity/transcribeStage/evaluateDefi)",
+     (defi.match(/await requireApprovedStudent\(context\)/g) || []).length, 3);
+  ok("tutor + week + messaging import the shared approval gate",
+     readFileSync("src/lib/tutor.functions.ts", "utf8").includes('from "@/lib/approval"') &&
+     readFileSync("src/lib/week.functions.ts", "utf8").includes("requireApprovedStudent") &&
+     readFileSync("src/lib/messaging.functions.ts", "utf8").includes("requireApprovedStudent"));
+  ok("getStaffContacts gates unapproved accounts",
+     /getStaffContacts[\s\S]{0,400}requireApprovedStudent/.test(readFileSync("src/lib/messaging.functions.ts", "utf8")));
+
+  // evaluateWeek can't mint +3 stars for a week the student hasn't finished.
+  const wk = readFileSync("src/lib/week.functions.ts", "utf8");
+  ok("evaluateWeek has a server-side completion gate before scoring",
+     wk.includes("day_completions") && wk.includes("defi_results") && /Termina el Día/.test(wk) && wk.includes("weekNumber * 5"));
+
+  // Role-grant lookups match emails LITERALLY (no ilike wildcard injection) and
+  // revoke works for null-email accounts (by user id).
+  const adm = readFileSync("src/lib/admin.functions.ts", "utf8");
+  ok("setCoachRole escapes LIKE wildcards + supports lookup by userId",
+     adm.includes("escapeLike") && adm.includes('q.eq("id", data.userId)') && adm.includes("UUID_RE"));
+  ok("approveStudent lead match escapes wildcards too", adm.includes("escapeLike(profile.email.toLowerCase())"));
+  ok("staff revoke uses the user id, not a nullable email",
+     readFileSync("src/components/StaffManager.tsx", "utf8").includes("userId: member.id"));
+
+  // /semaine/2 must redirect to its bespoke route, not serve the week-1 test.
+  ok("/semaine/2 redirects to /defi-semaine2 (no clobber of the week-2 result)",
+     readFileSync("src/routes/semaine.$weekId.tsx", "utf8").includes('navigate({ to: "/defi-semaine2", replace: true })'));
+
+  // Smaller fixes.
+  ok("messages inbox not wiped by a transient refresh failure",
+     readFileSync("src/routes/mensajes.tsx", "utf8").includes("error && (convs === null || convs.length === 0)"));
+  {
+    const semSrc = readFileSync("src/routes/semaine.$weekId.tsx", "utf8");
+    ok("weekly-test mic denial is handled (not a silent no-op)",
+       semSrc.includes("navigator.mediaDevices.getUserMedia") && semSrc.includes("No pudimos acceder al micrófono"));
+  }
+  ok("types.ts tutor_consume_message can return null (daily cap)",
+     /tutor_consume_message[\s\S]{0,60}Returns: number \| null/.test(readFileSync("src/integrations/supabase/types.ts", "utf8")));
+  ok("500 error page is Spanish", readFileSync("src/lib/error-page.ts", "utf8").includes('<html lang="es">'));
+  ok("admin star bar uses the true max (weekly-eval stars included)",
+     readFileSync("src/routes/liberte-profesor-panel-9382745-admin.tsx", "utf8").includes("TOTAL_DAYS * 4 + TOTAL_WEEKS * 3"));
 }
 
 /* ---------------- build output ---------------- */

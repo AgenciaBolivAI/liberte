@@ -8,7 +8,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Toaster } from "@/components/ui/sonner";
 import liberteLogoFull from "@/assets/liberte-logo-full.png.asset.json";
 
 export const Route = createFileRoute("/reset-password")({
@@ -81,7 +80,6 @@ function ResetPasswordPage() {
       className="min-h-screen w-full flex items-center justify-center p-4 sm:p-8"
       style={{ background: "linear-gradient(135deg, #EDF8FC 0%, #F5F0E8 100%)" }}
     >
-      <Toaster position="top-center" richColors />
       <div
         className="w-full max-w-md rounded-3xl bg-white p-6 sm:p-10 shadow-2xl"
         style={{ boxShadow: "0 30px 80px -20px rgba(30,58,95,0.35)" }}

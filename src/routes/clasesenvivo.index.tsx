@@ -3,9 +3,9 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useIsStaff } from "@/lib/use-staff";
 import { RecordedClassesManager } from "@/components/RecordedClassesManager";
+import { TopNav } from "@/components/TopNav";
 import { Lock, ArrowRight, Play } from "lucide-react";
 import eiffelBg from "@/assets/paris-eiffel-bg.jpg";
-import logo from "@/assets/liberte-logo-full.png.asset.json";
 
 export const Route = createFileRoute("/clasesenvivo/")({
   head: () => ({
@@ -391,6 +391,7 @@ function ClasesEnVivoHub() {
       }}
     >
       {/* Hero */}
+      <TopNav />
       <header
         className="relative overflow-hidden"
         style={{
@@ -400,19 +401,6 @@ function ClasesEnVivoHub() {
         }}
       >
         <div className="max-w-6xl mx-auto px-4 sm:px-8 py-8 sm:py-12">
-          <div className="flex items-center justify-between gap-4 mb-8">
-            <img
-              src={logo.url}
-              alt="Liberté"
-              className="h-10 sm:h-14 w-auto bg-white/90 rounded-lg px-2 py-1"
-            />
-            <Link
-              to="/liberte-plataforma-834798234728482934254-student"
-              className="text-xs sm:text-sm text-white/90 hover:text-white font-semibold underline underline-offset-4"
-            >
-              ← Volver
-            </Link>
-          </div>
           <p className="text-[11px] sm:text-xs font-bold uppercase tracking-[0.35em] text-white/80 mb-2">
             Programa Liberté
           </p>

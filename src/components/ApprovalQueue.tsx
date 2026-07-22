@@ -13,8 +13,10 @@ export function ApprovalQueue() {
   async function reload() {
     try {
       setPending(await getPendingStudents());
-    } catch {
+    } catch (e) {
+      // Don't silently render an empty queue on a load failure — surface it.
       setPending([]);
+      toast.error(e instanceof Error ? e.message : "No se pudo cargar la lista de aprobación");
     }
   }
 

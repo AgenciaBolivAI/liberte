@@ -868,7 +868,7 @@ export type Database = {
       }
       tutor_consume_message: {
         Args: { _limit: number }
-        Returns: number
+        Returns: number | null
       }
     }
     Enums: {

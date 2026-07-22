@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { callChat, transcribeFr } from "@/lib/ai";
 import { assertWeekNotLocked } from "@/lib/content-access.functions";
+import { requireApprovedStudent } from "@/lib/approval";
 
 /* ---------- Which days did the user complete (defi sent) ---------- */
 
@@ -67,10 +68,36 @@ export const evaluateWeek = createServerFn({ method: "POST" })
     };
   })
   .handler(async ({ data, context }) => {
+    // Unapproved accounts can't spend OpenAI tokens.
+    await requireApprovedStudent(context);
     // Hard gate: a week an admin has disabled can't be evaluated. Admins bypass.
     await assertWeekNotLocked(context, data.weekNumber);
+
+    // Server-side completion gate. The weekly evaluation inserts a
+    // weekly_evaluations row, which fires a +3-star trigger — so a crafted call
+    // must not score (and mint stars for) a week the student hasn't finished.
+    // "Finished" = the week's LAST day is done (marked complete OR défi
+    // submitted), mirroring the client gate. Admins bypass for content review.
+    {
+      const { data: isAdmin } = await context.supabase.rpc("has_role", {
+        _user_id: context.userId,
+        _role: "admin",
+      });
+      if (!isAdmin) {
+        const lastDay = data.weekNumber * 5;
+        const [dc, dr] = await Promise.all([
+          context.supabase.from("day_completions").select("day_id").eq("user_id", context.userId).eq("day_id", lastDay).maybeSingle(),
+          context.supabase.from("defi_results").select("day_id").eq("user_id", context.userId).eq("day_id", lastDay).maybeSingle(),
+        ]);
+        if (!dc.data && !dr.data) {
+          throw new Error(`Termina el Día ${lastDay} antes de hacer la evaluación de la semana ${data.weekNumber}.`);
+        }
+      }
+    }
     // ---- Fetch weekly data from DB ----
-    const dayIds = data.weekNumber === 1 ? [1, 2, 3, 4, 5] : [];
+    // Week N covers days (N-1)*5+1 .. N*5 (5 days/week), so the AI evaluation
+    // reads the right days for ANY week — not just week 1.
+    const dayIds = Array.from({ length: 5 }, (_, i) => (data.weekNumber - 1) * 5 + i + 1);
     const { data: defis } = await context.supabase
       .from("defi_results")
       .select("day_id, score_10, hits, misses, strengths, errors, weak_points, recommendation")

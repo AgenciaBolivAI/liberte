@@ -8,7 +8,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Toaster } from "@/components/ui/sonner";
 import signupImage from "@/assets/bon-voyage-signup.png.asset.json";
 import mobileBanner from "@/assets/bon-voyage-mobile-banner.png.asset.json";
 import liberteLogoFull from "@/assets/liberte-logo-full.png.asset.json";
@@ -84,7 +83,6 @@ export function AuthPage() {
       className="min-h-screen w-full flex items-center justify-center p-4 sm:p-8"
       style={{ background: "linear-gradient(135deg, #EDF8FC 0%, #F5F0E8 100%)" }}
     >
-      <Toaster position="top-center" richColors />
       <div
         className="w-full max-w-5xl overflow-hidden rounded-3xl bg-white shadow-2xl grid md:grid-cols-[40%_60%]"
         style={{ boxShadow: "0 30px 80px -20px rgba(30,58,95,0.35)" }}

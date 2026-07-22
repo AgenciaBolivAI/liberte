@@ -84,7 +84,10 @@ function MessagesPage() {
           <div className="mt-8 grid place-items-center">
             <Loader2 className="h-7 w-7 animate-spin text-white" />
           </div>
-        ) : error ? (
+        ) : /* Only replace the view with the error card when there's nothing
+              loaded — a transient realtime-refresh failure must not wipe the
+              inbox the student is already reading. */
+          error && (convs === null || convs.length === 0) && !active ? (
           <div className="mt-6 rounded-2xl border border-red/40 bg-white p-6 text-center text-sm text-red">
             {error}{" "}
             <button onClick={load} className="font-bold underline">

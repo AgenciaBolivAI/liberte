@@ -19,6 +19,12 @@ async function requireAdmin(context: Ctx): Promise<void> {
   if (!data) throw new Response("Forbidden", { status: 403 });
 }
 
+/** Escape LIKE/ILIKE wildcards so a value matches LITERALLY. Without this a
+ *  crafted email like "%@empresa.com" (or a real "_" in an address) pattern-
+ *  matches other accounts through PostgREST's `ilike`. */
+const escapeLike = (s: string) => s.replace(/([\\%_])/g, "\\$1");
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /* ---------------- Approval queue ---------------- */
 
 export type PendingStudent = {
@@ -67,7 +73,7 @@ export const approveStudent = createServerFn({ method: "POST" })
         await supabaseAdmin
           .from("leads")
           .update({ status: "approved" })
-          .ilike("email", profile.email.toLowerCase());
+          .ilike("email", escapeLike(profile.email.toLowerCase()));
       } catch {
         // non-fatal
       }
@@ -195,20 +201,27 @@ export const getStaffList = createServerFn({ method: "GET" })
 export const setCoachRole = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) => {
-    const d = input as { email?: string; assign?: boolean };
+    const d = input as { email?: string; userId?: string; assign?: boolean };
+    // Prefer a stable user id (used by "revoke", where the account's email may be
+    // null). Fall back to an email for the "grant by typing an address" flow.
+    const userId = d?.userId ? String(d.userId) : "";
+    if (userId && !UUID_RE.test(userId)) throw new Error("userId inválido");
     const email = String(d?.email ?? "").trim().toLowerCase();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("Email inválido");
-    return { email, assign: d?.assign !== false };
+    if (!userId && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("Email inválido");
+    return { userId, email, assign: d?.assign !== false };
   })
   .handler(async ({ data, context }) => {
     await requireAdmin(context as Ctx);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: profile } = await supabaseAdmin
-      .from("profiles")
-      .select("id, full_name, email")
-      .ilike("email", data.email)
-      .maybeSingle();
-    if (!profile) throw new Error("No hay ninguna cuenta registrada con ese email");
+    // Look up by id when provided (exact), else by email matched LITERALLY
+    // (escaped) so a wildcard pattern can't resolve to the wrong account.
+    const q = supabaseAdmin.from("profiles").select("id, full_name, email");
+    const { data: profile, error: lookupError } = await (data.userId
+      ? q.eq("id", data.userId)
+      : q.ilike("email", escapeLike(data.email))
+    ).maybeSingle();
+    if (lookupError) throw new Error(lookupError.message);
+    if (!profile) throw new Error("No hay ninguna cuenta registrada con esos datos");
     const userId = profile.id as string;
     if (data.assign) {
       const { error } = await supabaseAdmin

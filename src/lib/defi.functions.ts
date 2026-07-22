@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { callChat, transcribeFr } from "@/lib/ai";
 import { assertDayNotLocked } from "@/lib/content-access.functions";
+import { requireApprovedStudent } from "@/lib/approval";
 
 /* ---------------- Correct one open activity (PE or PO) ---------------- */
 
@@ -52,6 +53,8 @@ export const correctActivity = createServerFn({ method: "POST" })
     };
   })
   .handler(async ({ data, context }) => {
+    // Unapproved accounts can't spend OpenAI tokens.
+    await requireApprovedStudent(context);
     // Same hard gate as evaluateDefi: a day an admin disabled can't run the
     // paid per-activity AI correction either. Admins bypass.
     await assertDayNotLocked(context, data.dayId);
@@ -129,7 +132,10 @@ export const transcribeStage = createServerFn({ method: "POST" })
     if (!d?.audioBase64) throw new Error("audioBase64 required");
     return { audioBase64: d.audioBase64, mimeType: d.mimeType || "audio/webm" };
   })
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
+    // Was completely ungated: any signed-in account could burn STT tokens.
+    // (transcribeFr also caps the payload at MAX_AUDIO_B64.)
+    await requireApprovedStudent(context);
     return { text: await transcribeFr(data.audioBase64, data.mimeType) };
   });
 
@@ -161,6 +167,8 @@ export const evaluateDefi = createServerFn({ method: "POST" })
     };
   })
   .handler(async ({ data, context }) => {
+    // Unapproved accounts can't spend OpenAI tokens.
+    await requireApprovedStudent(context);
     // Hard gate: a day an admin has disabled can't be scored (also blocks the
     // paid AI call). A locked week locks its days too. Admins bypass.
     await assertDayNotLocked(context, data.dayId);

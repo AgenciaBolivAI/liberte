@@ -5,6 +5,7 @@ import { getTutorDayContext, TUTOR_MAX_DAY, type TutorDayContext } from "@/lib/t
 import type { RichDay } from "@/data/week34.meta";
 import { effectiveOverride, OPEN_THROUGH_DAY } from "@/lib/unlock";
 import { loadUserOverrides } from "@/lib/content-access.functions";
+import { requireApprovedStudent } from "@/lib/approval";
 
 export const TUTOR_DAILY_LIMIT = 30;
 const MAX_HISTORY = 20;
@@ -68,30 +69,8 @@ async function assertDayUnlocked(context: Ctx, dayId: number): Promise<void> {
   }
 }
 
-// The paid-AI gate: unapproved accounts can't spend tokens. Fails open if the
-// approval migration hasn't been applied yet (column missing → query error).
-async function requireApprovedStudent(context: Ctx): Promise<void> {
-  try {
-    const { data, error } = await context.supabase
-      .from("profiles")
-      .select("approved_at")
-      .eq("id", context.userId)
-      .maybeSingle();
-    if (error) return; // pre-migration: fail open
-    if (data && data.approved_at == null) {
-      const { data: isAdmin } = await context.supabase.rpc("has_role", {
-        _user_id: context.userId,
-        _role: "admin",
-      });
-      if (!isAdmin) {
-        throw new Error("Tu cuenta aún no está aprobada. El equipo activará tu acceso pronto.");
-      }
-    }
-  } catch (e) {
-    if (e instanceof Error && e.message.startsWith("Tu cuenta")) throw e;
-    // any other failure: fail open
-  }
-}
+// The paid-AI approval gate now lives in @/lib/approval (shared with the défi /
+// weekly-eval / staff-directory endpoints).
 
 /**
  * Resolve the tutor's day context. Days 11+ can be teacher-edited (their lesson

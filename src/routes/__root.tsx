@@ -15,6 +15,7 @@ import { IntroSplash } from "@/components/IntroSplash";
 import { AuthProvider } from "@/lib/auth-context";
 import { AuthGate } from "@/components/AuthGate";
 import { TutorMascot } from "@/components/TutorMascot";
+import { Toaster } from "@/components/ui/sonner";
 
 
 function NotFoundComponent() {
@@ -109,7 +110,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 
 function RootShell({ children }: { children: ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="es">
       <head>
         <HeadContent />
       </head>
@@ -133,6 +134,8 @@ function RootComponent() {
           <Outlet />
         </AuthGate>
         <TutorMascot />
+        {/* Single app-wide toast host (was duplicated across 5 routes → double toasts). */}
+        <Toaster position="top-center" richColors />
       </AuthProvider>
     </QueryClientProvider>
   );

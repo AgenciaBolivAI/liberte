@@ -48,7 +48,7 @@ export function TopNav({ stars: starsProp }: { stars?: number } = {}) {
   }
 
   return (
-    <header className="sticky top-0 z-40 border-b border-white/10 bg-navy/90 backdrop-blur-xl" style={{ backgroundColor: "color-mix(in oklab, var(--navy) 92%, transparent)" }}>
+    <header className="sticky top-0 z-40 border-b border-white/10 backdrop-blur-xl" style={{ backgroundColor: "color-mix(in oklab, var(--navy) 92%, transparent)" }}>
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6">
         <Link to={HOME_PATH} className="flex items-center gap-3">
           <img src={logo.url} alt="Liberté Instituto de Francés" className="h-10 w-auto brightness-0 invert" />
@@ -110,7 +110,7 @@ export function TopNav({ stars: starsProp }: { stars?: number } = {}) {
           </DropdownMenu>
         </div>
       </div>
-      {/* Mobile nav — 6 items must fit 360px without horizontal overflow */}
+      {/* Mobile nav — 7 items must fit 360px without horizontal overflow */}
       <nav className="flex items-stretch border-t border-white/10 px-1 py-1.5 md:hidden">
         {nav.map((n) => {
           const active = path === n.to;

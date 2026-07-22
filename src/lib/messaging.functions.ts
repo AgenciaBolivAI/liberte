@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { requireApprovedStudent } from "@/lib/approval";
 
 // Teacher <-> student direct messaging. RLS enforces "a staff member must be in
 // the thread" and "read only your own threads"; these fns add validation,
@@ -118,6 +119,8 @@ export const getThread = createServerFn({ method: "POST" })
 export const getStaffContacts = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
+    // Don't let unapproved signups enumerate the staff directory (ids + emails).
+    await requireApprovedStudent(context);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: roles, error } = await supabaseAdmin
       .from("user_roles")

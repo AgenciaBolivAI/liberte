@@ -5,6 +5,10 @@ import parisBg from "@/assets/paris-map-bg.jpg";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
 import { TOTAL_DAYS, DAYS_PER_WEEK, TOTAL_WEEKS } from "@/lib/progress";
+
+// Real max stars: +2 per day completion + +2 per défi (4/day) + +3 per weekly
+// evaluation. 120*4 + 24*3 = 552 (the old 480 forgot the weekly-eval stars).
+const MAX_STARS = TOTAL_DAYS * 4 + TOTAL_WEEKS * 3;
 import { Star, Loader2, ChevronDown, ChevronUp } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
@@ -15,7 +19,6 @@ import { ContentAccessManager } from "@/components/ContentAccessManager";
 import { TelegramBroadcast } from "@/components/TelegramBroadcast";
 import { StaffManager } from "@/components/StaffManager";
 import { ContentManager } from "@/components/ContentManager";
-import { Toaster } from "@/components/ui/sonner";
 
 export const Route = createFileRoute("/liberte-profesor-panel-9382745-admin")({
   head: () => ({ meta: [{ title: "Panel Profesor — Liberté" }] }),
@@ -163,7 +166,7 @@ function TeacherPanel() {
   if (authLoading || checking) {
     return (
       <div className="grid min-h-screen place-items-center">
-        <Loader2 className="h-8 w-8 animate-spin text-white" />
+        <Loader2 className="h-8 w-8 animate-spin text-blue" />
       </div>
     );
   }
@@ -197,7 +200,6 @@ function TeacherPanel() {
       }}
     >
       <TopNav />
-      <Toaster position="top-center" richColors />
       <main className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
         <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
           <div>
@@ -238,7 +240,7 @@ function TeacherPanel() {
 
         {loadingData ? (
           <div className="grid place-items-center py-20">
-            <Loader2 className="h-8 w-8 animate-spin text-white" />
+            <Loader2 className="h-8 w-8 animate-spin text-blue" />
           </div>
         ) : filtered.length === 0 ? (
           <div className="rounded-3xl border border-white/15 bg-card p-8 text-center text-muted-foreground">
@@ -318,13 +320,13 @@ function StudentCard({ student, rank }: { student: StudentStats; rank: number | 
             <span className="uppercase tracking-widest">Estrellas acumuladas</span>
             <span className="inline-flex items-center gap-1 text-navy">
               <Star className="h-3.5 w-3.5 fill-gold text-gold" />
-              {student.stars} / {TOTAL_DAYS * 4}
+              {student.stars} / {MAX_STARS}
             </span>
           </div>
           <div className="mt-1.5 h-3 overflow-hidden rounded-full bg-ice ring-1 ring-navy/10">
             <div
               className="h-full rounded-full bg-gradient-to-r from-gold to-blue transition-all"
-              style={{ width: `${Math.min(100, Math.max(2, (student.stars / (TOTAL_DAYS * 4)) * 100))}%` }}
+              style={{ width: `${Math.min(100, Math.max(2, (student.stars / MAX_STARS) * 100))}%` }}
             />
           </div>
         </div>

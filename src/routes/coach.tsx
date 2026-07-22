@@ -1,11 +1,13 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Loader2, ArrowLeft, User, Target, AlertCircle, Sparkles, Unlock, Lock } from "lucide-react";
+import { Loader2, User, Target, AlertCircle, Sparkles, Unlock, Lock } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { getCoachRoster, getStudentResults } from "@/lib/defi.functions";
 import { getStudentProgress, unlockWeek, lockWeek } from "@/lib/coach.functions";
 import { getWeeks } from "@/data/program";
-import { CalendarManager } from "@/components/CalendarManager";
+import { CalendarBoard } from "@/components/CalendarBoard";
+import { useCalendarEvents } from "@/lib/calendarEvents";
+import { TopNav } from "@/components/TopNav";
 
 export const Route = createFileRoute("/coach")({
   head: () => ({
@@ -22,6 +24,7 @@ type Detail = Awaited<ReturnType<typeof getStudentResults>>;
 
 function CoachPage() {
   const { user, loading } = useAuth();
+  const { events, refresh } = useCalendarEvents();
   const [roster, setRoster] = useState<Roster | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [detail, setDetail] = useState<Detail | null>(null);
@@ -63,23 +66,23 @@ function CoachPage() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-8">
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <Link to="/liberte-plataforma-834798234728482934254-student" className="inline-flex items-center gap-1 text-sm text-blue hover:underline">
-            <ArrowLeft className="h-4 w-4" /> Dashboard
-          </Link>
-          <h1 className="mt-1 font-display text-3xl font-extrabold text-navy">👩‍🏫 Panel del profesor</h1>
-          <p className="text-sm text-muted-foreground">Progreso de cada alumno en los desafíos finales.</p>
+    <div className="min-h-screen bg-ice">
+      <TopNav />
+      <div className="mx-auto max-w-6xl px-4 py-8">
+        <div className="mb-6 flex items-center justify-between">
+          <div>
+            <h1 className="mt-1 font-display text-3xl font-extrabold text-navy">👩‍🏫 Panel del profesor</h1>
+            <p className="text-sm text-muted-foreground">Progreso de cada alumno en los desafíos finales.</p>
+          </div>
         </div>
-      </div>
 
       {err && (
         <div className="mb-4 rounded-2xl border border-red/40 bg-red/5 p-4 text-sm text-red">
           <AlertCircle className="mr-2 inline h-4 w-4" /> {err}
           {err === "Forbidden" && (
             <p className="mt-1 text-xs text-red/80">
-              Tu cuenta aún no tiene rol de coach o admin. Pide que te lo asignen desde el backend.
+              Tu cuenta aún no tiene rol de coach o admin. Un admin puede asignarlo desde el panel
+              del profesor, sección «Equipo (roles de profesor)».
             </p>
           )}
         </div>
@@ -87,7 +90,11 @@ function CoachPage() {
 
       {loadingRoster && <Loader2 className="h-6 w-6 animate-spin text-blue" />}
 
-      {roster && <CalendarManager />}
+      {roster && (
+        <div className="mb-6">
+          <CalendarBoard events={events} refresh={refresh} />
+        </div>
+      )}
 
       {roster && (
         <div className="grid gap-6 md:grid-cols-[320px_1fr]">
@@ -127,6 +134,7 @@ function CoachPage() {
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 }

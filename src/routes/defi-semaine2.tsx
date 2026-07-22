@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, ArrowRight, Check, X, Download, Loader2, Send, Trophy } from "lucide-react";
+import { ArrowRight, Check, X, Download, Loader2, Send, Trophy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/lib/auth-context";
@@ -13,6 +13,7 @@ import {
 } from "@/lib/defiSemaine2.functions";
 import { getCompletedDays } from "@/lib/week.functions";
 import { generateWeek2Pdf } from "@/lib/week2Pdf";
+import { TopNav } from "@/components/TopNav";
 
 export const Route = createFileRoute("/defi-semaine2")({
   head: () => ({
@@ -872,15 +873,10 @@ function DefiSemaine2Page() {
 
   return (
     <div style={{ backgroundColor: NAVY }} className="min-h-screen text-white">
-      {/* Top bar */}
-      <div className="sticky top-0 z-10 border-b border-white/10 backdrop-blur bg-[#0F1B3C]/85">
+      <TopNav />
+      {/* Status bar — not sticky: TopNav owns the persistent header. */}
+      <div className="border-b border-white/10 bg-[#0F1B3C]/85">
         <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-3">
-          <Link
-            to="/liberte-plataforma-834798234728482934254-student"
-            className="inline-flex items-center gap-1 text-sm text-white/70 hover:text-white"
-          >
-            <ArrowLeft className="h-4 w-4" /> Salir
-          </Link>
           <div className="text-xs text-white/70">
             {stage !== "welcome" && stage !== "results" && (
               <>
