@@ -199,7 +199,9 @@ import vocabVideo from "@/assets/vocabulario-dia1.mp4.asset.json";
 import cuadernilloSemana1 from "@/assets/cuadernillo-semana1.pdf.asset.json";
 import { speakFr, stopFr } from "@/lib/speak";
 import { WEEK34, type WeekDay } from "@/data/week34";
+import { MONTH2 } from "@/data/month2";
 import { WEEK34_META, type RichDay, type Week34Meta } from "@/data/week34.meta";
+import { MONTH2_META } from "@/data/month2.meta";
 import { useRichDay } from "@/lib/rich-content";
 
 const DAY_TITLES: Record<string, { title: string; desc: string }> = {
@@ -448,7 +450,9 @@ function registerDay(id: string, m: Week34Meta) {
   DAY_TITLES[id] = { title: m.headTitle, desc: m.headDesc };
   DAYS_META.push({ id: Number(id), label: m.label, week: m.week });
   WEEK_OF_DAY[id] = m.week;
-  WEEK_TITLE_BY_DAY[id] = `Semaine ${m.week} · J'OSE ${m.weekEmoji}`;
+  // Month theme by week: weeks 1-4 = J'OSE (mois 1), weeks 5-8 = JE COMPRENDS (mois 2).
+  const theme = m.week <= 4 ? "J'OSE" : "JE COMPRENDS";
+  WEEK_TITLE_BY_DAY[id] = `Semaine ${m.week} · ${theme} ${m.weekEmoji}`;
   LESSONS_BY_DAY[id] = [
     { key: "gym", emoji: "🧠", title: "Gym cérébral", subtitle: "Réveille ton cerveau.", duration: "3 min" },
     { key: "intro", emoji: "🎬", title: `Intro · Jour ${id}`, subtitle: m.introSub, duration: "3 min" },
@@ -459,6 +463,7 @@ function registerDay(id: string, m: Week34Meta) {
 }
 
 for (const [id, m] of Object.entries(WEEK34_META)) registerDay(id, m);
+for (const [id, m] of Object.entries(MONTH2_META)) registerDay(id, m);
 
 function DayPage() {
   const { dayId } = Route.useParams();
@@ -1140,10 +1145,11 @@ function LessonView({
   // WEEK34 code seed; the code stays as an always-available fallback so the day
   // renders instantly and never breaks if the DB is empty/unreachable.
   const richDay = useRichDay(dayId);
-  const week34Data: RichDay | null = WEEK34[dayId]
-    ? { ...WEEK34[dayId], meta: WEEK34_META[dayId] }
+  const codeSeed = WEEK34[dayId] ?? MONTH2[dayId];
+  const codeData: RichDay | null = codeSeed
+    ? { ...codeSeed, meta: WEEK34_META[dayId] ?? MONTH2_META[dayId] }
     : null;
-  const richData = richDay ?? week34Data;
+  const richData = richDay ?? codeData;
 
   // Video gate: every native video in this lesson must be watched to the end
   // before "Suivant" unlocks. Already-completed lessons aren't re-gated.
@@ -1267,7 +1273,7 @@ function LessonView({
 
           {/* Days 11-20 · Weeks 3-4 — generic wrappers fed by the DB rich content
               (teacher-editable) or the WEEK34 code fallback; same design as 1-10. */}
-          {Number(dayId) >= 11 && Number(dayId) <= 20 && richData && (
+          {Number(dayId) >= 11 && Number(dayId) <= 40 && richData && (
             <>
               {lesson === "intro" && <IntroLessonG data={richData} />}
               {lesson === "vocab" && <VocabLessonG data={richData} dayId={dayId} onAward={onAward} />}
@@ -1569,7 +1575,7 @@ function GymCerebral({ dayId }: { dayId?: string }) {
     dayId === "8" ? day8Videos.gym :
     dayId === "7" ? day7Videos.gym :
     dayId === "6" ? day6Videos.gym :
-    (dayId && WEEK34[dayId]?.gym) ? WEEK34[dayId].gym :
+    (dayId && (WEEK34[dayId] ?? MONTH2[dayId])?.gym) ? (WEEK34[dayId] ?? MONTH2[dayId])!.gym :
     videos.gymCerebral;
   return (
     <div className="space-y-5">

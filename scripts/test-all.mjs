@@ -105,9 +105,11 @@ for (const d of [1, 2, 5, 6, 9, 10]) {
 }
 eq("furthest day, fresh student", mod.furthestUnlockedDay(S()), 1);
 eq("furthest day, days 1-4 done", mod.furthestUnlockedDay(S(1, 2, 3, 4)), 5);
-// Weeks 3-4 are now real content (LESSON_DAYS=20): finishing day 10 points at day 11.
+// Weeks 3-8 are now real content (LESSON_DAYS=40): finishing day 10 points at day 11,
+// finishing day 20 continues into month 2 (day 21), and the furthest day caps at 40.
 eq("furthest day, days 1-10 done -> 11", mod.furthestUnlockedDay(S(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)), 11);
-eq("furthest day caps at 20 (weeks 1-4)", mod.furthestUnlockedDay(S(...Array.from({ length: 20 }, (_, i) => i + 1))), 20);
+eq("furthest day, days 1-20 done -> 21 (weeks 5-8 continue)", mod.furthestUnlockedDay(S(...Array.from({ length: 20 }, (_, i) => i + 1))), 21);
+eq("furthest day caps at 40 (weeks 1-8)", mod.furthestUnlockedDay(S(...Array.from({ length: 40 }, (_, i) => i + 1))), 40);
 
 // Admin content_access overrides — most specific wins, and locks beat the window.
 const ovr = (scope, target_type, target_id, access) => ({ scope, target_type, target_id, access });
@@ -688,10 +690,14 @@ g("12. Regressions (bugs found in audit — must stay fixed)");
   const mascotSrc = readFileSync("src/components/TutorMascot.tsx", "utf8");
   ok("mascot links to the tutor", mascotSrc.includes('to="/conversation"'));
   ok("mascot mounted at the root (renders on every route)", readFileSync("src/routes/__root.tsx", "utf8").includes("<TutorMascot />"));
-  // It must follow the user EVERYWHERE — only the tutor page itself is excluded,
-  // and it must not be hidden inside lessons/challenges.
-  ok("mascot hidden only on the tutor page", /HIDE_PREFIXES\s*=\s*\["\/conversation"\]/.test(mascotSrc));
-  ok("mascot shows inside lessons + challenges", !mascotSrc.includes('"/day"') && !mascotSrc.includes('"/semaine"'));
+  // It follows the user across the app BUT is hidden on the pages that have a
+  // bottom-right primary action (the tutor composer, the day player's « Suivant »,
+  // the weekly-défi recorder) — the fixed bottom-right mascot used to sit on top
+  // of « Suivant » and eat the click, freezing progress. See the 12g regression.
+  ok("mascot hidden on the tutor page + lesson flows (can't block « Suivant »)",
+     ["/conversation", "/day", "/semaine", "/defi-semaine2"].every((p) => mascotSrc.includes(`"${p}"`)));
+  ok("mascot still shows on the dashboard/calendar (not globally hidden)",
+     !mascotSrc.includes('"/calendar"') && !mascotSrc.includes('"/progress"'));
   ok("mascot sits under drawers/modals (z-30)", mascotSrc.includes("z-30"));
 
   // Teacher <-> student messaging + document attachments.
@@ -872,11 +878,11 @@ g("12c. Weeks 3-4 · days 11-20 render through the REAL lesson player");
      day.includes("Object.entries(WEEK34_META)") && day.includes("LESSONS_BY_DAY[id]") && day.includes("WEEK_TITLE_BY_DAY[id]"));
   ok("generic wrappers reuse the day-1-10 games",
      ["IntroLessonG", "VocabLessonG", "ClesLessonG", "DefiLessonG"].every((w) => day.includes(`function ${w}`)));
-  ok("LessonView dispatches days 11-20 to the generic wrappers",
-     day.includes("Number(dayId) >= 11 && Number(dayId) <= 20"));
+  ok("LessonView dispatches days 11-40 to the generic wrappers",
+     day.includes("Number(dayId) >= 11 && Number(dayId) <= 40"));
   ok("router sends registered days (1-20) to DayPage",
      day.includes("if (dayId in LESSONS_BY_DAY) return <DayPage") && day.includes("<AuthoredDayView"));
-  ok("gym video wired for weeks 3-4", day.includes("WEEK34[dayId]?.gym"));
+  ok("gym video wired for weeks 3-8", day.includes("(WEEK34[dayId] ?? MONTH2[dayId])?.gym"));
 
   // The generated content module must be complete and in the day-6 shape.
   const w34src = readFileSync("src/data/week34.ts", "utf8");
@@ -895,7 +901,7 @@ g("12c. Weeks 3-4 · days 11-20 render through the REAL lesson player");
      days34.every((d) => W34[d].defiSteps.length >= 1 && W34[d].defiCriteria.length >= 1));
 
   // Unlock: weeks 3-4 are real content days now, still sequentially gated.
-  eq("LESSON_DAYS covers weeks 1-4", mod.LESSON_DAYS, 20);
+  eq("LESSON_DAYS covers weeks 1-8", mod.LESSON_DAYS, 40);
   eq("weeks 3-4 stay sequentially gated (OPEN_THROUGH_DAY unchanged)", mod.OPEN_THROUGH_DAY, 10);
   ok("day 11 LOCKED until day 10 done", !mod.isDayUnlocked(11, S()));
   ok("day 11 opens once day 10 done", mod.isDayUnlocked(11, S(10)));
@@ -903,18 +909,18 @@ g("12c. Weeks 3-4 · days 11-20 render through the REAL lesson player");
 
   // Tutor now covers weeks 3-4, driven by the same WEEK34 data.
   const tc = readFileSync("src/lib/tutorContext.ts", "utf8");
-  ok("TUTOR_MAX_DAY raised to 20", /TUTOR_MAX_DAY\s*=\s*20/.test(tc));
-  ok("tutor pulls scenes 11-20 from WEEK34",
-     tc.includes("Object.entries(WEEK34)") && tc.includes("TUTOR_SCENARIOS[id]") && tc.includes("CONTEXTS[id]"));
+  ok("TUTOR_MAX_DAY raised to 40", /TUTOR_MAX_DAY\s*=\s*40/.test(tc));
+  ok("tutor pulls scenes 11-40 from WEEK34 + MONTH2",
+     tc.includes("...WEEK34, ...MONTH2") && tc.includes("TUTOR_SCENARIOS[id]") && tc.includes("CONTEXTS[id]"));
   ok("each WEEK34 day carries a complete 3-objective tutor scene",
      days34.every((d) => W34[d].tutor && W34[d].tutor.objectives.length === 3 && W34[d].tutor.opener_fr && W34[d].tutor.opener_es && W34[d].tutor.topic && W34[d].tutor.role));
-  ok("scene picker lists all 20 scenes", readFileSync("src/routes/conversation.tsx", "utf8").includes("tutorDayGroups(20)"));
-  ok("tutor day-group helper defaults to 20", readFileSync("src/data/program.ts", "utf8").includes("tutorDayGroups(maxDay = 20)"));
+  ok("scene picker lists all 40 scenes", readFileSync("src/routes/conversation.tsx", "utf8").includes("tutorDayGroups(40)"));
+  ok("tutor day-group helper defaults to 40", readFileSync("src/data/program.ts", "utf8").includes("tutorDayGroups(maxDay = 40)"));
 
   // "Weeks with content" is a single source of truth (derived from LESSON_DAYS),
   // shared by the student dashboard AND the admin content-access panel, so the
   // "con contenido" badge can't drift (bug: it used to be hardcoded to weeks 1-2).
-  eq("WEEKS_WITH_CONTENT derives 4 from LESSON_DAYS", mod.WEEKS_WITH_CONTENT, 4);
+  eq("WEEKS_WITH_CONTENT derives 8 from LESSON_DAYS", mod.WEEKS_WITH_CONTENT, 8);
   const dashW = readFileSync("src/routes/liberte-plataforma-834798234728482934254-student.tsx", "utf8");
   ok("dashboard content-week count derives from the shared constant",
      dashW.includes("LAST_WEEK_WITH_CONTENT = WEEKS_WITH_CONTENT") && dashW.includes('3: "11"') && dashW.includes('4: "16"'));
@@ -933,8 +939,8 @@ g("12c. Weeks 3-4 · days 11-20 render through the REAL lesson player");
   const rc = readFileSync("src/lib/rich-content.ts", "utf8");
   ok("rich-content layer exports the hook + CRUD",
      ["useRichDay", "listRichDays", "getRichDay", "saveRichDay", "deleteRichDay"].every((f) => rc.includes(f)));
-  ok("player renders DB rich with a WEEK34 fallback",
-     day.includes("useRichDay(dayId)") && day.includes("richDay ?? week34Data"));
+  ok("player renders DB rich with a code (WEEK34/MONTH2) fallback",
+     day.includes("useRichDay(dayId)") && day.includes("richDay ?? codeData"));
   const rde = readFileSync("src/components/RichDayEditor.tsx", "utf8");
   ok("rich editor covers every lesson section",
      ["Vocabulario", "Flashcards", "Gramática", "Juegos de Vocabulario", "Juegos de Les clés", "Défi final"].every((s) => rde.includes(s)));
@@ -966,6 +972,122 @@ g("12c. Weeks 3-4 · days 11-20 render through the REAL lesson player");
      tutSrc.includes("resolveTutorContext") && tutSrc.includes('.from("authored_days")') && tutSrc.includes("rich.vocabulary"));
   ok("tutor falls back to code content when no DB row",
      tutSrc.includes("if (dayId < 11) return base") && /return base/.test(tutSrc));
+}
+
+/* ---------------- Month 2 · JE COMPRENDS (days 21-40) ---------------- */
+g("12f. Month 2 · days 21-40 (JE COMPRENDS) render through the REAL lesson player");
+{
+  const day = readFileSync("src/routes/day.$dayId.tsx", "utf8");
+  ok("day player imports the MONTH2 code data + meta",
+     day.includes('from "@/data/month2"') && day.includes('from "@/data/month2.meta"'));
+  ok("days 21-40 registered into the same lesson maps as 1-20",
+     day.includes("Object.entries(MONTH2_META)) registerDay"));
+  ok("week title uses the JE COMPRENDS theme for weeks 5+",
+     day.includes('m.week <= 4 ? "J\'OSE" : "JE COMPRENDS"'));
+
+  // The generated Month-2 content module must be complete and in the WeekDay shape.
+  const m2src = readFileSync("src/data/month2.ts", "utf8");
+  const jsonStart = m2src.indexOf("= {", m2src.indexOf("export const MONTH2"));
+  const M2 = JSON.parse(m2src.slice(jsonStart + 2).replace(/;\s*$/, "").trim());
+  const days2 = Object.keys(M2).map(Number).sort((a, b) => a - b);
+  const want2 = Array.from({ length: 20 }, (_, i) => 21 + i).join(",");
+  eq("MONTH2 covers days 21-40", days2.join(","), want2);
+  ok("each Month-2 day has 30 vocab words", days2.every((d) => M2[d].vocabulary.length === 30));
+  ok("each Month-2 day has flashcards + 4 grammar structures",
+     days2.every((d) => M2[d].flashQuiz.length >= 12 && M2[d].grammar.length === 4));
+  ok("each Month-2 day has the 4 vocab games (reading/5 listening/5 speaking/5 writing)",
+     days2.every((d) => { const gm = M2[d].vocabGames; return gm.reading.length >= 1 && gm.listening.length === 5 && gm.speaking.length === 5 && gm.writing.length === 5; }));
+  ok("each Month-2 day has a clés reading (3 questions) + 3 clés games (5 each)",
+     days2.every((d) => (M2[d].clesReading?.questions?.length ?? 0) === 3 && M2[d].clesGames.listening.length === 5 && M2[d].clesGames.speaking.length === 5 && M2[d].clesGames.writing.length === 5));
+  ok("each Month-2 day has a staged défi (5 steps + 6 criteria)",
+     days2.every((d) => M2[d].defiSteps.length === 5 && M2[d].defiCriteria.length === 6));
+  ok("each Month-2 day carries a complete 3-objective tutor scene",
+     days2.every((d) => M2[d].tutor && M2[d].tutor.objectives.length === 3 && M2[d].tutor.opener_fr && M2[d].tutor.opener_es && M2[d].tutor.topic && M2[d].tutor.role));
+  // Every MCQ/listening answer index must point at a real option (no off-by-one
+  // that would silently mark a wrong option as correct — real student content).
+  const mcqOk = days2.every((d) => {
+    const r = M2[d];
+    const listens = [...r.vocabGames.listening, ...r.clesGames.listening];
+    const reads = [r.clesReading, ...r.vocabGames.reading];
+    return listens.every((l) => l.answer >= 0 && l.answer <= 2 && l.options[l.answer] !== undefined)
+      && reads.every((rd) => rd.questions.every((q) => q.answer >= 0 && q.answer <= 2 && q.options[q.answer] !== undefined))
+      && r.flashQuiz.every((f) => f.answer >= 0 && f.answer <= 2 && f.options[f.answer] !== undefined);
+  });
+  ok("every Month-2 MCQ/listening answer index points at a real option", mcqOk);
+
+  // Meta: 20 day labels for weeks 5-8, JE COMPRENDS branding.
+  const m2meta = readFileSync("src/data/month2.meta.ts", "utf8");
+  ok("MONTH2_META covers days 21-40", Array.from({ length: 20 }, (_, i) => 21 + i).every((d) => m2meta.includes(`"${d}":`)));
+  ok("Month-2 meta spans weeks 5-8", m2meta.includes("week: 5,") && m2meta.includes("week: 8,"));
+
+  // Unlock: Month 2 days are real content now, still sequentially gated after day 10.
+  ok("day 21 LOCKED until day 20 done", !mod.isDayUnlocked(21, S()));
+  ok("day 21 opens once day 20 done", mod.isDayUnlocked(21, S(20)));
+  ok("day 40 opens once day 39 done", mod.isDayUnlocked(40, S(39)));
+
+  // Dashboard weeks 5-8 point at the right start days; month 2 is JE COMPRENDS.
+  const dashW = readFileSync("src/routes/liberte-plataforma-834798234728482934254-student.tsx", "utf8");
+  ok("dashboard maps weeks 5-8 to their start days",
+     dashW.includes('5: "21"') && dashW.includes('6: "26"') && dashW.includes('7: "31"') && dashW.includes('8: "36"'));
+  ok("program month 2 theme is JE COMPRENDS",
+     readFileSync("src/data/program.ts", "utf8").includes('name: "JE COMPRENDS"'));
+
+  // Rich seed: days 21-40 published into authored_days (teacher-editable), idempotent.
+  const richSeed2 = readFileSync("supabase/migrations/20260725000000_seed_month2_rich.sql", "utf8");
+  ok("Month-2 rich seed publishes all 20 days 21-40",
+     (richSeed2.match(/INSERT INTO public\.authored_days/g) || []).length === 20 && richSeed2.includes("'published'"));
+  ok("Month-2 rich seed is idempotent", richSeed2.includes("DELETE FROM public.authored_days WHERE day_id BETWEEN 21 AND 40"));
+  ok("Month-2 seed script shares the meta module",
+     readFileSync("scripts/gen-month2-seed.mjs", "utf8").includes("month2.meta.ts"));
+
+  // Recorded-classes fix: the built-in library appeared to vanish when staff added
+  // their first class (page swaps hardcoded->DB the moment the table is non-empty).
+  // Seeding the 3 real built-ins makes the table the source of truth (additive).
+  const recSeed = readFileSync("supabase/migrations/20260724000001_seed_recorded_classes.sql", "utf8");
+  ok("recorded-classes seed inserts the 3 real built-in classes",
+     (recSeed.match(/INSERT INTO public\.recorded_classes/g) || []).length === 3);
+  ok("recorded-classes seed is idempotent (skips titles already present)",
+     (recSeed.match(/WHERE NOT EXISTS/g) || []).length === 3);
+}
+
+/* -------- Universal messaging + the colibri/progress/calendar regressions -------- */
+g("12g. Peer messaging + regression guards for the client-reported bugs");
+{
+  // #3 REGRESSION — the floating tutor mascot (fixed bottom-right) must NOT show on
+  // the lesson-flow pages, where it overlapped and stole clicks from « Suivant »
+  // (the ONLY control that marks a lesson done — so #2 was a downstream effect).
+  const mascot = readFileSync("src/components/TutorMascot.tsx", "utf8");
+  ok("tutor mascot hidden on the day player + weekly défis (unblocks « Suivant »)",
+     ["/conversation", "/day", "/semaine", "/defi-semaine2"].every((p) => mascot.includes(`"${p}"`)));
+
+  // #2 — « Suivant » (advance) is what completes a lesson and persists progress to
+  // day_state; if this wiring breaks, "Ton progrès" freezes at 0% again.
+  const day = readFileSync("src/routes/day.$dayId.tsx", "utf8");
+  ok("advancing a lesson marks it done + persists to day_state",
+     day.includes("onComplete()") && /const complete = \(k[^)]*\) =>/.test(day) && day.includes("setDone((d) => ({ ...d, [k]: true }))") && day.includes("done_lessons"));
+
+  // #1 — students CAN read calendar_events (SELECT open to authenticated). If this
+  // regresses to staff-only, students silently fall back to the hardcoded schedule
+  // and never see the teacher's edits.
+  const calMig = readFileSync("supabase/migrations/20260718000001_calendar_events.sql", "utf8");
+  ok("students can read calendar_events (SELECT USING true)",
+     /FOR SELECT TO authenticated\s+USING \(true\)/.test(calMig));
+
+  // Universal messaging — peer-to-peer allowed at the DB layer (staff requirement dropped).
+  const msgMig = readFileSync("supabase/migrations/20260725000001_universal_messaging.sql", "utf8");
+  ok("messages INSERT policy allows peer messaging (no staff requirement)",
+     msgMig.includes('CREATE POLICY "send own messages"') && /WITH CHECK \(auth\.uid\(\) = sender_id\)/.test(msgMig) && !msgMig.includes("has_role(recipient_id"));
+  const msgFns = readFileSync("src/lib/messaging.functions.ts", "utf8");
+  ok("getContacts directory lists staff + approved students (not staff-only)",
+     msgFns.includes("export const getContacts") && msgFns.includes('.not("approved_at", "is", null)') && msgFns.includes('role: roleOf.get(id) ?? "student"'));
+  ok("getContacts is gated on approval (no unapproved cohort enumeration)",
+     /getContacts[\s\S]{0,400}requireApprovedStudent/.test(msgFns));
+  ok("sendMessage requires an approved account (spam guard after the RLS relax)",
+     /sendMessage[\s\S]{0,1600}requireApprovedStudent/.test(msgFns));
+  const msgUi = readFileSync("src/routes/mensajes.tsx", "utf8");
+  ok("Mensajes uses the universal directory + a search box",
+     msgUi.includes("getContacts") && !msgUi.includes("getStaffContacts") && msgUi.includes("Buscar profe o compañero"));
+  ok("Mensajes shows role badges (profe vs compañero)", msgUi.includes("RoleBadge") && msgUi.includes("roleLabel"));
 }
 
 /* ---------------- audit fixes (Kimi findings) ---------------- */

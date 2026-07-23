@@ -317,6 +317,10 @@ const WEEK_START_DAY: Record<number, string> = {
   2: "6",
   3: "11",
   4: "16",
+  5: "21",
+  6: "26",
+  7: "31",
+  8: "36",
 };
 // Derived from LESSON_DAYS so this never drifts from the real content count
 // (see also the admin "content access" panel, which uses the same constant).

@@ -585,7 +585,7 @@ function ConversationPage() {
                 onChange={(e) => void handleReset(Number(e.target.value))}
                 className="mt-2 w-full rounded-xl border border-border bg-white px-3 py-2.5 text-base text-navy sm:text-sm"
               >
-                {tutorDayGroups(20).map((group) => (
+                {tutorDayGroups(40).map((group) => (
                   <optgroup key={group.label} label={group.label}>
                     {group.days.map((d) => {
                       const locked = !isDayUnlocked(d);
@@ -598,7 +598,7 @@ function ConversationPage() {
                   </optgroup>
                 ))}
               </select>
-              {activeDay < 20 && !isDayUnlocked(activeDay + 1) && (
+              {activeDay < 40 && !isDayUnlocked(activeDay + 1) && (
                 <p className="mt-2 text-[11px] text-navy/55">
                   🔒 Termina el Día {activeDay} para desbloquear la siguiente escena.
                 </p>

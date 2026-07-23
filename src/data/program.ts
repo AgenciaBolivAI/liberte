@@ -20,7 +20,7 @@ export type RestWeek = {
 
 const monthThemes = [
   { name: "J'OSE", subtitle: "Me atrevo" },
-  { name: "JE VIS", subtitle: "Vivo" },
+  { name: "JE COMPRENDS", subtitle: "Comprendo" },
   { name: "JE CRÉE", subtitle: "Creo" },
   { name: "JE PARLE", subtitle: "Hablo" },
   { name: "JE VOYAGE", subtitle: "Viajo" },
@@ -101,7 +101,7 @@ export function getWeeks(
   return { weeks, vacations, monthThemes, currentDay };
 }
 
-export const dayLabels = Array.from({ length: 20 }, (_, i) => `Día ${i + 1}`);
+export const dayLabels = Array.from({ length: 40 }, (_, i) => `Día ${i + 1}`);
 
 /**
  * Group tutor lesson days into `<optgroup>`-friendly buckets for the month→day
@@ -111,7 +111,7 @@ export const dayLabels = Array.from({ length: 20 }, (_, i) => `Día ${i + 1}`);
  * With only weeks 1-2 of content today this yields two groups under month 1, and
  * it generalizes automatically as more days are added.
  */
-export function tutorDayGroups(maxDay = 20): { label: string; days: number[] }[] {
+export function tutorDayGroups(maxDay = 40): { label: string; days: number[] }[] {
   const groups: { label: string; days: number[] }[] = [];
   const byKey = new Map<string, { label: string; days: number[] }>();
   for (let day = 1; day <= maxDay; day++) {

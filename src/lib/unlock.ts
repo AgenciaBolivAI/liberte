@@ -5,7 +5,7 @@
 // A "done day" means the student either marked the day complete
 // (day_completions) or submitted its défi (defi_results).
 
-export const LESSON_DAYS = 20;
+export const LESSON_DAYS = 40;
 
 /** Weeks that have real lesson content, derived from LESSON_DAYS (5 days/week).
  *  Single source of truth so the student dashboard, the admin "content access"

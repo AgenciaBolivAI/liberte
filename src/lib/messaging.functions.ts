@@ -53,6 +53,10 @@ export const sendMessage = createServerFn({ method: "POST" })
     };
   })
   .handler(async ({ data, context }) => {
+    // Only approved accounts can send. This is the spam guard now that the DB
+    // RLS no longer requires a staff participant (peer messaging is allowed):
+    // an unapproved signup must not be able to DM the whole cohort.
+    await requireApprovedStudent(context);
     // An attachment must live under the sender's own {uid}/ folder (matches the
     // storage upload RLS). Rejecting anything else stops a crafted path from
     // pointing at another user's file.
@@ -140,6 +144,43 @@ export const getStaffContacts = createServerFn({ method: "GET" })
     );
     const roleOf = new Map((roles ?? []).map((r) => [r.user_id as string, r.role as string]));
     return ids.map((id) => ({ id, name: names.get(id) ?? "Equipo Liberté", role: roleOf.get(id) ?? "admin" }));
+  });
+
+/** Full messageable directory — staff (admins + coaches) AND approved students,
+ *  everyone except the caller. Powers the Mensajes people picker so anyone can
+ *  start a conversation, including student↔student. Names/roles come from the
+ *  service role because a student can't read other profiles via RLS. Only
+ *  approved accounts are listed (no emails leaked; unapproved signups are not
+ *  discoverable). Sorted: staff first, then students, each alphabetically. */
+export const getContacts = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    await requireApprovedStudent(context);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const [{ data: roles }, { data: approved }] = await Promise.all([
+      supabaseAdmin.from("user_roles").select("user_id, role").in("role", ["admin", "coach"]),
+      supabaseAdmin.from("profiles").select("id, full_name").not("approved_at", "is", null),
+    ]);
+    // admin outranks coach if a user somehow holds both roles.
+    const roleOf = new Map<string, string>();
+    for (const r of roles ?? []) {
+      const cur = roleOf.get(r.user_id as string);
+      if (!cur || (r.role as string) === "admin") roleOf.set(r.user_id as string, r.role as string);
+    }
+    const names = new Map<string, string>();
+    for (const p of approved ?? []) names.set(p.id as string, (p.full_name as string) || "Alumno/a");
+    // Staff without an approved_at still need a display name.
+    const missingStaff = [...roleOf.keys()].filter((id) => !names.has(id));
+    if (missingStaff.length) {
+      const { data: sp } = await supabaseAdmin.from("profiles").select("id, full_name").in("id", missingStaff);
+      for (const p of sp ?? []) names.set(p.id as string, (p.full_name as string) || "Equipo Liberté");
+    }
+    const ids = new Set<string>([...names.keys(), ...roleOf.keys()]);
+    ids.delete(context.userId);
+    const staffRank = (r: string) => (r === "admin" ? 0 : r === "coach" ? 1 : 2);
+    return [...ids]
+      .map((id) => ({ id, name: names.get(id) ?? "Alumno/a", role: roleOf.get(id) ?? "student" }))
+      .sort((a, b) => staffRank(a.role) - staffRank(b.role) || a.name.localeCompare(b.name));
   });
 
 /** Thread list for the current user: other participant, last message, unread. */

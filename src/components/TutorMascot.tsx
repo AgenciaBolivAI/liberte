@@ -2,12 +2,15 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import mascot from "@/assets/liberte-mascot.png.asset.json";
 
-// Lib the colibrí — the AI tutor's persona — follows you across the ENTIRE app
-// (landing, dashboard, lessons, everywhere) and flies you to the conversation
-// tutor on tap. Hidden only on the tutor page itself, where it is redundant and
-// would sit on top of the chat composer. Its z-index sits BELOW drawers (z-40)
-// and modals (z-50) so it never pokes through them.
-const HIDE_PREFIXES = ["/conversation"];
+// Lib the colibrí — the AI tutor's persona — follows you across the app
+// (landing, dashboard, calendar, progress…) and flies you to the conversation
+// tutor on tap. Its z-index sits BELOW drawers (z-40) and modals (z-50).
+// HIDDEN on the lesson-flow pages (the day player + the weekly défis) and on the
+// tutor page itself: all of these have a bottom-right primary action (« Suivant »,
+// the recorder, the chat composer) that the fixed bottom-right mascot would sit
+// on top of and intercept the clicks for — students reported being unable to
+// press « Suivant ». The tutor is still one tap away from the top nav there.
+const HIDE_PREFIXES = ["/conversation", "/day", "/semaine", "/defi-semaine2"];
 
 export function TutorMascot() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
