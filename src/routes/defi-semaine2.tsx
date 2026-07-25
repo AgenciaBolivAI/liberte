@@ -4,7 +4,9 @@ import { ArrowRight, Check, X, Download, Loader2, Send, Trophy } from "lucide-re
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/lib/auth-context";
+import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { persist } from "@/lib/persist";
 import {
   evaluateWeek2Writing,
   chatWeek2Roleplay,
@@ -554,6 +556,7 @@ function DefiSemaine2Page() {
     }
     let alive = true;
     (async () => {
+      let readOk = false;
       try {
         const [done, completedDays] = await Promise.all([
           getMyWeek2Result(),
@@ -580,13 +583,21 @@ function DefiSemaine2Page() {
           setStage("results");
           return;
         }
-        const { data } = await supabase
+        const { data, error } = await supabase
           .from("week_state")
           .select("state")
           .eq("user_id", user.id)
           .eq("week_number", 2)
           .maybeSingle();
         if (!alive) return;
+        // A failed read is NOT "no saved progress" — certifying it would let the
+        // 500ms autosave overwrite a real mid-test row with a blank one.
+        if (error) {
+          console.error("[week_state] hydrate failed", error.message);
+          toast.error("No pudimos cargar tu progreso guardado. Recarga la página antes de continuar.");
+          return; // `hydrated` stays false -> autosave disabled
+        }
+        readOk = true;
         const s = (data?.state ?? null) as Record<string, unknown> | null;
         if (s && typeof s === "object") {
           const stages: Stage[] = ["welcome", "quiz", "vocab", "writing", "roleplay"];
@@ -616,17 +627,18 @@ function DefiSemaine2Page() {
           if (typeof s.chatFinalScore === "number") setChatFinalScore(s.chatFinalScore);
           if (typeof s.chatFinalFeedback === "string") setChatFinalFeedback(s.chatFinalFeedback);
         }
-      } catch {
-        // Table may not exist yet or the fetch failed — start fresh.
+      } catch (e) {
+        console.error("[week_state] hydrate threw", e);
       } finally {
-        if (alive) setHydrated(true);
+        // Only a successful read unlocks the autosave.
+        if (alive && readOk) setHydrated(true);
       }
     })();
     return () => {
       alive = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authLoading, user]);
+  }, [authLoading, user?.id]);
 
   /* ------ autosave in-progress state (debounced) ------ */
   const stateRef = useRef<Record<string, unknown>>({});
@@ -650,12 +662,15 @@ function DefiSemaine2Page() {
   useEffect(() => {
     if (!hydrated || !user || saved || stage === "results" || stage === "welcome") return;
     const t = setTimeout(() => {
-      void supabase
-        .from("week_state")
-        .upsert(
-          { user_id: user.id, week_number: 2, state: stateRef.current as never },
-          { onConflict: "user_id,week_number" },
-        );
+      // Must be awaited — an un-awaited supabase builder never sends its request.
+      void persist("week_state", () =>
+        supabase
+          .from("week_state")
+          .upsert(
+            { user_id: user.id, week_number: 2, state: stateRef.current as never },
+            { onConflict: "user_id,week_number" },
+          ),
+      );
     }, 500);
     return () => clearTimeout(t);
   }, [
@@ -808,11 +823,11 @@ function DefiSemaine2Page() {
       setSaved(true);
       // The in-progress snapshot is no longer needed once the result is saved.
       if (user) {
-        void supabase
-          .from("week_state")
-          .delete()
-          .eq("user_id", user.id)
-          .eq("week_number", 2);
+        void persist(
+          "week_state:cleanup",
+          () => supabase.from("week_state").delete().eq("user_id", user.id).eq("week_number", 2),
+          { silent: true }, // best-effort cleanup; the result is already saved
+        );
       }
     } catch (e) {
       console.error(e);

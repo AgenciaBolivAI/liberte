@@ -52,6 +52,20 @@ type WeeklyReport = {
   competence_scores: { CO: number; CE: number; PE: number; PO: number };
 };
 
+/** Pronunciation focus per week, so the AI grades the sounds actually taught
+ *  that week (it used to check week-1 sounds for EVERY week). Keyed by week
+ *  number; weeks fall back to a generic instruction. */
+const PRONUNCIATION_TARGETS: Record<number, string> = {
+  1: "voudrais [vudʁɛ], croissant [kʁwasɑ̃], sans [sɑ̃], s'il vous plaît [sil vu plɛ]",
+  2: "l'addition [ladisjɔ̃], je voudrais [ʒə vudʁɛ], combien [kɔ̃bjɛ̃], merci [mɛʁsi]",
+  3: "à gauche [a goʃ], tout droit [tu dʁwa], en face de [ɑ̃ fas də], j'ai mal [ʒe mal]",
+  4: "taille [taj], essayer [eseje], un kilo de [œ̃ kilo də], s'inscrire [sɛ̃skʁiʁ]",
+  5: "allô [alo], je vais [ʒə vɛ], je le rappelle [ʒələʁapɛl], aujourd'hui [oʒuʁdɥi]",
+  6: "cordialement [kɔʁdjalmɑ̃], répéter [ʁepete], plus [ply], moins [mwɛ̃]",
+  7: "lui [lɥi], leur [lœʁ], je viens de [ʒəvjɛ̃də], d'abord [daboʁ], ensuite [ɑ̃sɥit]",
+  8: "remplissez [ʁɑ̃plise], cochez [koʃe], il dit que [ildikə], je voudrais savoir [ʒəvudʁɛsavwaʁ]",
+};
+
 export const evaluateWeek = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) => {
@@ -123,7 +137,7 @@ export const evaluateWeek = createServerFn({ method: "POST" })
 - lecturas y una mini situación oral (PO) transcritas del audio real,
 - historial de la semana: puntuación de cada desafío final diario + errores/aciertos ya detectados en actividades diarias.
 
-Tu tarea: dar puntuaciones justas de PE y PO sobre 10, y generar un informe cálido en español (con ejemplos concretos citando lo que ESCRIBIÓ/DIJO el alumno). Detecta errores de pronunciación comparando la transcripción de las lecturas con el texto original: los sonidos objetivo de la semana 1 son voudrais [vudʁɛ], croissant [kʁwasɑ̃], sans [sɑ̃], s'il vous plaît [sil vu plɛ].
+Tu tarea: dar puntuaciones justas de PE y PO sobre 10, y generar un informe cálido en español (con ejemplos concretos citando lo que ESCRIBIÓ/DIJO el alumno). Detecta errores de pronunciación comparando la transcripción de las lecturas con el texto original, tomando como sonidos objetivo LOS DE ESTA SEMANA: ${PRONUNCIATION_TARGETS[data.weekNumber] ?? "los sonidos que aparecen en las lecturas de esta semana"}.
 
 Responde SOLO JSON con esta forma EXACTA:
 {

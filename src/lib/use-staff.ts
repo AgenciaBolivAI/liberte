@@ -44,7 +44,7 @@ export function useIsStaff(): boolean {
     return () => {
       alive = false;
     };
-  }, [user, isAdmin]);
+  }, [user?.id, isAdmin]);
 
   // Hide staff editing UI while an admin previews as a student ("student" /
   // "as-user"). Only admins have a preview mode, so coaches are unaffected.

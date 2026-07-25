@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { StudentAnalytics } from "@/components/StudentAnalytics";
 import { Loader2, Target, AlertCircle, Sparkles, Unlock, Lock } from "lucide-react";
 import { getStudentResults } from "@/lib/defi.functions";
 import { getStudentProgress, unlockWeek, lockWeek } from "@/lib/coach.functions";
@@ -160,6 +161,12 @@ export function StudentDetailPanel({ userId }: { userId: string }) {
           <span className="rounded-full bg-success/10 px-3 py-1 text-success">✅ {totalHits} aciertos</span>
           <span className="rounded-full bg-red/10 px-3 py-1 text-red">❌ {totalMisses} errores</span>
         </div>
+      </div>
+
+      {/* Week-by-week analytics (replaces "download the PDF to see progress"). */}
+      <div className="rounded-3xl border border-border bg-white p-4 sm:p-5">
+        <p className="mb-3 font-display text-lg font-extrabold text-navy">📊 Progreso por semana</p>
+        <StudentAnalytics userId={userId} />
       </div>
 
       {(weekly ?? []).length > 0 && (

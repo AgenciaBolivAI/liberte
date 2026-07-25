@@ -76,7 +76,7 @@ export function MessageThread({
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [user, otherUserId, load]);
+  }, [user?.id, otherUserId, load]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });

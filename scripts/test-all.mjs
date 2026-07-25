@@ -505,7 +505,10 @@ g("10. Admin preview modes (view as student / specific student)");
   const day = readFileSync("src/routes/day.$dayId.tsx", "utf8");
   ok("day route uses preview-aware admin flag", day.includes("bypassLocks: isAdmin"));
   ok("day route loads the student snapshot", day.includes("getStudentSnapshot"));
-  ok("day route BLOCKS autosave while impersonating", /if \(!userI?d?\w* \|\| readOnly\) return/.test(day));
+  // The readOnly gate now lives in the pure state machine (shouldPersistDay in
+  // src/lib/dayProgress.ts); group 12h asserts it actually blocks impersonation.
+  ok("day route BLOCKS autosave while impersonating",
+     day.includes("shouldPersistDay({") && /readOnly,/.test(day));
   ok("day route BLOCKS lesson completion while impersonating", day.includes("if (readOnly) return"));
   ok("day route shows the preview banner", day.includes("<AdminPreviewBanner />"));
 
@@ -1088,6 +1091,223 @@ g("12g. Peer messaging + regression guards for the client-reported bugs");
   ok("Mensajes uses the universal directory + a search box",
      msgUi.includes("getContacts") && !msgUi.includes("getStaffContacts") && msgUi.includes("Buscar profe o compañero"));
   ok("Mensajes shows role badges (profe vs compañero)", msgUi.includes("RoleBadge") && msgUi.includes("roleLabel"));
+}
+
+/* ------- progress persistence: the bug that silently lost ALL student work ------- */
+g("12h. Progress persistence (REAL writes + the state machine)");
+{
+  // ── 1. The anti-pattern that caused it ────────────────────────────────────
+  // supabase-js builders are THENABLES: `void supabase.from(x).upsert(...)`
+  // builds a query and NEVER sends it. That single pattern meant `day_state`
+  // had 0 rows in production for the entire life of the app — every student
+  // lost their lesson progress on any reload/tab switch, with no error anywhere.
+  // Persistence must go through `persist()` (which awaits + reports failures).
+  const persistSrc = readFileSync("src/lib/persist.ts", "utf8");
+  ok("persist() helper exists and awaits the query", persistSrc.includes("export async function persist") && /await run\(\)/.test(persistSrc));
+  const srcFiles = ["src/routes/day.$dayId.tsx", "src/routes/semaine.$weekId.tsx", "src/routes/defi-semaine2.tsx"];
+  const offenders = [];
+  for (const f of srcFiles) {
+    const s = readFileSync(f, "utf8");
+    // `void supabase...` is only OK for removeChannel (a real Promise).
+    for (const m of s.match(/void\s+supabase\s*\.?\s*\n?\s*(?!removeChannel)[a-zA-Z]*/g) ?? []) {
+      if (!m.includes("removeChannel")) offenders.push(`${f}: ${m.replace(/\s+/g, " ").trim()}`);
+    }
+  }
+  ok("no un-awaited supabase writes remain (they never execute)", offenders.length === 0, offenders.join(" | "));
+  for (const f of srcFiles) {
+    ok(`${f.split("/").pop()} persists via persist()`, readFileSync(f, "utf8").includes('persist("'));
+  }
+
+  // ── 2. The pure state machine (races, deterministically) ──────────────────
+  const dpSrc = ts.transpileModule(readFileSync("src/lib/dayProgress.ts", "utf8"), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  const dp = {};
+  new Function("exports", "module", dpSrc)(dp, { exports: dp });
+
+  const K = dp.dayStateKey("u1", "3", false);
+  eq("hydration key includes user + day", K, "u1:3:nosnap");
+  ok("day 1 key does not certify day 10", !dp.isHydratedFor("u1:1:nosnap", "u1", "10"));
+  ok("matching user+day certifies", dp.isHydratedFor("u1:10:nosnap", "u1", "10"));
+  ok("another user's key never certifies", !dp.isHydratedFor("u2:3:nosnap", "u1", "3"));
+
+  const base = { hydratedKey: "u1:3:nosnap", userId: "u1", dayId: "3", readOnly: false };
+  ok("SAVE BLOCKED before a successful hydration (would overwrite real progress)",
+     !dp.shouldPersistDay({ ...base, hydratedKey: "", localDoneCount: 0, remoteDoneCount: null }));
+  ok("SAVE BLOCKED when empty local state meets an unknown remote row (no-downgrade)",
+     !dp.shouldPersistDay({ ...base, localDoneCount: 0, remoteDoneCount: null }));
+  ok("SAVE BLOCKED when empty local state would erase a non-empty remote row",
+     !dp.shouldPersistDay({ ...base, localDoneCount: 0, remoteDoneCount: 4 }));
+  ok("SAVE ALLOWED for a genuinely empty day", dp.shouldPersistDay({ ...base, localDoneCount: 0, remoteDoneCount: 0 }));
+  ok("SAVE ALLOWED with real progress", dp.shouldPersistDay({ ...base, localDoneCount: 2, remoteDoneCount: 1 }));
+  ok("SAVE BLOCKED while impersonating a student", !dp.shouldPersistDay({ ...base, readOnly: true, localDoneCount: 3, remoteDoneCount: 1 }));
+  ok("SAVE BLOCKED with no user", !dp.shouldPersistDay({ ...base, userId: undefined, localDoneCount: 3, remoteDoneCount: 1 }));
+
+  // A slow read must never roll back a lesson finished while it was in flight.
+  const merged = dp.mergeHydrated({ gym: true, intro: true }, { done_lessons: ["gym"], current_lesson: "gym", stars: 0 });
+  ok("hydration merges (local progress is never rolled back)", merged.gym === true && merged.intro === true);
+  eq("done keys are the completed lessons", dp.doneKeys({ a: true, b: false, c: true }).join(","), "a,c");
+  const ORDER = ["gym", "intro", "vocab", "cles", "defi"];
+  eq("resume lands on the saved lesson", dp.resolveLesson({ pending: null, saved: "cles", order: ORDER }), "cles");
+  eq("a cross-day click beats the saved lesson", dp.resolveLesson({ pending: "vocab", saved: "cles", order: ORDER }), "vocab");
+  // NULL = "leave the student where they are". Returning order[0] here meant a
+  // slow hydration yanked a student who had already tapped lesson 2 back to
+  // "Gym cérébral" — and then autosaved that position. Caught by the E2E suite.
+  eq("nothing to restore → keep the current lesson", dp.resolveLesson({ pending: null, saved: null, order: ORDER }), null);
+  eq("an unknown saved lesson does not reset to lesson 1", dp.resolveLesson({ pending: null, saved: "bogus", order: ORDER }), null);
+
+  // ── 3. REAL round-trip as an authenticated student (catches the outage) ────
+  if (studentClient && uid) {
+    const up = await studentClient.from("day_state").upsert(
+      { user_id: uid, day_id: 4, done_lessons: ["gym", "intro"], current_lesson: "vocab", stars: 2 },
+      { onConflict: "user_id,day_id" },
+    );
+    ok("student CAN write day_state (RLS + grants)", !up.error, up.error?.message);
+    const back = await studentClient.from("day_state").select("done_lessons, current_lesson, stars").eq("user_id", uid).eq("day_id", 4).maybeSingle();
+    ok("day_state round-trips (progress actually persists)",
+       !back.error && back.data?.current_lesson === "vocab" && Array.isArray(back.data?.done_lessons) && back.data.done_lessons.length === 2,
+       back.error?.message ?? JSON.stringify(back.data));
+    const ws = await studentClient.from("week_state").upsert(
+      { user_id: uid, week_number: 3, state: { block: "CE" } }, { onConflict: "user_id,week_number" },
+    );
+    ok("student CAN write week_state (weekly-test autosave)", !ws.error, ws.error?.message);
+    const foreign = await studentClient.from("day_state").select("user_id").neq("user_id", uid);
+    ok("RLS hides other students' day_state", !foreign.error && (foreign.data ?? []).length === 0, foreign.error?.message);
+  } else {
+    skip("student day_state round-trip", "no authenticated student client");
+  }
+
+  // ── 4. Dashboard counters: a student mid-week-2 must NOT read 0 ───────────
+  // They used to derive from `day_completions` ONLY (ignoring défi submissions)
+  // and counted weeks as floor(totalDays/5), so real work showed as 0/24 · 0/120.
+  const progSrcTxt = readFileSync("src/lib/progress.ts", "utf8");
+  ok("completed days = union(day_completions, defi_results)",
+     /new Set\(\[\s*\.\.\.rows\.map\(\(r\) => r\.day_id\),\s*\.\.\.defiDays\s*\]\)/.test(progSrcTxt));
+  ok("weeks counted only when ALL their days are done (not floor(n/5))",
+     progSrcTxt.includes("doneSet.has(dayId)") && !/weeksCompleted = Math\.floor/.test(progSrcTxt));
+  ok("a failed fetch keeps the previous data instead of blanking it",
+     progSrcTxt.includes("if (!dc.error) setRows") && progSrcTxt.includes("if (!dr.error) setDefiDays"));
+  ok("progress hooks depend on user?.id, not the churning user object",
+     progSrcTxt.includes("[user?.id, user?.created_at, targetUserId]") && progSrcTxt.includes("[user?.id, targetUserId]"));
+
+  // Replicate the shipped derivation to prove the arithmetic on real shapes.
+  const DPW = 5, TW = 24, TD = 120;
+  const derive = (dcDays, defiDays) => {
+    const days = Array.from(new Set([...dcDays, ...defiDays])).sort((a, b) => a - b);
+    const set = new Set(days);
+    const weeks = Array.from({ length: TW }, (_, i) => i + 1).filter((w) =>
+      Array.from({ length: DPW }, (_, d) => (w - 1) * DPW + d + 1).every((x) => set.has(x)),
+    ).length;
+    return { days: days.length, weeks, pct: Math.round((days.length / TD) * 100) };
+  };
+  const midWeek2 = derive([1, 2, 3, 4, 5, 6, 7], [8]);
+  eq("student mid-week-2 counts 8 days (not 0)", midWeek2.days, 8);
+  eq("student mid-week-2 shows week 1 complete", midWeek2.weeks, 1);
+  ok("student mid-week-2 shows real % (not the 1% floor)", midWeek2.pct === 7);
+  eq("défi-only days still count", derive([], [1, 2, 3]).days, 3);
+  eq("duplicates across both tables are not double-counted", derive([1, 2, 3], [2, 3, 4]).days, 4);
+  eq("5 scattered days do NOT make a completed week", derive([1, 2, 3, 7, 9], []).weeks, 0);
+  eq("a full week 2 counts once days 1-10 are done", derive(Array.from({ length: 10 }, (_, i) => i + 1), []).weeks, 2);
+
+  // ── 5. Auth churn: a tab return must not tear the app down ────────────────
+  const authSrc = readFileSync("src/lib/auth-context.tsx", "utf8");
+  ok("auth listener is event-aware (supabase re-emits SIGNED_IN on every tab return)",
+     authSrc.includes("onAuthStateChange((event, s)") && authSrc.includes('event === "SIGNED_OUT"'));
+  ok("a no-op auth event keeps the same user identity (no refetch storm)",
+     authSrc.includes("userIdRef.current") && authSrc.includes("if (sameUser) return;"));
+  ok("context value is memoized (consumers don't re-run on every render)", authSrc.includes("const value = useMemo("));
+  const gateSrc = readFileSync("src/components/AuthGate.tsx", "utf8");
+  ok("AuthGate keeps the page mounted through a transient auth blip",
+     gateSrc.includes("hadUserRef") && gateSrc.includes("!hadUserRef.current"));
+
+  // ── 6. EVERY week is evaluated + the coach sees it in the dashboard ───────
+  const wk = readFileSync("src/routes/semaine.$weekId.tsx", "utf8");
+  for (const w of [5, 6, 7, 8]) {
+    ok(`week ${w} has its own weekly test bank`, new RegExp(`const WEEK${w}_VARIANTS: Variant\\[\\]`).test(wk));
+  }
+  const byWeek = wk.slice(wk.indexOf("const VARIANTS_BY_WEEK"), wk.indexOf("const VARIANTS_BY_WEEK") + 400);
+  ok("weeks 1 and 3-8 are all registered (every content week is evaluated)",
+     [1, 3, 4, 5, 6, 7, 8].every((w) => new RegExp(`\\b${w}:\\s*(VARIANTS|WEEK${w}_VARIANTS)`).test(byWeek)));
+  ok("the week gate is week-agnostic (unlocks 5-8 like 3-4)", wk.includes("days.includes(weekNumber * 5)"));
+
+  const coachFns = readFileSync("src/lib/coach.functions.ts", "utf8");
+  ok("coach analytics server fn exists and is coach/admin-gated",
+     coachFns.includes("export const getStudentAnalytics") && /getStudentAnalytics[\s\S]{0,900}assertCoachOrAdmin/.test(coachFns));
+  ok("analytics aggregate every source a coach needs",
+     ["day_completions", "defi_results", "weekly_evaluations", "activity_results", "star_awards", "tutor_usage"]
+       .every((t) => new RegExp(`getStudentAnalytics[\\s\\S]*?from\\("${t}"\\)`).test(coachFns)));
+  ok("analytics count a day done via completion OR défi (same rule as unlocks)",
+     /doneDays = new Set<number>\(\[[\s\S]{0,200}wComp[\s\S]{0,200}wDefis/.test(coachFns));
+  ok("analytics flag stalled students", coachFns.includes("daysSinceLastSeen"));
+  const anaUi = readFileSync("src/components/StudentAnalytics.tsx", "utf8");
+  ok("coach UI shows per-week status, scores and weak points",
+     anaUi.includes("Test semanal") && anaUi.includes("weakPoints") && anaUi.includes("STATUS["));
+  ok("weekly PDF kept as an optional export (client's choice)",
+     anaUi.includes("generateWeeklyPdf") && anaUi.includes("Descargar PDF"));
+  ok("analytics panel mounted for coach AND admin",
+     readFileSync("src/routes/coach.tsx", "utf8").includes("<StudentAnalytics") &&
+     readFileSync("src/components/StudentDetailPanel.tsx", "utf8").includes("<StudentAnalytics"));
+
+  // ── 7. Audit findings — each of these was a real defect, keep them fixed ──
+  const dayTsx = readFileSync("src/routes/day.$dayId.tsx", "utf8");
+
+  // C1: fast day A→B→A left a stale hydration certificate over cleared state,
+  // so the next click overwrote day A's saved row with near-empty progress.
+  ok("clearing day state also REVOKES the hydration certificate",
+     /ownerDayRef\.current !== ownerDay[\s\S]*?hydratedKeyRef\.current = "";[\s\S]*?setDone\(\{\}\)/.test(dayTsx));
+  ok("a never-read day can never be persisted (remoteDoneCount null ⇒ blocked)",
+     !dp.shouldPersistDay({ ...base, localDoneCount: 3, remoteDoneCount: null }));
+  ok("the A→B→A interleaving is blocked even with local progress",
+     !dp.shouldPersistDay({ hydratedKey: "u1:3:nosnap", userId: "u1", dayId: "3", readOnly: false, localDoneCount: 1, remoteDoneCount: null }));
+
+  // M2/M3: admin "view as student" must never mix identities.
+  ok("day state is keyed on the OWNER + day (view-as can't leak into the admin's row)",
+     dayTsx.includes("const ownerDayRef") && dayTsx.includes("${viewAsUserId ?? user?.id ?? \"anon\"}:${activeDay}"));
+  ok("switching previewed students drops the previous snapshot immediately",
+     /setSnapshot\(null\);\s*\n\s*let alive = true;\s*\n\s*getStudentSnapshot/.test(dayTsx));
+  ok("stars are not awarded while impersonating", /const award = \([^)]*\) => \{ if \(!readOnly\)/.test(dayTsx));
+
+  // M4: a failed read must be visible and recoverable, never silent.
+  ok("a failed hydration warns the student and retries on reconnect/refocus",
+     dayTsx.includes("setHydrateFailed(true)") && dayTsx.includes('addEventListener("online"'));
+  // minor: don't lose the last <300ms of work when leaving/closing.
+  ok("debounced save is flushed on day change and on pagehide",
+     /pendingSaveRef\.current\?\.\(\);[\s\S]{0,200}ownerDayRef\.current = ownerDay/.test(dayTsx) &&
+     dayTsx.includes('addEventListener("pagehide"'));
+  ok("a late save ack cannot describe a different day",
+     dayTsx.includes("savingOwnerDay") && dayTsx.includes("ownerDayRef.current === savingOwnerDay"));
+
+  // M1: the weekly tests had the SAME failed-read-certification bug.
+  for (const f of ["src/routes/semaine.$weekId.tsx", "src/routes/defi-semaine2.tsx"]) {
+    const src = readFileSync(f, "utf8");
+    ok(`${f.split("/").pop()} only marks hydrated after a SUCCESSFUL read`,
+       src.includes("let readOk = false") && /if \(alive && readOk\) setHydrated\(true\)/.test(src));
+    ok(`${f.split("/").pop()} surfaces a failed week_state read`, /\[week_state\] hydrate failed/.test(src));
+  }
+
+  // D1: the union must not hide the "+2 ⭐ mark day complete" path.
+  ok("mark-day-complete uses day_completions only (union would hide the +2 ⭐)",
+     dayTsx.includes("const alreadyMarked = rows.some((r) => r.day_id === dayNum)") &&
+     dayTsx.includes("!completionDays.includes(dayNum)"));
+
+  // B1/B2: analytics maths.
+  ok("activity hits/misses count jsonb ARRAY lengths (Number([...]) was NaN)",
+     coachFns.includes("const countOf = (v: unknown) => (Array.isArray(v) ? v.length : Number(v) || 0)"));
+  ok("weekly stars match the real 'weekly:N' key exactly (not substring 'week:N')",
+     coachFns.includes("/^weekly:(\\d+)$/") && coachFns.includes("/^(?:day_complete|defi):(\\d+)$/") &&
+     !coachFns.includes("includes(`week:${w}`)"));
+
+  // C1 (weeks 5-8 were printed as "Mois 1 : J'OSE").
+  ok("month label is derived from the week (weeks 5-8 are JE COMPRENDS)",
+     wk.includes("function monthLabelForWeek") &&
+     wk.includes("monthLabel: monthLabelForWeek(weekNumber)") &&
+     wk.includes("{monthLabelForWeek(weekNumber)}") &&
+     // the old hardcode must be gone from real code (comments may mention it)
+     !/monthLabel: "Mois 1/.test(wk) && !/Semaine \{weekNumber\} · Mois 1/.test(wk));
+  ok("weekly AI evaluation grades THIS week's pronunciation targets",
+     readFileSync("src/lib/week.functions.ts", "utf8").includes("PRONUNCIATION_TARGETS[data.weekNumber]"));
+  ok("coach PDF maps week-2's different score shape instead of printing 0.0",
+     anaUi.includes("isWeek2Shape"));
 }
 
 /* ---------------- audit fixes (Kimi findings) ---------------- */

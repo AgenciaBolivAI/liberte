@@ -113,3 +113,180 @@ export const lockWeek = createServerFn({ method: "POST" })
     if (error) throw new Error(error.message);
     return { ok: true };
   });
+
+/* ============================================================================
+   COACH ANALYTICS — per-student, per-week performance in ONE call.
+   Replaces "download a PDF to see how a student is doing": the coach monitors
+   every week directly in the dashboard. Weeks with no data come back as
+   `status: "pending"` so the grid always shows the whole programme.
+   ============================================================================ */
+
+export type WeekAnalytics = {
+  week: number;
+  month: number;
+  /** Days of this week the student finished (day_completions ∪ defi_results). */
+  daysDone: number;
+  daysTotal: number;
+  /** Mean défi score for the week's days, /10. Null when none submitted. */
+  defiAvg: number | null;
+  /** Weekly test result, /10, plus its per-block breakdown (CO/CE/PE/PO…). */
+  weeklyScore: number | null;
+  testScores: Record<string, number> | null;
+  /** Activity-game accuracy across the week's days. */
+  hits: number;
+  misses: number;
+  accuracy: number | null;
+  stars: number;
+  /** Most recent activity anywhere in this week (ISO) — spot stalled students. */
+  lastActivityAt: string | null;
+  status: "pending" | "in_progress" | "evaluated" | "complete";
+  /** Weak points the AI flagged in this week's défis (deduped, max 5). */
+  weakPoints: string[];
+};
+
+const DAYS_PER_WEEK = 5;
+
+/** `test_scores` is free-form jsonb; keep only its numeric entries so the result
+ *  stays JSON-serializable across the server-function boundary. */
+function toScoreMap(v: unknown): Record<string, number> | null {
+  if (!v || typeof v !== "object" || Array.isArray(v)) return null;
+  const out: Record<string, number> = {};
+  for (const [k, raw] of Object.entries(v as Record<string, unknown>)) {
+    const n = Number(raw);
+    if (Number.isFinite(n)) out[k] = n;
+  }
+  return Object.keys(out).length ? out : null;
+}
+
+/** Rich per-week analytics for one student. Coach/admin only. */
+export const getStudentAnalytics = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => {
+    const d = input as { userId?: string; weeks?: number };
+    if (!d?.userId) throw new Error("userId required");
+    const weeks = Number(d?.weeks);
+    return { userId: String(d.userId), weeks: Number.isFinite(weeks) && weeks > 0 ? Math.min(weeks, 24) : 8 };
+  })
+  .handler(async ({ data, context }) => {
+    await assertCoachOrAdmin(context);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const uid = data.userId;
+
+    const [profile, completions, defis, weekly, activities, stars, tutor] = await Promise.all([
+      supabaseAdmin.from("profiles").select("id, full_name, email, created_at, approved_at").eq("id", uid).maybeSingle(),
+      supabaseAdmin.from("day_completions").select("day_id, completed_at").eq("user_id", uid),
+      supabaseAdmin.from("defi_results").select("day_id, score_10, hits, misses, weak_points, created_at").eq("user_id", uid),
+      supabaseAdmin.from("weekly_evaluations").select("week_number, weekly_score, test_score, test_scores, ai_report, pdf_generated, created_at").eq("user_id", uid),
+      supabaseAdmin.from("activity_results").select("day_id, aciertos, errores, competence, punto_debil, created_at").eq("user_id", uid),
+      supabaseAdmin.from("star_awards").select("amount, source_key, created_at").eq("user_id", uid),
+      supabaseAdmin.from("tutor_usage").select("usage_date, message_count").eq("user_id", uid),
+    ]);
+
+    // The star triggers write exactly three key shapes (see the migrations):
+    //   "day_complete:N"  +2   ·  "defi:N"  +2  ·  "weekly:N"  +3
+    const dayOfStar = (key: string | null): number | null => {
+      const m = /^(?:day_complete|defi):(\d+)$/.exec(key ?? "");
+      return m ? Number(m[1]) : null;
+    };
+    const weekOfStar = (key: string | null): number | null => {
+      const m = /^weekly:(\d+)$/.exec(key ?? "");
+      return m ? Number(m[1]) : null;
+    };
+    const latest = (a: string | null, b: string | null) =>
+      !a ? b : !b ? a : new Date(a) > new Date(b) ? a : b;
+
+    const weeks: WeekAnalytics[] = [];
+    for (let w = 1; w <= data.weeks; w++) {
+      const dayIds = Array.from({ length: DAYS_PER_WEEK }, (_, i) => (w - 1) * DAYS_PER_WEEK + i + 1);
+      const inWeek = (d: number) => dayIds.includes(Number(d));
+
+      const wDefis = (defis.data ?? []).filter((r) => inWeek(r.day_id as number));
+      const wActs = (activities.data ?? []).filter((r) => inWeek(r.day_id as number));
+      const wComp = (completions.data ?? []).filter((r) => inWeek(r.day_id as number));
+      const wEval = (weekly.data ?? []).find((r) => Number(r.week_number) === w) ?? null;
+      const wStars = (stars.data ?? []).filter((r) => {
+        const key = r.source_key as string | null;
+        const d = dayOfStar(key);
+        if (d !== null) return inWeek(d);
+        // Exact match: `includes("week:1")` also matched "week:12".."week:19",
+        // and never matched the real "weekly:N" key at all — so the +3 weekly
+        // stars landed in no week and the column never summed to the total.
+        return weekOfStar(key) === w;
+      });
+
+      const doneDays = new Set<number>([
+        ...wComp.map((r) => Number(r.day_id)),
+        ...wDefis.map((r) => Number(r.day_id)),
+      ]);
+      // `activity_results.aciertos`/`errores` are jsonb ARRAYS (the praised
+      // phrases / the corrections), not counts — `Number([...])` is NaN, which
+      // poisoned the whole sum and made accuracy show "—" for every active
+      // student. Count their length; `defi_results.hits/misses` are real ints.
+      const countOf = (v: unknown) => (Array.isArray(v) ? v.length : Number(v) || 0);
+      const hits = wActs.reduce((s, r) => s + countOf(r.aciertos), 0)
+        + wDefis.reduce((s, r) => s + (Number(r.hits) || 0), 0);
+      const misses = wActs.reduce((s, r) => s + countOf(r.errores), 0)
+        + wDefis.reduce((s, r) => s + (Number(r.misses) || 0), 0);
+      const defiScores = wDefis.map((r) => Number(r.score_10)).filter((n) => Number.isFinite(n));
+
+      let lastActivityAt: string | null = null;
+      for (const r of [...wDefis, ...wActs, ...wComp]) {
+        lastActivityAt = latest(lastActivityAt, (r as { created_at?: string; completed_at?: string }).created_at
+          ?? (r as { completed_at?: string }).completed_at ?? null);
+      }
+      if (wEval) lastActivityAt = latest(lastActivityAt, wEval.created_at as string);
+
+      const weakPoints = Array.from(
+        new Set(
+          wDefis.flatMap((r) => (Array.isArray(r.weak_points) ? (r.weak_points as string[]) : []))
+            .concat(wActs.map((r) => String(r.punto_debil ?? "")).filter(Boolean)),
+        ),
+      ).slice(0, 5);
+
+      const status: WeekAnalytics["status"] =
+        doneDays.size === 0 && !wEval ? "pending"
+        : wEval && doneDays.size >= DAYS_PER_WEEK ? "complete"
+        : wEval ? "evaluated"
+        : "in_progress";
+
+      weeks.push({
+        week: w,
+        month: Math.ceil(w / 4),
+        daysDone: doneDays.size,
+        daysTotal: DAYS_PER_WEEK,
+        defiAvg: defiScores.length ? Number((defiScores.reduce((a, b) => a + b, 0) / defiScores.length).toFixed(1)) : null,
+        weeklyScore: wEval ? Number(wEval.weekly_score) : null,
+        testScores: toScoreMap(wEval?.test_scores),
+        hits,
+        misses,
+        accuracy: hits + misses > 0 ? Math.round((hits / (hits + misses)) * 100) : null,
+        stars: wStars.reduce((s, r) => s + Number(r.amount ?? 0), 0),
+        lastActivityAt,
+        status,
+        weakPoints,
+      });
+    }
+
+    const totalStars = (stars.data ?? []).reduce((s, r) => s + Number(r.amount ?? 0), 0);
+    const allDone = new Set<number>([
+      ...(completions.data ?? []).map((r) => Number(r.day_id)),
+      ...(defis.data ?? []).map((r) => Number(r.day_id)),
+    ]);
+    const lastSeen = weeks.reduce<string | null>((acc, w) => latest(acc, w.lastActivityAt), null);
+
+    return {
+      profile: profile.data ?? null,
+      weeks,
+      totals: {
+        daysDone: allDone.size,
+        stars: totalStars,
+        weeklyTestsTaken: (weekly.data ?? []).length,
+        tutorMessages: (tutor.data ?? []).reduce((s, r) => s + Number(r.message_count ?? 0), 0),
+        lastSeen,
+        /** Days since the student last did anything — the "stalled" alert. */
+        daysSinceLastSeen: lastSeen
+          ? Math.floor((Date.now() - new Date(lastSeen).getTime()) / 86_400_000)
+          : null,
+      },
+    };
+  });

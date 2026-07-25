@@ -63,7 +63,7 @@ export function AuthoredDayView({ dayId }: { dayId: number }) {
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "No se pudo guardar");
     }
-  }, [user, readOnly, isDone, dayId, refresh]);
+  }, [user?.id, readOnly, isDone, dayId, refresh]);
 
   const shell = (child: React.ReactNode) => (
     <div className="min-h-screen bg-ice">

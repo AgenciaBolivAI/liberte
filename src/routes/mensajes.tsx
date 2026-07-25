@@ -81,7 +81,7 @@ function MessagesPage() {
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [user, load]);
+  }, [user?.id, load]);
 
   // People the user has no thread with yet, filtered by the search box. Capped so
   // a large cohort can't dump hundreds of rows into the DOM — narrow with search.

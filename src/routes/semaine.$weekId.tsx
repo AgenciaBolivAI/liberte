@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/lib/auth-context";
 import { supabase } from "@/integrations/supabase/client";
+import { persist } from "@/lib/persist";
 import { evaluateWeek, getCompletedDays, transcribeAudio, markWeeklyPdfGenerated, getMyWeeklyEvaluation } from "@/lib/week.functions";
 import { generateWeeklyPdf, type WeeklyReportData } from "@/lib/weekPdf";
 import { speakFr, stopFr } from "@/lib/speak";
@@ -32,6 +33,14 @@ type Variant = {
   pe: { prompt: string }[];
   po: { prompt: string; expected?: string }[];
 };
+
+/** Month label for a week (4 weeks per month) — weeks 5-8 are month 2, so the
+ *  page and the student PDF must not keep saying "Mois 1 : J'OSE". */
+const MONTH_THEMES = ["J'OSE 🗼", "JE COMPRENDS 📞", "JE CRÉE ✍️", "JE PARLE 🗣️", "JE VOYAGE ✈️", "JE SUIS LIBRE 🕊️"];
+function monthLabelForWeek(weekNumber: number): string {
+  const m = Math.max(1, Math.ceil(weekNumber / 4));
+  return `Mois ${m} : ${MONTH_THEMES[m - 1] ?? ""}`.trim();
+}
 
 const VARIANTS: Variant[] = [
   {
@@ -161,10 +170,136 @@ const WEEK4_VARIANTS: Variant[] = [
 
 // Weekly-test content per week. Week 2 has its own bespoke route (/defi-semaine2);
 // weeks without a bank fall back to week 1's so the route never crashes.
+/* ===== MOIS 2 · JE COMPRENDS — semaines 5-8 (jours 21-40) =====
+   Every week of month 2 now has its own evaluation, so the coach can score
+   progress each week (previously only weeks 1-4 had one). Content is grounded
+   strictly in the client's Mes 2 dictionary/curriculum: each week reuses the
+   situations and the grammar taught on its own five days. */
+
+/* Semaine 5 (jours 21-25): appels, messages vocaux, e-mails.
+   Grammaire : futur proche · registre formel au téléphone · COD (le/la/les)
+   · expressions de temps · pronoms toniques. */
+const WEEK5_VARIANTS: Variant[] = [
+  {
+    co: [
+      { audio: "Allô, bonjour. Cabinet médical, j'écoute. — Bonjour, je voudrais prendre rendez-vous avec le médecin. — Pour quel jour ? — Demain matin, si possible.", question: "¿Para cuándo quiere la cita?", options: ["para esta tarde", "para mañana por la mañana", "para la semana que viene"], correct: 1 },
+      { audio: "Bonjour, c'est Madame Dupont. Le médecin ne sera pas disponible le matin. Pouvez-vous venir à 15h ? Merci de rappeler au 01 23 45 67 89.", question: "¿Qué cambio anuncia el mensaje?", options: ["la cita pasa a las 15h", "la cita se cancela", "hay que cambiar de médico"], correct: 0 },
+      { audio: "Je n'ai pas bien compris. Vous pouvez répéter plus lentement, s'il vous plaît ?", question: "¿Qué pide la persona?", options: ["que repitan más despacio", "que hablen más alto", "que le llamen mañana"], correct: 0 },
+    ],
+    ce: {
+      text: "Objet : Demande d'information — appartement rue Lepic. Bonjour Madame, Je vous contacte au sujet de l'appartement que vous proposez à la location. Pourriez-vous m'indiquer si les charges sont comprises dans le loyer et quand l'appartement est disponible ? Je reste à votre disposition pour une visite. Cordialement, Ana García.",
+      items: [
+        { question: "¿Cuál es el asunto del correo?", options: ["una reclamación", "una solicitud de información sobre un apartamento", "una confirmación de cita"], correct: 1 },
+        { question: "¿Qué dos cosas pregunta Ana?", options: ["si los gastos están incluidos y cuándo está disponible", "el precio y el tamaño", "la dirección y el código postal"], correct: 0 },
+        { question: "¿Cómo cierra el correo?", options: ["« Salut »", "« Cordialement »", "sin fórmula de cierre"], correct: 1 },
+      ],
+    },
+    pe: [
+      { prompt: "Escribe en francés el mensaje que dejarías en un buzón de voz: preséntate, di el motivo de tu llamada y cuándo esperas respuesta." },
+      { prompt: "Escribe una frase con « je vais + infinitif » (futur proche) para decir que vas a volver a llamar mañana por la mañana." },
+    ],
+    po: [
+      { prompt: "Lectura en voz alta (diagnóstico de pronunciación). Lee tal cual:", expected: "Allô, bonjour. Je vous appelle pour prendre rendez-vous. Je voudrais parler à Madame Dupont, s'il vous plaît. Merci beaucoup, bonne journée !" },
+      { prompt: "Mini situación (30-45 seg): llamas a una consulta médica. Saluda con el registro formal, pide una cita, propón un día y una hora, y deja tus datos." },
+    ],
+  },
+];
+
+/* Semaine 6 (jours 26-30): e-mail formel, logement, voisins.
+   Grammaire : demander de répéter · structure de l'e-mail formel
+   · comparatifs · superlatifs · tu/vous. */
+const WEEK6_VARIANTS: Variant[] = [
+  {
+    co: [
+      { audio: "Bonjour, je suis votre voisine du dessous. Je me permets de vous contacter car le bruit est très fort la nuit. — Oh, je suis désolé. Je ne savais pas.", question: "¿Por qué habla la vecina?", options: ["por el ruido nocturno", "por una fuga de agua", "por la basura"], correct: 0 },
+      { audio: "Cet appartement est plus grand que l'autre, mais il est moins cher parce qu'il est à rénover.", question: "¿Cómo es este apartamento?", options: ["más pequeño y más caro", "más grande y más barato, para reformar", "igual que el otro"], correct: 1 },
+      { audio: "Pour le dossier de location, il faut une pièce d'identité, un justificatif de domicile et vos trois derniers bulletins de salaire.", question: "¿Qué documentos piden?", options: ["identidad, justificante de domicilio y nóminas", "solo el pasaporte", "un cheque y el contrato"], correct: 0 },
+    ],
+    ce: {
+      text: "RÈGLEMENT DE L'IMMEUBLE — Le calme est obligatoire après 22h. Les poubelles doivent être sorties le soir, avant 20h. Les parties communes (escalier, couloir, palier) doivent rester propres. En cas de problème, contactez le gardien ou le syndic.",
+      items: [
+        { question: "¿A partir de qué hora hay que guardar silencio?", options: ["después de las 20h", "después de las 22h", "después de las 24h"], correct: 1 },
+        { question: "¿Cuándo hay que sacar la basura?", options: ["por la mañana", "por la noche, antes de las 20h", "el domingo"], correct: 1 },
+        { question: "¿A quién hay que contactar si hay un problema?", options: ["al conserje o al administrador", "a la policía", "al vecino de arriba"], correct: 0 },
+      ],
+    },
+    pe: [
+      { prompt: "Escribe un correo formal breve (4-5 líneas) a una agencia inmobiliaria: apertura, pide información sobre el alquiler y los gastos, y cierra con « Cordialement »." },
+      { prompt: "Compara dos apartamentos en francés con « plus … que », « moins … que » y « aussi … que » (3 frases)." },
+    ],
+    po: [
+      { prompt: "Lectura en voz alta (diagnóstico de pronunciación). Lee tal cual:", expected: "Bonjour Madame, je me permets de vous contacter au sujet de l'appartement. Est-ce que les charges sont comprises ? Je vous remercie de votre compréhension. Cordialement." },
+      { prompt: "Mini situación (30-45 seg): te presentas a tu nuevo vecino, explicas una norma del edificio y planteas con amabilidad un problema de ruido." },
+    ],
+  },
+];
+
+/* Semaine 7 (jours 31-35): banque, poste, achats en ligne.
+   Grammaire : COI (lui/leur) · adverbes de fréquence · passé récent (venir de)
+   · connecteurs · négation avancée. */
+const WEEK7_VARIANTS: Variant[] = [
+  {
+    co: [
+      { audio: "Bonjour, je voudrais ouvrir un compte courant. — Bien sûr. Vous avez une pièce d'identité et un justificatif de domicile ? — Oui, les voici.", question: "¿Qué quiere hacer el cliente?", options: ["abrir una cuenta corriente", "pedir un préstamo", "cerrar su cuenta"], correct: 0 },
+      { audio: "Je viens de recevoir mon relevé et je ne comprends rien à ces frais. Ma carte est bloquée depuis hier.", question: "¿Cuál es el problema?", options: ["ha perdido el móvil", "su tarjeta está bloqueada y no entiende unos gastos", "quiere cambiar de banco"], correct: 1 },
+      { audio: "D'abord, pesez le colis. Ensuite, remplissez le formulaire. Enfin, déposez-le au guichet.", question: "¿Cuál es el orden correcto?", options: ["pesar, rellenar, entregar", "rellenar, pagar, pesar", "entregar, pesar, rellenar"], correct: 0 },
+    ],
+    ce: {
+      text: "SUIVI DE VOTRE COMMANDE nº 12345 — Statut : expédié. Livraison prévue sous 3 jours ouvrables. Les frais de port sont offerts dès 50 euros. Vous pouvez retourner l'article sous 30 jours. Pour toute question, contactez le service client.",
+      items: [
+        { question: "¿Cuál es el estado del pedido?", options: ["entregado", "enviado", "en preparación"], correct: 1 },
+        { question: "¿Desde qué importe es gratis el envío?", options: ["desde 30 €", "desde 50 €", "siempre es gratis"], correct: 1 },
+        { question: "¿Cuánto tiempo hay para devolver el artículo?", options: ["30 días", "3 días", "no se puede devolver"], correct: 0 },
+      ],
+    },
+    pe: [
+      { prompt: "Escribe 4 frases sobre tus hábitos bancarios usando « toujours », « souvent », « parfois » y « ne… jamais »." },
+      { prompt: "Explica en francés, con « d'abord / ensuite / enfin », los pasos para enviar un paquete en la oficina de correos." },
+    ],
+    po: [
+      { prompt: "Lectura en voz alta (diagnóstico de pronunciación). Lee tal cual:", expected: "Bonjour, je voudrais faire un virement. Je viens d'ouvrir un compte. Je ne donne jamais mon code PIN. Merci beaucoup !" },
+      { prompt: "Mini situación (30-45 seg): estás en el banco. Explica que tu tarjeta está bloqueada, pide una solución y pregunta cuánto tarda." },
+    ],
+  },
+];
+
+/* Semaine 8 (jours 36-40): retours en ligne, aéroport, gare — révision du mois.
+   Grammaire : impératif des formulaires · questions directes/indirectes
+   · discours indirect · révision intégrée JE COMPRENDS. */
+const WEEK8_VARIANTS: Variant[] = [
+  {
+    co: [
+      { audio: "Votre passeport et votre billet, s'il vous plaît. Votre bagage fait 26 kilos, c'est 2 kilos de plus que la limite. Il y a un supplément de 15 euros.", question: "¿Por qué hay un suplemento?", options: ["por exceso de equipaje", "por cambiar de asiento", "por facturar tarde"], correct: 0 },
+      { audio: "Mesdames et messieurs, le vol AF123 est retardé de deux heures. Le nouvel embarquement est prévu à 16h30, porte B7.", question: "¿Qué anuncian?", options: ["el vuelo se adelanta", "el vuelo tiene dos horas de retraso", "el vuelo está cancelado"], correct: 1 },
+      { audio: "Le contrôleur dit que le train part de la voie 3 et qu'il faut composter son billet avant de monter à bord.", question: "¿Qué informa el revisor?", options: ["que el tren sale de la vía 3 y hay que picar el billete", "que el tren está lleno", "que hay que cambiar de tren"], correct: 0 },
+    ],
+    ce: {
+      text: "PROCÉDURE DE RETOUR — Remplissez le formulaire en ligne. Imprimez l'étiquette de retour et joignez-la au colis. Déposez le colis dans un point relais sous 30 jours. Le remboursement est effectué sous 5 jours après réception. Cochez la case « article défectueux » si nécessaire.",
+      items: [
+        { question: "¿Qué hay que hacer primero?", options: ["rellenar el formulario en línea", "llamar por teléfono", "ir a la tienda"], correct: 0 },
+        { question: "¿Dónde hay que dejar el paquete?", options: ["en un punto de recogida", "en el buzón", "en la oficina del banco"], correct: 0 },
+        { question: "¿Cuándo se hace el reembolso?", options: ["en 30 días", "en 5 días tras la recepción", "inmediatamente"], correct: 1 },
+      ],
+    },
+    pe: [
+      { prompt: "Escribe un correo al servicio al cliente: explica que el artículo llegó defectuoso y pide un reembolso (usa el discurso indirecto: « Le vendeur dit que… »)." },
+      { prompt: "Transforma en preguntas indirectas: « Le vol est à l'heure ? » y « Où est la porte d'embarquement ? » (usa « Je voudrais savoir… »)." },
+    ],
+    po: [
+      { prompt: "Lectura en voz alta (diagnóstico de pronunciación). Lee tal cual:", expected: "Bonjour, je voudrais m'enregistrer pour le vol à destination de Paris. J'ai un bagage en soute. Je voudrais savoir si le vol est à l'heure. Merci !" },
+      { prompt: "RETO FINAL JE COMPRENDS (45-60 seg): encadena tres situaciones sin cambiar al español — una llamada para avisar de un retraso, un correo formal de reclamación y un trámite en la estación." },
+    ],
+  },
+];
+
 const VARIANTS_BY_WEEK: Record<number, Variant[]> = {
   1: VARIANTS,
   3: WEEK3_VARIANTS,
   4: WEEK4_VARIANTS,
+  5: WEEK5_VARIANTS,
+  6: WEEK6_VARIANTS,
+  7: WEEK7_VARIANTS,
+  8: WEEK8_VARIANTS,
 };
 
 function variantsForWeek(weekNumber: number): Variant[] {
@@ -225,7 +360,7 @@ function WeekPage() {
         setGateLoading(false);
       }
     })();
-  }, [loading, user, weekNumber, isAdmin]);
+  }, [loading, user?.id, weekNumber, isAdmin]);
 
   if (loading || gateLoading || weekNumber === 2) {
     return (
@@ -300,14 +435,24 @@ function WeekTest({ weekNumber, studentName, previous }: { weekNumber: number; s
     }
     let alive = true;
     (async () => {
+      // Only a SUCCESSFUL read may enable the autosave (see the error branch).
+      let readOk = false;
       try {
-        const { data } = await supabase
+        const { data, error } = await supabase
           .from("week_state")
           .select("state")
           .eq("user_id", user.id)
           .eq("week_number", weekNumber)
           .maybeSingle();
         if (!alive) return;
+        // A FAILED read is not "no saved test". Marking it hydrated would let the
+        // 500ms autosave below overwrite a real mid-test row with a blank one.
+        if (error) {
+          console.error("[week_state] hydrate failed", error.message);
+          toast.error("No pudimos cargar tu test guardado. Recarga la página antes de continuar.");
+          return; // leaves `hydrated` false -> autosave stays disabled
+        }
+        readOk = true;
         const s = (data?.state ?? null) as Record<string, unknown> | null;
         if (s && typeof s === "object") {
           const savedIdx = typeof s.variantIdx === "number" ? s.variantIdx % banks.length : variantIdx;
@@ -331,31 +476,36 @@ function WeekTest({ weekNumber, studentName, previous }: { weekNumber: number; s
             setBlock("PO");
           }
         }
-      } catch {
-        // Table may not exist yet or fetch failed — start fresh.
+      } catch (e) {
+        console.error("[week_state] hydrate threw", e);
       } finally {
-        if (alive) setHydrated(true);
+        // NEVER certify a failed read: `hydrated` is what unlocks the autosave,
+        // so certifying here would let a blank form overwrite a saved test.
+        if (alive && readOk) setHydrated(true);
       }
     })();
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [previous, user, weekNumber]);
+  }, [previous, user?.id, weekNumber]);
 
   // Debounced autosave of the in-progress test.
   useEffect(() => {
     if (!hydrated || !user || previous || evalRes || block === "eval" || block === "result") return;
     const t = setTimeout(() => {
-      void supabase.from("week_state").upsert(
-        {
-          user_id: user.id,
-          week_number: weekNumber,
-          state: { variantIdx, block, coAnswers, ceAnswers, peAnswers },
-        },
-        { onConflict: "user_id,week_number" },
+      // Must be awaited — an un-awaited supabase builder never sends its request.
+      void persist("week_state", () =>
+        supabase.from("week_state").upsert(
+          {
+            user_id: user.id,
+            week_number: weekNumber,
+            state: { variantIdx, block, coAnswers, ceAnswers, peAnswers },
+          },
+          { onConflict: "user_id,week_number" },
+        ),
       );
     }, 500);
     return () => clearTimeout(t);
-  }, [hydrated, user, previous, evalRes, block, variantIdx, coAnswers, ceAnswers, peAnswers, weekNumber]);
+  }, [hydrated, user?.id, previous, evalRes, block, variantIdx, coAnswers, ceAnswers, peAnswers, weekNumber]);
 
   const percentByBlock: Record<Block, number> = { intro: 0, CO: 20, CE: 40, PE: 60, PO: 80, eval: 95, result: 100 };
 
@@ -395,11 +545,11 @@ function WeekTest({ weekNumber, studentName, previous }: { weekNumber: number; s
       setBlock("result");
       // The evaluation is saved server-side; drop the in-progress snapshot.
       if (user) {
-        void supabase
-          .from("week_state")
-          .delete()
-          .eq("user_id", user.id)
-          .eq("week_number", weekNumber);
+        void persist(
+          "week_state:cleanup",
+          () => supabase.from("week_state").delete().eq("user_id", user.id).eq("week_number", weekNumber),
+          { silent: true }, // best-effort cleanup; the result is already saved
+        );
       }
       if (res.weeklyScore >= 8.5) fireConfetti();
     } catch (e) {
@@ -459,7 +609,7 @@ function WeekTest({ weekNumber, studentName, previous }: { weekNumber: number; s
         {block === "intro" && (
           <div className="rounded-3xl border-2 border-gold/40 bg-white p-8 shadow-card">
             <p className="text-xs font-bold tracking-widest text-gold uppercase">🎉 Le défi de la semaine</p>
-            <h1 className="mt-2 font-display text-4xl font-extrabold text-navy">Semaine {weekNumber} · Mois 1 : J'OSE 🗼</h1>
+            <h1 className="mt-2 font-display text-4xl font-extrabold text-navy">Semaine {weekNumber} · {monthLabelForWeek(weekNumber)}</h1>
             <p className="mt-3 text-sm text-navy/80">
               ¡Bravo por llegar hasta aquí! Esta es tu <strong>fiesta de fin de semana</strong>: 4 mini retos cortos (10-12 min)
               para descubrir todo lo que ya sabes decir en francés. Al terminar recibirás tu <strong>nota semanal</strong>,
@@ -743,7 +893,7 @@ function ResultView({ data, studentName, weekNumber }: {
       const doc = generateWeeklyPdf({
         studentName,
         weekNumber,
-        monthLabel: "Mois 1 : J'OSE",
+        monthLabel: monthLabelForWeek(weekNumber),
         daysCompleted: data.daysCompleted,
         daysTotal: 5,
         weeklyScore: data.weeklyScore,

@@ -8,6 +8,7 @@ import { getWeeks } from "@/data/program";
 import { CalendarBoard } from "@/components/CalendarBoard";
 import { useCalendarEvents } from "@/lib/calendarEvents";
 import { TopNav } from "@/components/TopNav";
+import { StudentAnalytics } from "@/components/StudentAnalytics";
 
 export const Route = createFileRoute("/coach")({
   head: () => ({
@@ -224,6 +225,12 @@ function StudentDetail({ detail, userId }: { detail: Detail; userId: string }) {
   return (
     <div className="space-y-4">
       <ProgressPanel userId={userId} />
+      {/* Week-by-week analytics: the coach evaluates progress here instead of
+          having to download a PDF (the PDF is still available per week). */}
+      <div className="rounded-3xl border border-border bg-white p-5 shadow-soft">
+        <p className="mb-3 font-display text-lg font-extrabold text-navy">📊 Progreso por semana</p>
+        <StudentAnalytics userId={userId} />
+      </div>
       <div className="rounded-3xl border border-border bg-white p-5 shadow-soft">
         <h2 className="font-display text-2xl font-extrabold text-navy">
           {profile?.full_name || profile?.email || "Alumno"}

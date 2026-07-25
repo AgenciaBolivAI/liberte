@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { Loader2 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
@@ -16,6 +16,10 @@ export function AuthGate({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const isPublic = PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/"));
+  // Did this session ever have a signed-in user? If so, a momentary `!user` is
+  // treated as a transient auth blip rather than a reason to tear the app down.
+  const hadUserRef = useRef(false);
+  if (user) hadUserRef.current = true;
 
   useEffect(() => {
     if (loading) return;
@@ -32,7 +36,12 @@ export function AuthGate({ children }: { children: ReactNode }) {
     );
   }
 
-  if (!user && !isPublic) {
+  // Never signed in on this page load → show the spinner while we redirect.
+  // But if the student WAS signed in (e.g. a token-refresh hiccup on tab
+  // return), keep the page mounted: unmounting here destroyed the whole lesson
+  // subtree and everything the student had done in it. A genuine sign-out still
+  // navigates away via the effect above, which unmounts the route normally.
+  if (!user && !isPublic && !hadUserRef.current) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#0d1b3a]">
         <Loader2 className="h-8 w-8 animate-spin text-white" />

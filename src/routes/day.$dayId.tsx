@@ -200,6 +200,8 @@ import cuadernilloSemana1 from "@/assets/cuadernillo-semana1.pdf.asset.json";
 import { speakFr, stopFr } from "@/lib/speak";
 import { WEEK34, type WeekDay } from "@/data/week34";
 import { MONTH2 } from "@/data/month2";
+import { persist } from "@/lib/persist";
+import { dayStateKey, doneKeys, mergeHydrated, resolveLesson, shouldPersistDay } from "@/lib/dayProgress";
 import { WEEK34_META, type RichDay, type Week34Meta } from "@/data/week34.meta";
 import { MONTH2_META } from "@/data/month2.meta";
 import { useRichDay } from "@/lib/rich-content";
@@ -500,6 +502,11 @@ function DayPage() {
       setSnapshot(null);
       return;
     }
+    // Drop the previous student's snapshot IMMEDIATELY. Switching straight from
+    // student A to student B in the preview banner otherwise rendered A's day
+    // progress under B's name — and, because the hydration key only recorded
+    // "has a snapshot", B's real data was never applied once it arrived.
+    setSnapshot(null);
     let alive = true;
     getStudentSnapshot({ data: { userId: viewAsUserId } })
       .then((s) => {
@@ -512,7 +519,10 @@ function DayPage() {
       alive = false;
     };
   }, [viewAsUserId]);
-  const { days: persistedDays, loading: daysLoading, refresh: refreshDays } = useDayCompletions();
+  const { days: persistedDays, rows: completionRows, loading: daysLoading, refresh: refreshDays } = useDayCompletions();
+  // Days with an actual `day_completions` row (the union in `persistedDays` also
+  // counts défi submissions, which must NOT suppress the day-completion insert).
+  const completionDays = useMemo(() => completionRows.map((r) => r.day_id), [completionRows]);
 
   // Progressive unlock: a day opens once the previous day is completed
   // (défi sent or day marked done). The first day of the week is always open;
@@ -584,13 +594,26 @@ function DayPage() {
   // navigation + re-hydration (which otherwise resets to lesson 1). Cleared
   // once applied. This fixes "click lesson 3 of day 3 → lands on lesson 1".
   const pendingLessonRef = useRef<LessonKey | null>(null);
+  // How many done-lessons the last SUCCESSFUL read saw (null = never read OK).
+  // The autosave uses this to refuse to overwrite a non-empty row with nothing.
+  const remoteDoneCountRef = useRef<number | null>(null);
+  // Hydration could not read the saved row (offline/RLS/network). While true the
+  // day is deliberately NOT persisting, and we retry on reconnect/refocus.
+  const [hydrateFailed, setHydrateFailed] = useState(false);
+  const [hydrateAttempt, setHydrateAttempt] = useState(0);
+  // WHOSE progress is currently in memory, and for which day. Keyed on the owner
+  // too (not just the day) so that entering/leaving admin "view as student" —
+  // which swaps the owner in place, without a remount — can never leave one
+  // person's lesson state loaded under another person's identity (it would then
+  // be autosaved into their row).
+  const ownerDayRef = useRef<string>(`${viewAsUserId ?? user?.id ?? "anon"}:${activeDay}`);
   useEffect(() => {
     // The key changes ONLY when the day, the user, or (while impersonating) the
     // loaded snapshot changes. Clicking a lesson, a token refresh on tab
     // refocus, or an admin-preview store update do NOT change it — so this
     // effect no longer wipes the student's current lesson back to zero on every
     // re-render. That was the "comes back to the first lesson" bug.
-    const key = `${viewAsUserId ?? user?.id ?? "anon"}:${activeDay}:${snapshot ? "snap" : "nosnap"}`;
+    const key = dayStateKey(viewAsUserId ?? user?.id, activeDay, Boolean(snapshot));
     if (hydratedKeyRef.current === key) return;
 
     // A lesson clicked on another day wins over both the reset-to-lesson-1 and
@@ -604,9 +627,25 @@ function DayPage() {
     };
 
     setOpenDay(Number(activeDay));
-    setLesson(order[0]);
-    setDone({});
-    setStars(0);
+    // Clear ONLY when the owner or the day actually changed. Re-running for the
+    // same owner+day (e.g. an auth event changing the key) must not blank the
+    // screen — that reset-then-fetch window is what sent students back to "gym"
+    // and, if the fetch then failed, got persisted as empty progress.
+    const ownerDay = `${viewAsUserId ?? user?.id ?? "anon"}:${activeDay}`;
+    if (ownerDayRef.current !== ownerDay) {
+      // Flush any debounced save for the PREVIOUS day before dropping its state,
+      // otherwise a lesson completed <300ms before navigating is silently lost.
+      pendingSaveRef.current?.();
+      ownerDayRef.current = ownerDay;
+      remoteDoneCountRef.current = null;
+      // Wiping the state MUST revoke the hydration certificate: leaving a stale
+      // key here let a fast A→B→A navigation certify B's blank state as day A's
+      // and overwrite A's saved row on the next interaction.
+      hydratedKeyRef.current = "";
+      setLesson(order[0]);
+      setDone({});
+      setStars(0);
+    }
 
     // Impersonating: use the snapshot instead of our own row. The autosave
     // effect is separately guarded by `readOnly`, so it still can't write.
@@ -634,29 +673,77 @@ function DayPage() {
     }
     let alive = true;
     (async () => {
-      const { data } = await supabase
-        .from("day_state")
-        .select("done_lessons, current_lesson, stars")
-        .eq("user_id", user.id)
-        .eq("day_id", Number(activeDay))
-        .maybeSingle();
-      if (!alive) return;
-      if (data) {
-        const doneArr = Array.isArray(data.done_lessons) ? (data.done_lessons as string[]) : [];
-        const doneMap: Record<string, boolean> = {};
-        doneArr.forEach((k) => { doneMap[k] = true; });
-        setDone(doneMap);
-        setStars(Number(data.stars ?? 0));
-        if (data.current_lesson && order.includes(data.current_lesson as LessonKey)) {
-          setLesson(data.current_lesson as LessonKey);
+      // Retry a failing read instead of treating it as "no progress". A failed
+      // read must NEVER mark this day hydrated: the autosave gate below trusts
+      // that flag, so certifying an empty screen would overwrite real progress.
+      for (let attempt = 0; attempt < 3 && alive; attempt++) {
+        const { data, error } = await supabase
+          .from("day_state")
+          .select("done_lessons, current_lesson, stars")
+          .eq("user_id", user.id)
+          .eq("day_id", Number(activeDay))
+          .maybeSingle();
+        if (!alive) return;
+
+        if (error) {
+          console.error("[day_state] hydrate failed", error.message);
+          await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
+          continue; // leave hydratedKeyRef untouched → autosave stays disabled
         }
+
+        // Success (data may legitimately be null = brand-new day).
+        const remoteDone = Array.isArray(data?.done_lessons) ? (data.done_lessons as string[]) : [];
+        const remoteState = data
+          ? {
+              done_lessons: remoteDone,
+              current_lesson: (data.current_lesson as string | null) ?? null,
+              stars: Number(data.stars ?? 0),
+            }
+          : null;
+        remoteDoneCountRef.current = data ? remoteDone.length : 0;
+        // Merge rather than replace: a lesson finished while the read was in
+        // flight must not be rolled back by a slow response.
+        setDone((local) => mergeHydrated(local, remoteState));
+        if (data) setStars((s) => Math.max(s, Number(data.stars ?? 0)));
+        // Only move the student when there is something to restore. A null here
+        // means "stay put" — hydration finishing AFTER a tap must not drag them
+        // back to lesson 1 (and then persist that as their position).
+        const next = resolveLesson({
+          pending,
+          saved: (data?.current_lesson as string | null) ?? null,
+          order,
+        });
+        if (next) setLesson(next as LessonKey);
+        hydratedKeyRef.current = key;
+        setHydrateFailed(false);
+        return;
       }
-      applyPendingLesson();
-      hydratedKeyRef.current = key;
+      // All attempts failed — apply any pending lesson so navigation still works,
+      // but stay un-hydrated so nothing can be persisted over the saved row.
+      // Tell the student: silently continuing would mean a whole day's work is
+      // never saved, with no clue until the next reload.
+      if (alive) {
+        applyPendingLesson();
+        setHydrateFailed(true);
+        toast.error("No pudimos cargar tu progreso guardado. Revisa tu conexión y recarga la página.");
+      }
     })();
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeDay, order, user?.id, viewAsUserId, snapshot]);
+  }, [activeDay, order, user?.id, viewAsUserId, snapshot, hydrateAttempt]);
+
+  // Re-arm hydration when the connection or the tab comes back, so a student who
+  // blipped offline at load doesn't stay in a non-persisting session forever.
+  useEffect(() => {
+    if (!hydrateFailed) return;
+    const retry = () => setHydrateAttempt((n) => n + 1);
+    window.addEventListener("online", retry);
+    window.addEventListener("focus", retry);
+    return () => {
+      window.removeEventListener("online", retry);
+      window.removeEventListener("focus", retry);
+    };
+  }, [hydrateFailed]);
 
   // Autosave: whenever done/stars/lesson changes after hydration, upsert.
   // A pending (debounced) save is flushed on unmount so leaving the page
@@ -664,32 +751,62 @@ function DayPage() {
   const pendingSaveRef = useRef<(() => void) | null>(null);
   const userId = user?.id;
   useEffect(() => {
-    if (!userId || readOnly) return; // never write while impersonating
-    // Only save once this user+day has actually hydrated (so we never overwrite
-    // real progress with the empty initial state). Match the hydration key's
-    // user+day prefix without depending on its snapshot marker.
-    if (!hydratedKeyRef.current.startsWith(`${userId}:${activeDay}:`)) return;
-    const doneArr = Object.keys(done).filter((k) => done[k]);
+    const doneArr = doneKeys(done);
+    // Gate: hydrated for THIS user+day, not impersonating, and never downgrading
+    // a non-empty saved row to an empty one. See src/lib/dayProgress.ts.
+    if (
+      !shouldPersistDay({
+        hydratedKey: hydratedKeyRef.current,
+        userId,
+        dayId: activeDay,
+        readOnly,
+        localDoneCount: doneArr.length,
+        remoteDoneCount: remoteDoneCountRef.current,
+      })
+    ) {
+      return;
+    }
+    // Whose day this save belongs to, so a late response can't touch another day.
+    const savingOwnerDay = `${userId}:${activeDay}`;
     const save = () => {
       pendingSaveRef.current = null;
-      void supabase.from("day_state").upsert(
-        {
-          user_id: userId,
-          day_id: Number(activeDay),
-          done_lessons: doneArr,
-          current_lesson: lesson,
-          stars,
-        },
-        { onConflict: "user_id,day_id" },
-      );
+      // MUST be awaited: a supabase builder that is never awaited never sends
+      // its request (this silently lost all progress in production).
+      void persist("day_state", () =>
+        supabase.from("day_state").upsert(
+          {
+            user_id: userId!,
+            day_id: Number(activeDay),
+            done_lessons: doneArr,
+            current_lesson: lesson,
+            stars,
+          },
+          { onConflict: "user_id,day_id" },
+        ),
+      ).then((ok) => {
+        // Remember what the row now holds so the no-downgrade rule stays accurate.
+        // Guarded: if the student already moved on, this stale ack must not
+        // describe the day now on screen.
+        if (ok && ownerDayRef.current === savingOwnerDay) {
+          remoteDoneCountRef.current = doneArr.length;
+        }
+      });
     };
     pendingSaveRef.current = save;
     const t = setTimeout(save, 300);
     return () => clearTimeout(t);
   }, [done, stars, lesson, userId, activeDay, readOnly]);
   useEffect(() => {
+    // Flush a debounced save when the page goes away. `pagehide` also covers the
+    // mobile/bfcache case where `beforeunload` never fires; without it, closing
+    // the tab inside the 300ms debounce dropped the student's last action.
+    const flush = () => pendingSaveRef.current?.();
+    window.addEventListener("pagehide", flush);
+    window.addEventListener("beforeunload", flush);
     return () => {
-      pendingSaveRef.current?.();
+      window.removeEventListener("pagehide", flush);
+      window.removeEventListener("beforeunload", flush);
+      flush(); // unmount (route change)
     };
   }, []);
 
@@ -699,7 +816,8 @@ function DayPage() {
     stopFr();
   }, [lesson, plusItemId]);
 
-  const award = (n = 1) => setStars((s) => s + n);
+  // No star bookkeeping while impersonating — the admin's own counter would move.
+  const award = (n = 1) => { if (!readOnly) setStars((s) => s + n); };
   const complete = (k: LessonKey) => {
     if (readOnly) return; // impersonating: never alter a student's progress
     setDone((d) => ({ ...d, [k]: true }));
@@ -710,7 +828,10 @@ function DayPage() {
       // para que el progreso y las estrellas no se pierdan si el alumno
       // cierra o refresca antes de pulsar el botón manual.
       const dayNum = Number(activeDay);
-      if (user && !persistedDays.includes(dayNum)) {
+      // `completionDays` (day_completions only), not the union: the union now
+      // includes défi days, which would skip this backfill and with it the
+      // +2 ⭐ day-completion award.
+      if (user && !completionDays.includes(dayNum)) {
         markDayCompleted(user.id, dayNum, activeWeek)
           .then(() => refreshDays())
           .catch(() => { /* ignore duplicates */ });
@@ -1313,9 +1434,13 @@ function DayCompleteBlock({ dayId, nextDayId, nextDayLabel, onGoNextDay, readOnl
   onGoNextDay: () => void;
 }) {
   const { user } = useAuth();
-  const { days, refresh } = useDayCompletions();
+  const { rows, refresh } = useDayCompletions();
   const dayNum = Number(dayId);
-  const alreadyMarked = days.includes(dayNum);
+  // Deliberately `rows` (day_completions) and NOT the combined `days` union:
+  // this button is what CREATES a day_completions row (and fires its +2 ⭐
+  // trigger). Using the union would hide the button for any day the student had
+  // only submitted a défi for, so those stars could never be earned.
+  const alreadyMarked = rows.some((r) => r.day_id === dayNum);
   const [saving, setSaving] = useState(false);
 
   async function handleMark() {
