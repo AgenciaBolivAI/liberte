@@ -19,7 +19,7 @@ import { COUNTRY_CODES } from "@/lib/country-codes";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/profile")({
-  head: () => ({ meta: [{ title: "Mi perfil — Liberté" }] }),
+  head: () => ({ meta: [{ title: "Mon profil — Liberté" }] }),
   component: ProfilePage,
 });
 
@@ -86,9 +86,9 @@ function ProfilePage() {
         .eq("id", user.id);
       if (dbErr) throw dbErr;
       await refreshAvatar();
-      toast.success("¡Foto actualizada!");
+      toast.success("Photo mise à jour !");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "No se pudo subir la foto.");
+      toast.error(err instanceof Error ? err.message : "Impossible de téléverser la photo.");
     } finally {
       setUploading(false);
       if (fileRef.current) fileRef.current.value = "";
@@ -116,7 +116,7 @@ function ProfilePage() {
       toast.success("Perfil actualizado");
       setEditing(false);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "No se pudo guardar.");
+      toast.error(err instanceof Error ? err.message : "Impossible d’enregistrer.");
     } finally {
       setSaving(false);
     }
@@ -147,7 +147,7 @@ function ProfilePage() {
                   type="button"
                   onClick={() => fileRef.current?.click()}
                   disabled={uploading}
-                  aria-label="Cambiar foto de perfil"
+                  aria-label="Changer la photo de profil"
                   className="absolute -bottom-1 -right-1 flex h-9 w-9 items-center justify-center rounded-full border-2 border-card bg-blue text-white shadow-card transition hover:bg-navy disabled:opacity-70"
                 >
                   {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
@@ -162,52 +162,52 @@ function ProfilePage() {
               </div>
               {!editing ? (
                 <Button onClick={() => setEditing(true)} className="mt-14 gap-2 bg-blue text-white hover:bg-navy">
-                  <Pencil className="h-4 w-4" /> Editar datos
+                  <Pencil className="h-4 w-4" /> Modifier mes infos
                 </Button>
               ) : (
                 <div className="mt-14 flex gap-2">
                   <Button onClick={() => setEditing(false)} variant="outline" className="gap-2">
-                    <X className="h-4 w-4" /> Cancelar
+                    <X className="h-4 w-4" /> Annuler
                   </Button>
                   <Button onClick={handleSave} disabled={saving} className="gap-2 bg-blue text-white hover:bg-navy">
-                    {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Guardar
+                    {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Enregistrer
                   </Button>
                 </div>
               )}
             </div>
 
             <h1 className="mt-4 font-display text-3xl font-extrabold text-navy">{displayName}</h1>
-            <p className="text-sm text-muted-foreground">Inscrita el {enrolled}</p>
+            <p className="text-sm text-muted-foreground">Inscrit(e) le {enrolled}</p>
 
             {!editing ? (
               <div className="mt-6 grid gap-4 sm:grid-cols-2">
-                <Field label="Nombre completo" value={profile?.full_name || displayName} />
+                <Field label="Nom complet" value={profile?.full_name || displayName} />
                 <Field label="Email" value={email} />
-                <Field label="Teléfono" value={profile?.phone || "—"} />
-                <Field label="Nacionalidad" value={profile?.nationality || "—"} />
-                <Field label="País de residencia" value={profile?.country_residence || "—"} />
-                <Field label="Fecha de nacimiento" value={birthDisplay} />
-                <Field label="Idioma materno" value={profile?.mother_tongue || "—"} />
-                <Field label="Objetivo" value={profile?.objective || "—"} />
+                <Field label="Téléphone" value={profile?.phone || "—"} />
+                <Field label="Nationalité" value={profile?.nationality || "—"} />
+                <Field label="Pays de résidence" value={profile?.country_residence || "—"} />
+                <Field label="Date de naissance" value={birthDisplay} />
+                <Field label="Langue maternelle" value={profile?.mother_tongue || "—"} />
+                <Field label="Objectif" value={profile?.objective || "—"} />
               </div>
             ) : (
               <div className="mt-6 grid gap-4 sm:grid-cols-2">
-                <EditField label="Nombre completo">
+                <EditField label="Nom complet">
                   <Input value={dFullName} onChange={(e) => setDFullName(e.target.value)} />
                 </EditField>
                 <EditField label="Email">
                   <Input value={email} disabled />
                 </EditField>
-                <EditField label="Teléfono">
+                <EditField label="Téléphone">
                   <Input value={dPhone} onChange={(e) => setDPhone(e.target.value)} placeholder="+52 55 1234 5678" />
                 </EditField>
-                <EditField label="Nacionalidad">
+                <EditField label="Nationalité">
                   <Input value={dNationality} onChange={(e) => setDNationality(e.target.value)} placeholder="Mexicana" />
                 </EditField>
-                <EditField label="País de residencia">
+                <EditField label="Pays de résidence">
                   <Select value={dCountry} onValueChange={setDCountry}>
                     <SelectTrigger>
-                      <SelectValue placeholder="Selecciona un país" />
+                      <SelectValue placeholder="Choisis un pays" />
                     </SelectTrigger>
                     <SelectContent>
                       {COUNTRY_CODES.map((c) => (
@@ -218,14 +218,14 @@ function ProfilePage() {
                     </SelectContent>
                   </Select>
                 </EditField>
-                <EditField label="Fecha de nacimiento">
+                <EditField label="Date de naissance">
                   <Popover>
                     <PopoverTrigger asChild>
                       <Button
                         variant="outline"
                         className={cn("w-full justify-start text-left font-normal", !dBirth && "text-muted-foreground")}
                       >
-                        {dBirth ? format(dBirth, "d 'de' MMMM, yyyy", { locale: es }) : "Elegir fecha"}
+                        {dBirth ? format(dBirth, "d 'de' MMMM, yyyy", { locale: es }) : "Choisir une date"}
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0" align="start">
@@ -242,11 +242,11 @@ function ProfilePage() {
                     </PopoverContent>
                   </Popover>
                 </EditField>
-                <EditField label="Idioma materno">
+                <EditField label="Langue maternelle">
                   <Input value={dMotherTongue} onChange={(e) => setDMotherTongue(e.target.value)} placeholder="Español" />
                 </EditField>
-                <EditField label="Objetivo">
-                  <Input value={dObjective} onChange={(e) => setDObjective(e.target.value)} placeholder="Nivel B1 en 6 meses" />
+                <EditField label="Objectif">
+                  <Input value={dObjective} onChange={(e) => setDObjective(e.target.value)} placeholder="Niveau B1 en 6 mois" />
                 </EditField>
               </div>
             )}

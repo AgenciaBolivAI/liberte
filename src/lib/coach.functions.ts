@@ -137,6 +137,8 @@ export type WeekAnalytics = {
   misses: number;
   accuracy: number | null;
   stars: number;
+  /** Accumulated visible time inside this week's days (day_state.seconds_spent). */
+  secondsSpent: number;
   /** Most recent activity anywhere in this week (ISO) — spot stalled students. */
   lastActivityAt: string | null;
   status: "pending" | "in_progress" | "evaluated" | "complete";
@@ -172,7 +174,7 @@ export const getStudentAnalytics = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const uid = data.userId;
 
-    const [profile, completions, defis, weekly, activities, stars, tutor] = await Promise.all([
+    const [profile, completions, defis, weekly, activities, stars, tutor, dayState] = await Promise.all([
       supabaseAdmin.from("profiles").select("id, full_name, email, created_at, approved_at").eq("id", uid).maybeSingle(),
       supabaseAdmin.from("day_completions").select("day_id, completed_at").eq("user_id", uid),
       supabaseAdmin.from("defi_results").select("day_id, score_10, hits, misses, weak_points, created_at").eq("user_id", uid),
@@ -180,6 +182,7 @@ export const getStudentAnalytics = createServerFn({ method: "POST" })
       supabaseAdmin.from("activity_results").select("day_id, aciertos, errores, competence, punto_debil, created_at").eq("user_id", uid),
       supabaseAdmin.from("star_awards").select("amount, source_key, created_at").eq("user_id", uid),
       supabaseAdmin.from("tutor_usage").select("usage_date, message_count").eq("user_id", uid),
+      supabaseAdmin.from("day_state").select("day_id, seconds_spent").eq("user_id", uid),
     ]);
 
     // The star triggers write exactly three key shapes (see the migrations):
@@ -203,6 +206,9 @@ export const getStudentAnalytics = createServerFn({ method: "POST" })
       const wDefis = (defis.data ?? []).filter((r) => inWeek(r.day_id as number));
       const wActs = (activities.data ?? []).filter((r) => inWeek(r.day_id as number));
       const wComp = (completions.data ?? []).filter((r) => inWeek(r.day_id as number));
+      const wSeconds = (dayState.data ?? [])
+        .filter((r) => inWeek(r.day_id as number))
+        .reduce((s, r) => s + (Number(r.seconds_spent) || 0), 0);
       const wEval = (weekly.data ?? []).find((r) => Number(r.week_number) === w) ?? null;
       const wStars = (stars.data ?? []).filter((r) => {
         const key = r.source_key as string | null;
@@ -261,6 +267,7 @@ export const getStudentAnalytics = createServerFn({ method: "POST" })
         misses,
         accuracy: hits + misses > 0 ? Math.round((hits / (hits + misses)) * 100) : null,
         stars: wStars.reduce((s, r) => s + Number(r.amount ?? 0), 0),
+        secondsSpent: wSeconds,
         lastActivityAt,
         status,
         weakPoints,
@@ -280,6 +287,8 @@ export const getStudentAnalytics = createServerFn({ method: "POST" })
       totals: {
         daysDone: allDone.size,
         stars: totalStars,
+        /** Total visible time on the platform, in seconds (client: "time spent"). */
+        secondsSpent: (dayState.data ?? []).reduce((s, r) => s + (Number(r.seconds_spent) || 0), 0),
         weeklyTestsTaken: (weekly.data ?? []).length,
         tutorMessages: (tutor.data ?? []).reduce((s, r) => s + Number(r.message_count ?? 0), 0),
         lastSeen,
@@ -289,4 +298,73 @@ export const getStudentAnalytics = createServerFn({ method: "POST" })
           : null,
       },
     };
+  });
+
+/* ============================================================================
+   Score override + teacher assignment + notifications (teacher suite).
+   ============================================================================ */
+
+/** Coach/admin: manually adjust an AI-graded score (the automatic grading ran
+ *  too strict; see the lenient-rubric prompts). Audited via overridden_by/at. */
+export const overrideScore = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => {
+    const d = input as { userId?: string; kind?: string; targetId?: number; score?: number };
+    if (!d?.userId) throw new Error("userId required");
+    const kind = d.kind === "weekly" ? "weekly" : d.kind === "defi" ? "defi" : null;
+    if (!kind) throw new Error("kind must be 'defi' or 'weekly'");
+    const targetId = Number(d.targetId);
+    if (!Number.isInteger(targetId) || targetId < 1) throw new Error("targetId required");
+    const score = Number(d.score);
+    if (!Number.isFinite(score) || score < 0 || score > 10) throw new Error("score must be 0-10");
+    return { userId: String(d.userId), kind, targetId, score: Math.round(score * 10) / 10 };
+  })
+  .handler(async ({ data, context }) => {
+    const graderId = await assertCoachOrAdmin(context);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const stamp = { overridden_by: graderId, overridden_at: new Date().toISOString() };
+    const { error } =
+      data.kind === "weekly"
+        ? await supabaseAdmin
+            .from("weekly_evaluations")
+            .update({ weekly_score: data.score, ...stamp })
+            .eq("user_id", data.userId)
+            .eq("week_number", data.targetId)
+        : await supabaseAdmin
+            .from("defi_results")
+            .update({ score_10: data.score, ...stamp })
+            .eq("user_id", data.userId)
+            .eq("day_id", data.targetId);
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
+
+/** Admin/coach: assign (or clear) a student's teacher — weekly reports and
+ *  activity notifications route to this coach (admins always see everything). */
+export const setAssignedCoach = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => {
+    const d = input as { userId?: string; coachId?: string | null };
+    if (!d?.userId) throw new Error("userId required");
+    return { userId: String(d.userId), coachId: d.coachId ? String(d.coachId) : null };
+  })
+  .handler(async ({ data, context }) => {
+    await assertCoachOrAdmin(context);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    if (data.coachId) {
+      // The assignee must actually hold a staff role.
+      const { data: role } = await supabaseAdmin
+        .from("user_roles")
+        .select("user_id")
+        .eq("user_id", data.coachId)
+        .in("role", ["coach", "admin"])
+        .limit(1);
+      if (!role?.length) throw new Error("La persona asignada debe tener rol de coach o admin");
+    }
+    const { error } = await supabaseAdmin
+      .from("profiles")
+      .update({ assigned_coach: data.coachId })
+      .eq("id", data.userId);
+    if (error) throw new Error(error.message);
+    return { ok: true };
   });

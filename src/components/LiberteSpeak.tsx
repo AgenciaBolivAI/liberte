@@ -34,7 +34,7 @@ export function LiberteSpeak({
     >
       <img
         src={mascot.url}
-        alt="Liberté el colibrí"
+        alt="Liberté le colibri"
         className={`${sizes[size].img} shrink-0 bg-transparent object-contain animate-[float_3s_ease-in-out_infinite] drop-shadow-[0_8px_18px_rgba(75,177,236,0.35)]`}
       />
       <div className="flex-1">

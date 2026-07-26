@@ -373,7 +373,7 @@ function WeekPage() {
   if (!user) {
     return (
       <div className="p-6 text-center">
-        <Link to="/liberte-log-in-983749824923465723" className="text-blue underline">Inicia sesión</Link>
+        <Link to="/liberte-log-in-983749824923465723" className="text-blue underline">Connecte-toi</Link>
       </div>
     );
   }
@@ -385,10 +385,10 @@ function WeekPage() {
           <div className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-navy text-white">🎉</div>
           <h1 className="mt-4 font-display text-2xl font-extrabold text-navy">Le défi de la semaine te espera</h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            Termina el <strong>Défi Final del Día {weekNumber * 5}</strong> para abrir <strong>Le défi de la semaine {weekNumber}</strong> y celebrar tu progreso.
+            Termine le <strong>Défi Final du Jour {weekNumber * 5}</strong> pour ouvrir <strong>Le défi de la semaine {weekNumber}</strong> y celebrar tu progreso.
           </p>
           <Button onClick={() => navigate({ to: "/day/$dayId", params: { dayId: String(weekNumber * 5) } })} className="mt-6 bg-gradient-blue text-white">
-            Ir al Día {weekNumber * 5}
+            Aller au Jour {weekNumber * 5}
           </Button>
         </div>
       </div>
@@ -449,7 +449,7 @@ function WeekTest({ weekNumber, studentName, previous }: { weekNumber: number; s
         // 500ms autosave below overwrite a real mid-test row with a blank one.
         if (error) {
           console.error("[week_state] hydrate failed", error.message);
-          toast.error("No pudimos cargar tu test guardado. Recarga la página antes de continuar.");
+          toast.error("Impossible de charger ton test enregistré. Recharge la page avant de continuer.");
           return; // leaves `hydrated` false -> autosave stays disabled
         }
         readOk = true;
@@ -611,18 +611,18 @@ function WeekTest({ weekNumber, studentName, previous }: { weekNumber: number; s
             <p className="text-xs font-bold tracking-widest text-gold uppercase">🎉 Le défi de la semaine</p>
             <h1 className="mt-2 font-display text-4xl font-extrabold text-navy">Semaine {weekNumber} · {monthLabelForWeek(weekNumber)}</h1>
             <p className="mt-3 text-sm text-navy/80">
-              ¡Bravo por llegar hasta aquí! Esta es tu <strong>fiesta de fin de semana</strong>: 4 mini retos cortos (10-12 min)
-              para descubrir todo lo que ya sabes decir en francés. Al terminar recibirás tu <strong>nota semanal</strong>,
-              tu <strong>veredicto cálido</strong> y podrás descargar tu <strong>informe PDF</strong> para tu coach.
+              Bravo d’être arrivé(e) jusqu’ici ! Voici ta <strong>fête de fin de semaine</strong> : 4 mini-défis courts (10-12 min)
+              pour découvrir tout ce que tu sais déjà dire en français. À la fin, tu recevras ta <strong>note de la semaine</strong>,
+              ton <strong>verdict bienveillant</strong> et tu pourras télécharger ton <strong>rapport PDF</strong> pour ton coach.
             </p>
             <ul className="mt-4 space-y-2 text-sm text-navy/90">
-              <li>🔊 Reto 1 · Escucho — 3 audios</li>
-              <li>📖 Reto 2 · Leo — 1 texto + 3 preguntas</li>
-              <li>✍️ Reto 3 · Escribo — 2 tareas</li>
-              <li>🎙️ Reto 4 · Hablo — 2 grabaciones</li>
+              <li>🔊 Défi 1 · J’écoute — 3 audios</li>
+              <li>📖 Défi 2 · Je lis — 1 texte + 3 questions</li>
+              <li>✍️ Défi 3 · J’écris — 2 tâches</li>
+              <li>🎙️ Défi 4 · Je parle — 2 enregistrements</li>
             </ul>
             <Button onClick={() => setBlock("CO")} className="mt-6 bg-gradient-blue text-white font-extrabold">
-              ¡Comenzar mi Fête! <ArrowRight className="ml-2 h-4 w-4" />
+              Commencer ma Fête ! <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
           </div>
         )}
@@ -651,7 +651,7 @@ function WeekTest({ weekNumber, studentName, previous }: { weekNumber: number; s
           <div className="rounded-3xl border border-border bg-white p-10 text-center shadow-card">
             <Loader2 className="mx-auto h-10 w-10 animate-spin text-blue" />
             <p className="mt-4 font-display text-lg font-extrabold text-navy">{busyMsg || "Preparando tu Fête…"}</p>
-            <p className="mt-1 text-xs text-muted-foreground">Puede tardar un minuto — no cierres esta pestaña.</p>
+            <p className="mt-1 text-xs text-muted-foreground">Ça peut prendre une minute — ne ferme pas cet onglet.</p>
           </div>
         )}
         {block === "result" && shown && (
@@ -680,7 +680,7 @@ function BlockCO({ items, answers, setAnswers, onNext }: { items: CoItem[]; answ
   const done = answers.every((a) => a >= 0);
   return (
     <div className="space-y-6">
-      <SectionHeader eyebrow="Reto 1" title="🔊 Escucho" subtitle="Escucha (máx. 2 veces) y elige la respuesta." />
+      <SectionHeader eyebrow="Défi 1" title="🔊 J’écoute" subtitle="Écoute (2 fois max.) et choisis la réponse." />
       {items.map((it, i) => (
         <div key={i} className="rounded-2xl border border-border bg-white p-5 shadow-soft">
           <div className="flex items-center gap-3">
@@ -721,7 +721,7 @@ function BlockCE({ text, items, answers, setAnswers, onBack, onNext }: { text: s
   const done = answers.every((a) => a >= 0);
   return (
     <div className="space-y-6">
-      <SectionHeader eyebrow="Reto 2" title="📖 Leo" subtitle="Lee el texto y contesta las 3 preguntas." />
+      <SectionHeader eyebrow="Défi 2" title="📖 Je lis" subtitle="Lis le texte et réponds aux 3 questions." />
       <div className="rounded-2xl border-2 border-gold/40 bg-gradient-to-br from-white to-ice p-6 shadow-soft">
         <p className="font-display text-base leading-relaxed text-navy">{text}</p>
       </div>
@@ -752,10 +752,10 @@ function BlockPE({ items, answers, setAnswers, onBack, onNext }: { items: PeItem
   const done = answers.every((a) => a.trim().length >= 3);
   return (
     <div className="space-y-6">
-      <SectionHeader eyebrow="Reto 3" title="✍️ Escribo" subtitle="Escribe en francés. La IA corregirá tus dos frases al final." />
+      <SectionHeader eyebrow="Défi 3" title="✍️ J’écris" subtitle="Écris en français. L’IA corrigera tes deux phrases à la fin." />
       {items.map((it, i) => (
         <div key={i} className="rounded-2xl border border-border bg-white p-5 shadow-soft">
-          <p className="text-xs font-bold tracking-widest text-navy/60 uppercase">Tarea {i + 1}</p>
+          <p className="text-xs font-bold tracking-widest text-navy/60 uppercase">Tâche {i + 1}</p>
           <p className="mt-1 font-display text-base font-bold text-navy">{it.prompt}</p>
           <Input
             value={answers[i]}
@@ -778,7 +778,7 @@ function BlockPO({ items, blobs, setBlobs, onBack, onSubmit, busy, error }: {
   const done = blobs.every(Boolean);
   return (
     <div className="space-y-6">
-      <SectionHeader eyebrow="Reto 4" title="🎙️ Hablo" subtitle="Graba tus dos respuestas. La IA analizará tu pronunciación." />
+      <SectionHeader eyebrow="Défi 4" title="🎙️ Je parle" subtitle="Enregistre tes deux réponses. L’IA analysera ta prononciation." />
       {items.map((it, i) => (
         <SpeakingItem
           key={i}
@@ -797,14 +797,14 @@ function BlockPO({ items, blobs, setBlobs, onBack, onSubmit, busy, error }: {
       )}
       <div className="flex flex-wrap items-center justify-between gap-2 pt-2">
         <Button variant="ghost" onClick={onBack} disabled={busy}>
-          <ArrowLeft className="mr-1 h-4 w-4" /> Volver
+          <ArrowLeft className="mr-1 h-4 w-4" /> Retour
         </Button>
         <Button
           onClick={onSubmit}
           disabled={!done || busy}
           className="bg-gradient-to-r from-gold to-[oklch(0.78_0.14_80)] text-navy font-extrabold shadow-card"
         >
-          {busy ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Evaluando…</> : <>Terminar mi Fête <ArrowRight className="ml-2 h-4 w-4" /></>}
+          {busy ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Évaluation…</> : <>Terminer ma Fête <ArrowRight className="ml-2 h-4 w-4" /></>}
         </Button>
       </div>
     </div>
@@ -838,7 +838,7 @@ function SpeakingItem({ index, prompt, expected, blob, onBlob }: {
       setRec(true);
     } catch {
       // Denied/unavailable mic used to reject silently — the button did nothing.
-      toast.error("No pudimos acceder al micrófono. Revisa los permisos del navegador.");
+      toast.error("Impossible d’accéder au micro. Vérifie les autorisations du navigateur.");
     }
   };
   const stop = () => recRef.current?.stop();
@@ -917,7 +917,7 @@ function ResultView({ data, studentName, weekNumber }: {
       <div className="rounded-3xl bg-gradient-to-br from-[oklch(0.32_0.08_265)] to-[oklch(0.42_0.09_265)] p-8 text-white shadow-card">
         <div className="flex items-center gap-2">
           <PartyPopper className="h-6 w-6 text-gold" />
-          <p className="text-xs font-bold tracking-widest text-gold uppercase">Tu veredicto</p>
+          <p className="text-xs font-bold tracking-widest text-gold uppercase">Ton verdict</p>
         </div>
         <h1 className="mt-2 font-display text-4xl font-extrabold">{r.verdict_title}</h1>
         <p className="mt-2 text-white/85">{r.verdict_message}</p>
@@ -937,7 +937,7 @@ function ResultView({ data, studentName, weekNumber }: {
       </div>
 
       <div className="rounded-2xl border border-success/30 bg-success/5 p-5">
-        <p className="font-display text-lg font-extrabold text-success">✨ Mis puntos fuertes</p>
+        <p className="font-display text-lg font-extrabold text-success">✨ Mes points forts</p>
         <ul className="mt-2 space-y-2 text-sm text-navy/90">
           {r.strengths.map((s, i) => (
             <li key={i}><strong>{s.title}</strong> — <em className="text-navy/70">« {s.example} »</em></li>
@@ -959,18 +959,18 @@ function ResultView({ data, studentName, weekNumber }: {
       </div>
 
       <div className="rounded-2xl border border-blue/30 bg-blue/5 p-5">
-        <p className="font-display text-lg font-extrabold text-blue">🎯 Dónde mejorar</p>
+        <p className="font-display text-lg font-extrabold text-blue">🎯 Où m’améliorer</p>
         <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-navy/90">
           {r.improvements.map((im, i) => <li key={i}>{im}</li>)}
         </ul>
       </div>
 
       <div className="rounded-2xl border border-gold/40 bg-gold/10 p-5">
-        <p className="font-display text-lg font-extrabold text-navy">🔊 Mi pronunciación</p>
+        <p className="font-display text-lg font-extrabold text-navy">🔊 Ma prononciation</p>
         <ul className="mt-2 space-y-2 text-sm text-navy/90">
           {r.pronunciation.map((p, i) => (
             <li key={i}>
-              <strong>{p.word}</strong> — sonó: <em>{p.heard}</em> · debe sonar: <em>{p.target}</em>
+              <strong>{p.word}</strong> — entendu : <em>{p.heard}</em> · à viser : <em>{p.target}</em>
               <div className="text-xs text-muted-foreground">💡 {p.tip}</div>
             </li>
           ))}
@@ -980,17 +980,17 @@ function ResultView({ data, studentName, weekNumber }: {
       <div className="rounded-3xl border-2 border-gold/40 bg-white p-6 text-center shadow-card">
         <p className="font-display text-lg font-extrabold text-navy">📄 Descarga tu informe semanal</p>
         <p className="mt-1 text-sm text-muted-foreground">
-          Envía este informe a tu Coach para continuar tu seguimiento personalizado.
+          Envoie ce rapport à ton coach pour continuer ton suivi personnalisé.
         </p>
         <Button
           onClick={download}
           disabled={downloading}
           className="mt-4 bg-gradient-to-r from-gold to-[oklch(0.78_0.14_80)] text-navy font-extrabold shadow-card"
         >
-          {downloading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Generando…</> : <><Download className="mr-2 h-4 w-4" /> Descargar mi informe Semanal</>}
+          {downloading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Génération…</> : <><Download className="mr-2 h-4 w-4" /> Descargar mi informe Semanal</>}
         </Button>
         <p className="mt-4 text-xs text-muted-foreground">
-          Envíalo por WhatsApp a tu coach Alejandra Miranda: <strong className="text-navy">+591 72586663</strong>
+          Envoie-le par WhatsApp à ta coach Alejandra Miranda : <strong className="text-navy">+591 72586663</strong>
         </p>
       </div>
     </div>
@@ -1013,10 +1013,10 @@ function NavButtons({ onBack, onNext, rightDisabled }: { onBack?: () => void; on
   return (
     <div className="flex items-center justify-between pt-2">
       {onBack ? (
-        <Button variant="ghost" onClick={onBack}><ArrowLeft className="mr-1 h-4 w-4" /> Volver</Button>
+        <Button variant="ghost" onClick={onBack}><ArrowLeft className="mr-1 h-4 w-4" /> Retour</Button>
       ) : <span />}
       <Button onClick={onNext} disabled={rightDisabled} className="bg-gradient-blue text-white font-extrabold">
-        Continuar <ArrowRight className="ml-2 h-4 w-4" />
+        Continuer <ArrowRight className="ml-2 h-4 w-4" />
       </Button>
     </div>
   );

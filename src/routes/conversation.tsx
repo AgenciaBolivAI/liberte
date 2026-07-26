@@ -32,7 +32,7 @@ import {
 export const Route = createFileRoute("/conversation")({
   head: () => ({
     meta: [
-      { title: "Tutor de conversación — Liberté" },
+      { title: "Tuteur de conversation — Liberté" },
       {
         name: "description",
         content: "Practica francés conversando con Lib, la tutora IA de Liberté.",
@@ -172,7 +172,7 @@ function ConversationPage() {
       const out = await withTimeout(
         sendTutorMessage({ data: { dayId: activeDay, text, withAudio: useVoice } }),
         45_000,
-        "La respuesta de Lib",
+        "La réponse de Lib",
       );
       setRemaining(out.remaining);
       setSuggestion(out.suggestion);
@@ -202,7 +202,7 @@ function ConversationPage() {
         if (voiceOnRef.current) listenRef.current();
       }
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "No se pudo enviar el mensaje");
+      toast.error(e instanceof Error ? e.message : "Impossible d’envoyer le message");
       setBubbles((b) => (b ?? []).slice(0, -1));
       // In voice mode keep the conversation alive: hand the turn back rather
       // than dropping the student on a dead spinner.
@@ -218,7 +218,7 @@ function ConversationPage() {
     return Promise.race([
       p,
       new Promise<T>((_, rej) =>
-        setTimeout(() => rej(new Error(`${label} tardó demasiado. Inténtalo otra vez.`)), ms),
+        setTimeout(() => rej(new Error(`${label} a pris trop de temps. Réessaie.`)), ms),
       ),
     ]);
   }
@@ -237,7 +237,7 @@ function ConversationPage() {
       },
     });
     if (!ok) {
-      toast.error(recorder.error || "No pudimos acceder al micrófono");
+      toast.error(recorder.error || "Impossible d’accéder au micro");
       setVoicePhase("off");
       voiceOnRef.current = false;
     }
@@ -262,7 +262,7 @@ function ConversationPage() {
       const r = await withTimeout(
         transcribeStage({ data: { audioBase64: b64, mimeType: blob.type || "audio/webm" } }),
         25_000,
-        "La transcripción",
+        "La transcription",
       );
       const said = r.text.trim();
       if (!said) {
@@ -272,7 +272,7 @@ function ConversationPage() {
       await handleSend(said, { voice: true });
     } catch (e) {
       // Never strand the student on a spinner: report and hand the turn back.
-      toast.error(e instanceof Error ? e.message : "No se pudo transcribir el audio");
+      toast.error(e instanceof Error ? e.message : "Impossible de transcrire l’audio");
       listenTurn();
     }
   }
@@ -316,7 +316,7 @@ function ConversationPage() {
         // The transcript goes to the input so the student can review/edit it.
         setInput((prev) => (prev ? `${prev} ${r.text}` : r.text));
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : "No se pudo transcribir el audio");
+        toast.error(e instanceof Error ? e.message : "Impossible de transcrire l’audio");
       } finally {
         setTranscribing(false);
       }
@@ -370,14 +370,14 @@ function ConversationPage() {
             <header className="flex items-center gap-3 border-b border-border p-4">
               <img src={mascot.url} alt="Lib" className="h-10 w-10 object-contain" />
               <div className="min-w-0 flex-1">
-                <p className="font-display text-sm font-extrabold text-navy">Lib · Tutora de conversación</p>
+                <p className="font-display text-sm font-extrabold text-navy">Lib · Tutrice de conversation</p>
                 <p className="truncate text-xs text-muted-foreground">
                   Día {activeDay} · {TUTOR_DAY_TOPICS[activeDay]}
                 </p>
               </div>
               {allDone && (
                 <span className="rounded-full bg-success/10 px-3 py-1 text-xs font-bold text-success">
-                  🎉 ¡Escena completada!
+                  🎉 Scène terminée !
                 </span>
               )}
             </header>
@@ -398,7 +398,7 @@ function ConversationPage() {
                         <span className="ml-2 inline-flex translate-y-0.5 gap-2">
                           <button
                             onClick={() => speakFr(m.content)}
-                            aria-label="Escuchar en francés"
+                            aria-label="Écouter en français"
                             className="text-blue hover:text-navy"
                           >
                             <Volume2 className="h-4 w-4" />
@@ -406,7 +406,7 @@ function ConversationPage() {
                           {m.translation && (
                             <button
                               onClick={() => toggleTranslation(i)}
-                              aria-label="Ver traducción"
+                              aria-label="Voir la traduction"
                               className={showTranslation.has(i) ? "text-navy" : "text-blue hover:text-navy"}
                             >
                               <Languages className="h-4 w-4" />
@@ -447,7 +447,7 @@ function ConversationPage() {
             <footer className="border-t border-border p-3">
               {quotaEmpty ? (
                 <p className="rounded-xl bg-ice p-3 text-center text-sm text-navy">
-                  Has usado tus {TUTOR_DAILY_LIMIT} mensajes de hoy. ¡Vuelve mañana! 🌙
+                  Tu as utilisé tes {TUTOR_DAILY_LIMIT} messages du jour. Reviens demain ! 🌙
                 </p>
               ) : voiceOn ? (
                 <div className="flex flex-col items-center gap-3 py-2">
@@ -458,7 +458,7 @@ function ConversationPage() {
                       if (voicePhase === "listening") void finishListening();
                     }}
                     disabled={voicePhase !== "listening"}
-                    aria-label={voicePhase === "listening" ? "He terminado de hablar" : undefined}
+                    aria-label={voicePhase === "listening" ? "J’ai fini de parler" : undefined}
                     className={`relative grid h-20 w-20 place-items-center rounded-full text-white transition ${
                       voicePhase === "listening"
                         ? "bg-red"
@@ -481,19 +481,19 @@ function ConversationPage() {
                   <p className="text-center text-sm font-semibold text-navy">
                     {voicePhase === "listening" && "🎙️ Habla en francés… te escucho"}
                     {voicePhase === "thinking" && "Un instant…"}
-                    {voicePhase === "speaking" && "🔊 Lib está hablando"}
+                    {voicePhase === "speaking" && "🔊 Lib est en train de parler"}
                   </p>
                   <p className="text-center text-xs text-muted-foreground">
                     {voicePhase === "listening"
-                      ? "Cuando dejes de hablar te respondo sola — o toca el micrófono para enviar."
-                      : "Cuando dejes de hablar, te respondo automáticamente."}
+                      ? "Quand tu arrêtes de parler, je te réponds toute seule — ou touche le micro pour envoyer."
+                      : "Quand tu arrêtes de parler, je te réponds automatiquement."}
                   </p>
                   <Button
                     onClick={() => void toggleVoiceMode()}
                     variant="outline"
                     className="rounded-full border-navy/20 text-navy"
                   >
-                    <PhoneOff className="mr-2 h-4 w-4" /> Terminar conversación
+                    <PhoneOff className="mr-2 h-4 w-4" /> Terminer la conversation
                   </Button>
                 </div>
               ) : (
@@ -514,19 +514,19 @@ function ConversationPage() {
                     >
                       <span className="font-bold">{suggestion.fr}</span>
                       <span className="block text-xs italic text-navy/60">{suggestion.es}</span>
-                      <span className="block text-[10px] text-blue">Toca para usar esta frase ↑</span>
+                      <span className="block text-[10px] text-blue">Touche pour utiliser cette phrase ↑</span>
                     </button>
                   )}
                   {readOnly && (
                     <p className="mb-2 text-center text-xs text-navy/60">
-                      👀 Vista de solo lectura — no puedes enviar mensajes como este alumno.
+                      👀 Lecture seule — impossible d’envoyer des messages comme cet élève.
                     </p>
                   )}
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => void handleMic()}
                       disabled={transcribing || sending || readOnly}
-                      aria-label={recorder.recording ? "Detener grabación" : "Grabar audio"}
+                      aria-label={recorder.recording ? "Arrêter l’enregistrement" : "Enregistrer un audio"}
                       className={`grid h-11 w-11 shrink-0 place-items-center rounded-full text-white transition ${
                         recorder.recording ? "animate-pulse bg-red" : "bg-navy hover:bg-navy/85"
                       } disabled:opacity-50`}
@@ -542,8 +542,8 @@ function ConversationPage() {
                     {suggestion && (
                       <button
                         onClick={() => setShowSuggestion((v) => !v)}
-                        aria-label="¿Qué puedo decir?"
-                        title="¿Qué puedo decir?"
+                        aria-label="Que puis-je dire ?"
+                        title="Que puis-je dire ?"
                         className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-gold/20 text-gold transition hover:bg-gold/30"
                       >
                         <Lightbulb className="h-5 w-5" />
@@ -558,14 +558,14 @@ function ConversationPage() {
                           void handleSend();
                         }
                       }}
-                      placeholder={recorder.recording ? "Grabando… habla en francés 🎙️" : "Écris en français…"}
+                      placeholder={recorder.recording ? "Enregistrement… parle en français 🎙️" : "Écris en français…"}
                       disabled={sending || readOnly}
                       className="h-11 rounded-full border-border bg-white"
                     />
                     <Button
                       onClick={() => void handleSend()}
                       disabled={sending || !input.trim() || readOnly}
-                      aria-label="Enviar"
+                      aria-label="Envoyer"
                       className="h-11 w-11 shrink-0 rounded-full bg-gradient-blue p-0 text-white"
                     >
                       <Send className="h-5 w-5" />
@@ -644,13 +644,13 @@ function ConversationPage() {
               onClick={() => void handleReset()}
               className="w-full rounded-2xl border-white/40 bg-white/10 text-white hover:bg-white/20"
             >
-              <RotateCcw className="mr-2 h-4 w-4" /> Nueva conversación
+              <RotateCcw className="mr-2 h-4 w-4" /> Nouvelle conversation
             </Button>
 
             <div className="rounded-3xl border border-white/15 bg-white/10 p-4 text-xs text-white/85">
-              💡 Escribe o usa el micrófono 🎙️. Toca 🔊 para escuchar a Lib y{" "}
-              <Languages className="inline h-3 w-3" /> para ver la traducción. Si te quedas sin
-              palabras, toca la 💡 para una sugerencia. ¡Equivocarse es parte de aprender!
+              💡 Écris ou utilise le micro 🎙️. Touche 🔊 pour écouter Lib et{" "}
+              <Languages className="inline h-3 w-3" /> pour voir la traduction. Si tu es à court de
+              mots, touche la 💡 pour une suggestion. Se tromper fait partie de l’apprentissage !
             </div>
           </aside>
         </div>

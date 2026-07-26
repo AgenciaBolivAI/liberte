@@ -11,13 +11,13 @@ import { Label } from "@/components/ui/label";
 import liberteLogoFull from "@/assets/liberte-logo-full.png.asset.json";
 
 export const Route = createFileRoute("/reset-password")({
-  head: () => ({ meta: [{ title: "Restablecer contraseña — Liberté" }] }),
+  head: () => ({ meta: [{ title: "Réinitialiser le mot de passe — Liberté" }] }),
   component: ResetPasswordPage,
 });
 
 const passwordSchema = z
   .string()
-  .min(8, "La contraseña debe tener al menos 8 caracteres");
+  .min(8, "Le mot de passe doit contenir au moins 8 caractères");
 
 function ResetPasswordPage() {
   const navigate = useNavigate();
@@ -58,17 +58,17 @@ function ResetPasswordPage() {
       return;
     }
     if (password !== confirm) {
-      toast.error("Las contraseñas no coinciden.");
+      toast.error("Les mots de passe ne correspondent pas.");
       return;
     }
     setSaving(true);
     try {
       const { error } = await supabase.auth.updateUser({ password });
       if (error) {
-        toast.error("No pudimos actualizar la contraseña. Pide un nuevo enlace e inténtalo otra vez.");
+        toast.error("Impossible de mettre à jour le mot de passe. Demande un nouveau lien et réessaie.");
         return;
       }
-      toast.success("¡Contraseña actualizada!");
+      toast.success("Mot de passe mis à jour !");
       navigate({ to: "/liberte-plataforma-834798234728482934254-student", replace: true });
     } finally {
       setSaving(false);
@@ -89,7 +89,7 @@ function ResetPasswordPage() {
           className="mt-4 text-2xl font-bold tracking-tight"
           style={{ color: "#1E3A5F", fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif" }}
         >
-          Nueva contraseña
+          Nouveau mot de passe
         </h1>
 
         {checking && (
@@ -101,11 +101,11 @@ function ResetPasswordPage() {
         {!checking && !hasSession && (
           <div className="mt-4 space-y-4">
             <p className="text-sm text-slate-600">
-              Este enlace no es válido o ya expiró. Pide uno nuevo desde la página de inicio de
-              sesión con «¿Olvidaste tu contraseña?».
+              Ce lien n’est pas valide ou a expiré. Demande-en un nouveau depuis la page de
+              connexion avec « Mot de passe oublié ? ».
             </p>
             <Button asChild className="h-11 w-full rounded-xl" style={{ backgroundColor: "#4FB2EA", color: "white" }}>
-              <Link to="/liberte-log-in-983749824923465723">Ir a iniciar sesión</Link>
+              <Link to="/liberte-log-in-983749824923465723">Aller à la connexion</Link>
             </Button>
           </div>
         )}
@@ -114,7 +114,7 @@ function ResetPasswordPage() {
           <form onSubmit={handleSubmit} className="mt-6 space-y-4">
             <div className="space-y-1.5">
               <Label htmlFor="new-password" className="text-slate-700">
-                Nueva contraseña
+                Nouveau mot de passe
               </Label>
               <div className="relative">
                 <Input
@@ -132,7 +132,7 @@ function ResetPasswordPage() {
                   type="button"
                   onClick={() => setShowPass((v) => !v)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                  aria-label={showPass ? "Ocultar contraseña" : "Mostrar contraseña"}
+                  aria-label={showPass ? "Masquer le mot de passe" : "Afficher le mot de passe"}
                 >
                   {showPass ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
@@ -141,7 +141,7 @@ function ResetPasswordPage() {
 
             <div className="space-y-1.5">
               <Label htmlFor="confirm-password" className="text-slate-700">
-                Confirma la contraseña
+                Confirme le mot de passe
               </Label>
               <Input
                 id="confirm-password"
@@ -162,7 +162,7 @@ function ResetPasswordPage() {
               className="mt-2 h-11 w-full rounded-xl text-base font-semibold shadow-md transition-all hover:shadow-lg"
               style={{ backgroundColor: "#4FB2EA", color: "white" }}
             >
-              {saving ? <Loader2 className="h-5 w-5 animate-spin" /> : "Guardar contraseña"}
+              {saving ? <Loader2 className="h-5 w-5 animate-spin" /> : "Enregistrer le mot de passe"}
             </Button>
           </form>
         )}

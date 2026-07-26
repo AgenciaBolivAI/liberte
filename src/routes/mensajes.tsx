@@ -9,7 +9,7 @@ import { getConversations, getContacts } from "@/lib/messaging.functions";
 import { MessageThread } from "@/components/MessageThread";
 
 export const Route = createFileRoute("/mensajes")({
-  head: () => ({ meta: [{ title: "Mensajes — Liberté" }] }),
+  head: () => ({ meta: [{ title: "Messages — Liberté" }] }),
   component: MessagesPage,
 });
 
@@ -49,7 +49,7 @@ function MessagesPage() {
         setActive((a) => a ?? (list[0] ? { otherId: list[0].otherId, name: list[0].name } : null));
       })
       .catch((e) =>
-        setError(e instanceof Error ? e.message : "No se pudieron cargar los mensajes"),
+        setError(e instanceof Error ? e.message : "Impossible de charger les messages"),
       );
   }, []);
 
@@ -101,7 +101,7 @@ function MessagesPage() {
       <input
         value={search}
         onChange={(e) => setSearch(e.target.value)}
-        placeholder="Buscar profe o compañero…"
+        placeholder="Chercher un prof ou un camarade…"
         className="w-full rounded-2xl border border-white/20 bg-white/95 py-2.5 pl-9 pr-3 text-sm text-navy placeholder:text-navy/40 focus:border-blue focus:outline-none"
       />
     </div>
@@ -133,8 +133,8 @@ function MessagesPage() {
     >
       <TopNav />
       <main className="mx-auto max-w-4xl px-4 py-8 sm:px-6 sm:py-10">
-        <h1 className="font-display text-3xl font-extrabold text-white">✉️ Mensajes</h1>
-        <p className="mt-1 text-sm text-white/80">Conversaciones con tu equipo y tus compañeros de Liberté.</p>
+        <h1 className="font-display text-3xl font-extrabold text-white">✉️ Messages</h1>
+        <p className="mt-1 text-sm text-white/80">Conversations avec ton équipe et tes camarades de Liberté.</p>
 
         {convs === null && !error ? (
           <div className="mt-8 grid place-items-center">
@@ -147,12 +147,12 @@ function MessagesPage() {
           <div className="mt-6 rounded-2xl border border-red/40 bg-white p-6 text-center text-sm text-red">
             {error}{" "}
             <button onClick={load} className="font-bold underline">
-              Reintentar
+              Réessayer
             </button>
           </div>
         ) : convs !== null && convs.length === 0 && !active ? (
           <div className="mt-6 rounded-2xl border border-white/15 bg-white p-6 text-sm text-muted-foreground">
-            <p className="text-center">Aún no tienes mensajes. Empieza una conversación 💌</p>
+            <p className="text-center">Pas encore de messages. Commence une conversation 💌</p>
             <div className="mx-auto mt-4 max-w-sm">{searchBox}</div>
             {shownContacts.length > 0 ? (
               <ul className="mx-auto mt-3 grid max-w-sm gap-1.5">{shownContacts.map((s) => contactRow(s, true))}</ul>
@@ -189,7 +189,7 @@ function MessagesPage() {
                 ))}
                 {shownContacts.map((s) => contactRow(s, true))}
                 {search.trim() && shownContacts.length === 0 && (
-                  <li className="px-1 py-2 text-center text-xs text-white/70">Sin resultados.</li>
+                  <li className="px-1 py-2 text-center text-xs text-white/70">Aucun résultat.</li>
                 )}
               </ul>
             </div>

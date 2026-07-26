@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { ChevronDown, ChevronRight, Loader2, Plus, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { getRichDay, saveRichDay, deleteRichDay, blankRichDay } from "@/lib/rich-content";
+import { getRichDay, saveRichDay, deleteRichDay, blankRichDay, toYouTubeEmbed } from "@/lib/rich-content";
 import type { RichDay, Week34Meta } from "@/data/week34.meta";
 import type { MCQ, WeekReading, WeekListen, WeekSpeak, WeekWrite, WeekDay } from "@/data/week34";
 
@@ -285,7 +285,13 @@ export function RichDayEditor({ dayId, onBack }: { dayId: number; onBack: () => 
         Recuerda pulsar <b>Guardar cambios</b> al final.
       </p>
 
-      <Section title="Presentación del día" emoji="🏷️" defaultOpen>
+      {/* Sections follow the lesson order the student sees:
+          1 Gym cérébral · 2 Bienvenue · 3 Vocabulaire · 4 Les Clés · 5 Défi final */}
+      <Section title="1 · Gym cérébral" emoji="🧠" defaultOpen>
+        <Field label="Video Gym cérébral (pega cualquier enlace de YouTube — se convierte solo)" value={rich.gym} onChange={(v) => setRich({ ...rich, gym: toYouTubeEmbed(v) })} />
+      </Section>
+
+      <Section title="2 · Bienvenue — presentación del día" emoji="🎬">
         <div className="grid gap-2 sm:grid-cols-2">
           <Field label="Etiqueta (menú lateral)" value={m.label} onChange={(v) => setMeta({ label: v })} placeholder="Jour 11 · Demander son chemin" />
           <Field label="Semana (número)" value={String(m.week)} onChange={(v) => setMeta({ week: Number(v) || m.week })} />
@@ -296,10 +302,19 @@ export function RichDayEditor({ dayId, onBack }: { dayId: number; onBack: () => 
         </div>
         <Field label="Descripción (SEO)" value={m.headDesc} onChange={(v) => setMeta({ headDesc: v })} textarea rows={2} />
         <Field label="Mensaje de bienvenida (mascota Lib)" value={m.intro} onChange={(v) => setMeta({ intro: v })} textarea rows={2} />
-        <Field label="Video Gym cérébral (URL embed de YouTube)" value={rich.gym} onChange={(v) => setRich({ ...rich, gym: v })} />
+        <Field
+          label="🎬 Video de presentación (opcional — pega el enlace de YouTube, mejor «oculto»)"
+          value={rich.introVideo ?? ""}
+          onChange={(v) => setRich({ ...rich, introVideo: toYouTubeEmbed(v) || undefined })}
+        />
       </Section>
 
-      <Section title="Vocabulario" emoji="📚">
+      <Section title="3 · Vocabulaire — palabras" emoji="📚">
+        <Field
+          label="🎬 Video de vocabulario (opcional — enlace de YouTube)"
+          value={rich.vocabVideo ?? ""}
+          onChange={(v) => setRich({ ...rich, vocabVideo: toYouTubeEmbed(v) || undefined })}
+        />
         <ItemList
           label="Palabras" items={rich.vocabulary} onChange={(vocabulary) => setRich({ ...rich, vocabulary })}
           blank={() => ({ fr: "", es: "", example: "", emoji: "📝" })} addLabel="Añadir palabra"
@@ -314,7 +329,7 @@ export function RichDayEditor({ dayId, onBack }: { dayId: number; onBack: () => 
         />
       </Section>
 
-      <Section title="Flashcards (mini-juego)" emoji="🃏">
+      <Section title="3 · Vocabulaire — flashcards" emoji="🃏">
         <ItemList
           label="Tarjetas" items={rich.flashQuiz} onChange={(flashQuiz) => setRich({ ...rich, flashQuiz })}
           blank={() => ({ emoji: "🃏", concept: "", options: ["", "", ""], answer: 0 })} addLabel="Añadir tarjeta"
@@ -330,7 +345,25 @@ export function RichDayEditor({ dayId, onBack }: { dayId: number; onBack: () => 
         />
       </Section>
 
-      <Section title="Gramática — Les clés" emoji="🗝️">
+
+      <Section title="3 · Vocabulaire — juegos" emoji="🎯">
+        <ItemList<WeekReading>
+          label="📖 Lecturas" items={rich.vocabGames.reading} blank={blankReading}
+          onChange={(reading) => setVG({ reading })} addLabel="Añadir lectura"
+          render={(it, patch) => <ReadingEditor value={it} onChange={patch} />}
+        />
+        <GamesEditor
+          listening={rich.vocabGames.listening} speaking={rich.vocabGames.speaking} writing={rich.vocabGames.writing}
+          onListening={(listening) => setVG({ listening })} onSpeaking={(speaking) => setVG({ speaking })} onWriting={(writing) => setVG({ writing })}
+        />
+      </Section>
+
+      <Section title="4 · Les Clés — gramática" emoji="🗝️">
+        <Field
+          label="🎬 Video de gramática (opcional — enlace de YouTube)"
+          value={rich.clesVideo ?? ""}
+          onChange={(v) => setRich({ ...rich, clesVideo: toYouTubeEmbed(v) || undefined })}
+        />
         <ItemList
           label="Estructuras" items={rich.grammar} onChange={(grammar) => setRich({ ...rich, grammar })}
           blank={() => ({ formula: "", use: "" })} addLabel="Añadir estructura"
@@ -343,19 +376,7 @@ export function RichDayEditor({ dayId, onBack }: { dayId: number; onBack: () => 
         />
       </Section>
 
-      <Section title="Juegos de Vocabulario" emoji="🎯">
-        <ItemList<WeekReading>
-          label="📖 Lecturas" items={rich.vocabGames.reading} blank={blankReading}
-          onChange={(reading) => setVG({ reading })} addLabel="Añadir lectura"
-          render={(it, patch) => <ReadingEditor value={it} onChange={patch} />}
-        />
-        <GamesEditor
-          listening={rich.vocabGames.listening} speaking={rich.vocabGames.speaking} writing={rich.vocabGames.writing}
-          onListening={(listening) => setVG({ listening })} onSpeaking={(speaking) => setVG({ speaking })} onWriting={(writing) => setVG({ writing })}
-        />
-      </Section>
-
-      <Section title="Juegos de Les clés" emoji="🔑">
+      <Section title="4 · Les Clés — juegos" emoji="🔑">
         <div className="rounded-xl border border-border bg-white/60 p-2.5">
           <p className="mb-1 text-[11px] font-bold tracking-wide text-navy/60 uppercase">📖 Lectura de gramática</p>
           <ReadingEditor value={rich.clesReading} onChange={(clesReading) => setRich({ ...rich, clesReading })} />
@@ -366,7 +387,7 @@ export function RichDayEditor({ dayId, onBack }: { dayId: number; onBack: () => 
         />
       </Section>
 
-      <Section title="Défi final" emoji="🏆">
+      <Section title="5 · Défi final" emoji="🏆">
         <div className="grid gap-2 sm:grid-cols-2">
           <Field label="Título del défi" value={m.defiTitle} onChange={(v) => setMeta({ defiTitle: v })} />
           <Field label="Avatar (emoji)" value={m.defiAvatar} onChange={(v) => setMeta({ defiAvatar: v })} />

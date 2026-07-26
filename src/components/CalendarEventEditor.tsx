@@ -41,6 +41,10 @@ export function CalendarEventEditor({ init, onClose, onSaved }: {
     zoomUrl: editing?.zoomUrl ?? "",
     zoomId: editing?.zoomId ?? "",
     description: editing?.desc ?? "",
+    // Recurrence (create only): total number of weekly occurrences, 1 = single
+    // event. "Repetir semanalmente" inserts N rows offset by 7 days so the
+    // teacher doesn't have to create each class of the month by hand.
+    repeatWeeks: 1,
   });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -68,10 +72,27 @@ export function CalendarEventEditor({ init, onClose, onSaved }: {
     };
     setBusy(true);
     try {
-      const { error } = editing
-        ? await supabase.from("calendar_events").update(payload).eq("id", editing.id)
-        : await supabase.from("calendar_events").insert({ ...payload, material_to: "/clasesenvivo" });
-      if (error) throw new Error(error.message);
+      if (editing) {
+        const { error } = await supabase.from("calendar_events").update(payload).eq("id", editing.id);
+        if (error) throw new Error(error.message);
+      } else {
+        // One row per weekly occurrence. The title gets an occurrence counter
+        // when repeating, so "Clase EUROPA #9" → "#9", "#10", … stays readable.
+        const weeks = Math.max(1, Math.min(12, Number(form.repeatWeeks) || 1));
+        const baseNum = /#(\d+)\s*$/.exec(payload.title);
+        const rows = Array.from({ length: weeks }, (_, i) => ({
+          ...payload,
+          title: weeks === 1
+            ? payload.title
+            : baseNum
+              ? payload.title.replace(/#\d+\s*$/, `#${Number(baseNum[1]) + i}`)
+              : `${payload.title} (${i + 1}/${weeks})`,
+          start_utc: new Date(start.getTime() + i * 7 * 86_400_000).toISOString(),
+          material_to: "/clasesenvivo",
+        }));
+        const { error } = await supabase.from("calendar_events").insert(rows);
+        if (error) throw new Error(error.message);
+      }
       onSaved();
     } catch (e2) {
       setErr(e2 instanceof Error ? e2.message : "No se pudo guardar el evento");
@@ -159,6 +180,24 @@ export function CalendarEventEditor({ init, onClose, onSaved }: {
             value={form.description}
             onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
           />
+          {!editing && (
+            <label className="text-xs font-semibold text-navy/70">
+              Repetir semanalmente (número de semanas; 1 = evento único)
+              <Input
+                type="number"
+                min={1}
+                max={12}
+                value={form.repeatWeeks}
+                onChange={(e) => setForm((f) => ({ ...f, repeatWeeks: Number(e.target.value) }))}
+                className="mt-1"
+              />
+              {Number(form.repeatWeeks) > 1 && (
+                <span className="mt-1 block font-normal text-navy/60">
+                  Se crearán {Math.max(1, Math.min(12, Number(form.repeatWeeks) || 1))} eventos, uno por semana, a la misma hora.
+                </span>
+              )}
+            </label>
+          )}
 
           {err && <p className="text-xs text-red">{err}</p>}
 

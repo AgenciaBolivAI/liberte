@@ -141,6 +141,36 @@ export const saveWeek2Result = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) => input as Week2Report)
   .handler(async ({ data, context }) => {
     const { userId } = context;
+    // A real (small) AI report so week 2 has parity with every other week: the
+    // coach panel and the auto-sent teacher message read `ai_report`, which used
+    // to be `{}` here — the only week with an empty report.
+    const weeklyScore = data.totalScore / 10;
+    const topics = Object.entries(data.byTopic ?? {})
+      .map(([k, v]) => `${k}: ${v.correct}/${v.total}`)
+      .join(" · ");
+    const verdict =
+      weeklyScore >= 8.5 ? "EXCELLENCE" : weeklyScore >= 6 ? "TRÈS BIEN" : weeklyScore >= 4 ? "EN CAMINO" : "COURAGE";
+    const weakTopics = Object.entries(data.byTopic ?? {})
+      .filter(([, v]) => v.total > 0 && v.correct / v.total < 0.6)
+      .map(([k]) => k);
+    const aiReport = {
+      verdict_key: verdict.toLowerCase().replace(" ", "_"),
+      verdict_title: verdict,
+      verdict_message: `Semana 2 completada con ${data.totalScore}/100.`,
+      competence_scores: {
+        CO: Math.round((data.quizScore / 40) * 100) / 10,
+        CE: Math.round((data.vocabScore / 20) * 100) / 10,
+        PE: Math.round((data.writingScore / 30) * 100) / 10,
+        PO: Math.round((data.roleplayScore / 10) * 100) / 10,
+      },
+      strengths: [],
+      common_errors: [],
+      improvements: weakTopics.map((t) => `Repasar ${t.replace(/_/g, " ")}`),
+      pronunciation: [],
+      coach_summary:
+        `Défi Semana 2: ${data.totalScore}/100 (quiz ${data.quizScore}/40, vocab ${data.vocabScore}/20, ` +
+        `escritura ${data.writingScore}/30, roleplay ${data.roleplayScore}/10). Por tema: ${topics || "—"}.`,
+    };
     const payload = {
       user_id: userId,
       week_number: 2,
@@ -152,8 +182,8 @@ export const saveWeek2Result = createServerFn({ method: "POST" })
         byTopic: data.byTopic as unknown,
       } as unknown as Record<string, unknown>,
       test_score: data.totalScore,
-      weekly_score: data.totalScore / 10,
-      ai_report: {} as Record<string, unknown>,
+      weekly_score: weeklyScore,
+      ai_report: aiReport as unknown as Record<string, unknown>,
       responses: (data.responses ?? {}) as Record<string, unknown>,
     };
     // Service role: this row fires the weekly star trigger; students must not
@@ -163,6 +193,13 @@ export const saveWeek2Result = createServerFn({ method: "POST" })
       .from("weekly_evaluations")
       .upsert(payload as never, { onConflict: "user_id,week_number" });
     if (error) throw new Error(error.message);
+    // Same automatic delivery to the teacher as every other week (best-effort).
+    try {
+      const { sendWeeklyReportToTeacher } = await import("@/lib/week.functions");
+      await sendWeeklyReportToTeacher(supabaseAdmin, userId, 2, weeklyScore, aiReport);
+    } catch (e) {
+      console.error("[week2] report delivery failed", e);
+    }
     return { ok: true };
   });
 

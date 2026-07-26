@@ -18,6 +18,12 @@ export type WeekDay = {
   defiSteps: { serveur: string; hint: string; example: string }[];
   defiCriteria: string[];
   tutor: { role: string; opener_fr: string; opener_es: string; objectives: string[]; topic: string };
+  /** Optional per-section YouTube embeds (client #3/#8: the teacher records the
+   *  class, uploads unlisted to YouTube, pastes the link in the editor). All
+   *  optional so existing authored rows stay valid untouched. */
+  introVideo?: string;
+  vocabVideo?: string;
+  clesVideo?: string;
 };
 
 export const WEEK34: Record<string, WeekDay> = {

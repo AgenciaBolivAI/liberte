@@ -46,7 +46,7 @@ export function MessageThread({
       setMsgs(res.messages as Msg[]);
       setLoadErr("");
     } catch (e) {
-      setLoadErr(e instanceof Error ? e.message : "No se pudo cargar la conversación");
+      setLoadErr(e instanceof Error ? e.message : "Impossible de charger la conversation");
     }
     setLoading(false);
   }, [otherUserId]);
@@ -107,7 +107,7 @@ export function MessageThread({
       await load();
       onSent?.();
     } catch (e2) {
-      toast.error(e2 instanceof Error ? e2.message : "No se pudo enviar el mensaje");
+      toast.error(e2 instanceof Error ? e2.message : "Impossible d’envoyer le message");
     } finally {
       setSending(false);
     }
@@ -118,7 +118,7 @@ export function MessageThread({
       const { url } = await getAttachmentUrl({ data: { messageId: id } });
       window.open(url, "_blank", "noopener");
     } catch {
-      toast.error("No se pudo abrir el adjunto");
+      toast.error("Impossible d’ouvrir la pièce jointe");
     }
   }
 
@@ -131,7 +131,7 @@ export function MessageThread({
         ) : loadErr ? (
           <p className="py-6 text-center text-xs text-red">{loadErr}</p>
         ) : msgs.length === 0 ? (
-          <p className="py-6 text-center text-xs text-muted-foreground">Aún no hay mensajes. Escribe el primero.</p>
+          <p className="py-6 text-center text-xs text-muted-foreground">Pas encore de messages. Écris le premier.</p>
         ) : (
           msgs.map((m) => {
             const mine = m.sender_id === user?.id;
@@ -176,13 +176,13 @@ export function MessageThread({
         <Input
           value={text}
           onChange={(e) => setText(e.target.value)}
-          placeholder={file ? `📎 ${file.name}` : "Escribe un mensaje…"}
+          placeholder={file ? `📎 ${file.name}` : "Écris un message…"}
           className="h-10 rounded-full border-border bg-white"
         />
         <Button
           type="submit"
           disabled={sending || (!text.trim() && !file)}
-          aria-label="Enviar"
+          aria-label="Envoyer"
           className="h-10 w-10 shrink-0 rounded-full bg-gradient-blue p-0 text-white"
         >
           {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}

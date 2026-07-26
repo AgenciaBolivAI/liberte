@@ -6,7 +6,7 @@ import { requireApprovedStudent } from "@/lib/approval";
 
 /* ---------------- Correct one open activity (PE or PO) ---------------- */
 
-const CORRECTOR_SYSTEM = `Eres el corrector de Liberté, un programa de francés para hispanohablantes de nivel A2-B1. Evalúa la respuesta del alumno contra la consigna. Reglas: (1) Prioriza la comunicación: si un francófono lo entendería, es un acierto aunque tenga errores menores. (2) Máximo 2 correcciones, las más importantes. (3) Tono cálido y celebratorio, nunca severo. (4) Responde SOLO en este formato JSON:
+const CORRECTOR_SYSTEM = `Eres el corrector de Liberté, un programa de francés para hispanohablantes de nivel A2-B1. Evalúa la respuesta del alumno contra la consigna. Reglas: (1) Prioriza la comunicación: si un francófono lo entendería, es un acierto aunque tenga errores menores. (2) MUY IMPORTANTE para respuestas ORALES (competencia PO): la respuesta llega como TRANSCRIPCIÓN AUTOMÁTICA imperfecta. El sistema de reconocimiento suele quitar acentos, unir o separar palabras, confundir homófonos (« c'est » / « ses » / « sait », « a » / « à ») y normalizar el francés del alumno. NUNCA marques como error algo que probablemente sea ruido de transcripción; ante la duda, cuenta a favor del alumno. Solo señala errores claros de vocabulario o estructura que la transcripción no explicaría. (3) Máximo 2 correcciones, las más importantes. (4) Tono cálido y celebratorio, nunca severo. (5) Responde SOLO en este formato JSON:
 
 { "resultado": "correcto | parcial | incorrecto",
   "nota": 0-10,
@@ -172,7 +172,7 @@ export const evaluateDefi = createServerFn({ method: "POST" })
     // Hard gate: a day an admin has disabled can't be scored (also blocks the
     // paid AI call). A locked week locks its days too. Admins bypass.
     await assertDayNotLocked(context, data.dayId);
-    const system = `Eres una profesora de francés cálida y precisa. Evalúas el DESAFÍO FINAL del Día ${data.dayId} ("${data.title}"). Recibes por cada etapa: la intención (hint), el ejemplo base en francés y la transcripción real del alumno. Devuelves SOLO JSON válido con esta forma exacta, sin texto extra:
+    const system = `Eres una profesora de francés cálida y precisa. Evalúas el DESAFÍO FINAL del Día ${data.dayId} ("${data.title}") de alumnos A1-A2. Recibes por cada etapa: la intención (hint), el ejemplo base en francés y la TRANSCRIPCIÓN AUTOMÁTICA (imperfecta) del audio real del alumno. Devuelves SOLO JSON válido con esta forma exacta, sin texto extra:
 
 {
   "stages": [ { "passed": boolean, "note": "es-corta", "error": null | { "said": "fr", "corrected": "fr" } } ],
@@ -187,10 +187,20 @@ export const evaluateDefi = createServerFn({ method: "POST" })
 
 Reglas:
 - "stages" debe tener EXACTAMENTE ${data.stages.length} elementos, en orden.
-- "matched_criteria" = subconjunto EXACTO de los criterios provistos que el alumno SÍ cumplió (copia el texto literal).
+- TRANSCRIPCIÓN IMPERFECTA (regla clave): las transcripciones vienen de un
+  reconocedor automático que quita acentos, une/separa palabras, confunde
+  homófonos (« c'est »/« ses », « a »/« à », « et »/« est ») y "corrige" el
+  francés del alumno. Cualquier desviación que pueda explicarse por la
+  transcripción CUENTA A FAVOR del alumno. Un criterio se cumple si la INTENCIÓN
+  comunicativa se logró, aunque las palabras exactas difieran del ejemplo.
+- "matched_criteria" = criterios que el alumno cumplió EN INTENCIÓN (copia el
+  texto literal del criterio). Sé generoso: A1-A2 comunicándose = criterio cumplido.
 - "strengths" = 2 elogios concretos en español.
 - "improvement" = 1 mejora: cita lo que dijo (o su hueco) y da la versión corregida en francés.
-- "score_10" = (aciertos_criterios / total_criterios) * 10, redondeado a 1 decimal.
+- "score_10" = evaluación GLOBAL de comunicación sobre 10, no una fracción
+  mecánica de criterios: si el alumno completó la conversación y se hizo
+  entender, la nota es 7-10; reserva <5 para intentos donde la comunicación
+  realmente falló. Concede crédito parcial por criterios casi logrados.
 - "weak_points" = 1-3 puntos débiles en español (por estructura o competencia).
 - "recommendation" = "debería practicar…" con 1-2 acciones concretas.
 Tono cálido, profesional, en español.`;

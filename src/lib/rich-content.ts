@@ -39,6 +39,18 @@ export function blankRichDay(dayId: number): RichDay {
   };
 }
 
+/** Accepts any YouTube URL shape the teacher may paste (watch?v=, youtu.be/,
+ *  shorts/, live/, embed/) and returns the /embed/ URL the lesson player needs.
+ *  Anything non-YouTube passes through untouched (self-hosted mp4, etc.). */
+export function toYouTubeEmbed(raw: string): string {
+  const url = raw.trim();
+  if (!url) return "";
+  const m =
+    /youtube\.com\/(?:watch\?(?:.*&)?v=|shorts\/|live\/|embed\/)([\w-]{6,})/.exec(url) ??
+    /youtu\.be\/([\w-]{6,})/.exec(url);
+  return m ? `https://www.youtube.com/embed/${m[1]}` : url;
+}
+
 export type RichDayRow = {
   day_id: number;
   title: string;
@@ -56,18 +68,23 @@ export function useRichDay(dayId: string | number): RichDay | null {
   const n = Number(dayId);
   useEffect(() => {
     let alive = true;
-    if (!Number.isInteger(n) || n < 11) {
+    if (!Number.isInteger(n) || n < 1) {
       setData(null);
       return;
     }
     void (async () => {
       const { data: row, error } = await supabase
         .from("authored_days")
-        .select("rich")
+        .select("rich, status")
         .eq("day_id", n)
         .maybeSingle();
       if (!alive) return;
-      setData(error || !row?.rich ? null : (row.rich as unknown as RichDay));
+      // Days 1-10 ship with a hand-built design. Their converted row is seeded as
+      // a DRAFT so the teacher can edit it, and it only takes over the rendering
+      // once they PUBLISH — students never see a half-edited flagship day.
+      // Days 11+ are data-driven from the start, so any row applies.
+      const usable = row?.rich && (n >= 11 || row.status === "published");
+      setData(error || !usable ? null : (row!.rich as unknown as RichDay));
     })();
     return () => {
       alive = false;

@@ -48,7 +48,7 @@ export async function login(page: Page, student: TestStudent) {
   await page.goto(LOGIN_PATH);
   await page.locator('input[type="email"]').fill(student.email);
   await page.locator('input[type="password"]').first().fill(student.password);
-  await page.getByRole("button", { name: "Iniciar sesión" }).click();
+  await page.getByRole("button", { name: "Se connecter" }).click();
   // Landing anywhere authenticated is fine; the specs navigate explicitly after.
   await page.waitForURL((u) => !u.pathname.includes("log-in"), { timeout: 30_000 });
 }

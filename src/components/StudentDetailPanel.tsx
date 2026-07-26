@@ -1,13 +1,97 @@
 import { useEffect, useState } from "react";
 import { StudentAnalytics } from "@/components/StudentAnalytics";
-import { Loader2, Target, AlertCircle, Sparkles, Unlock, Lock } from "lucide-react";
+import { Loader2, Target, AlertCircle, Sparkles, Unlock, Lock, GraduationCap } from "lucide-react";
 import { getStudentResults } from "@/lib/defi.functions";
-import { getStudentProgress, unlockWeek, lockWeek } from "@/lib/coach.functions";
+import { getStudentProgress, unlockWeek, lockWeek, setAssignedCoach } from "@/lib/coach.functions";
 import { getWeeks } from "@/data/program";
 import { StudentReportCard } from "@/components/StudentReportCard";
 import { MessageThread } from "@/components/MessageThread";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 type Detail = Awaited<ReturnType<typeof getStudentResults>>;
+
+/** Assign the student's teacher (client #12/#14): weekly reports land in this
+ *  coach's Mensajes and every finished lesson notifies them. No coach assigned
+ *  → every admin receives both. Admin-panel only (RLS: admins read all rows). */
+function AssignedCoachCard({ userId }: { userId: string }) {
+  const [staff, setStaff] = useState<{ id: string; name: string; role: string }[]>([]);
+  const [current, setCurrent] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    setLoaded(false);
+    (async () => {
+      const [{ data: roles }, { data: prof }] = await Promise.all([
+        supabase.from("user_roles").select("user_id, role").in("role", ["coach", "admin"]),
+        supabase.from("profiles").select("assigned_coach").eq("id", userId).maybeSingle(),
+      ]);
+      if (!alive) return;
+      const ids = [...new Set((roles ?? []).map((r) => r.user_id))];
+      let people: { id: string; name: string; role: string }[] = [];
+      if (ids.length) {
+        const { data: profs } = await supabase.from("profiles").select("id, full_name, email").in("id", ids);
+        if (!alive) return;
+        const roleOf = new Map((roles ?? []).map((r) => [r.user_id, String(r.role)]));
+        people = (profs ?? [])
+          .map((p) => ({
+            id: p.id,
+            name: p.full_name || p.email || p.id.slice(0, 8),
+            role: roleOf.get(p.id) ?? "coach",
+          }))
+          .sort((a, b) => a.name.localeCompare(b.name));
+      }
+      setStaff(people);
+      setCurrent((prof as { assigned_coach?: string | null } | null)?.assigned_coach ?? null);
+      setLoaded(true);
+    })();
+    return () => { alive = false; };
+  }, [userId]);
+
+  async function save(coachId: string | null) {
+    setBusy(true);
+    try {
+      await setAssignedCoach({ data: { userId, coachId } });
+      setCurrent(coachId);
+      toast.success(coachId ? "Profesor/a asignado/a" : "Asignación quitada — los informes irán a todos los admins");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "No se pudo guardar la asignación");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="rounded-3xl border border-border bg-white p-4 sm:p-5 shadow-soft">
+      <p className="flex items-center gap-2 font-display text-lg font-extrabold text-navy">
+        <GraduationCap className="h-5 w-5 text-blue" /> Profesor/a asignado/a
+      </p>
+      <p className="mt-0.5 text-xs text-muted-foreground">
+        Recibe los informes semanales en Mensajes y una notificación por cada lección terminada.
+        Sin asignación, los reciben todos los admins.
+      </p>
+      {!loaded ? (
+        <Loader2 className="mt-3 h-5 w-5 animate-spin text-blue" />
+      ) : (
+        <select
+          value={current ?? ""}
+          disabled={busy}
+          onChange={(e) => void save(e.target.value || null)}
+          className="mt-3 w-full max-w-sm rounded-xl border border-border bg-white px-3 py-2 text-sm text-navy focus:outline-none focus:ring-2 focus:ring-blue/40"
+        >
+          <option value="">— Sin asignar (todos los admins) —</option>
+          {staff.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.name} {s.role === "admin" ? "(admin)" : "(coach)"}
+            </option>
+          ))}
+        </select>
+      )}
+    </div>
+  );
+}
 
 function ProgressPanel({ userId }: { userId: string }) {
   const [data, setData] = useState<Awaited<ReturnType<typeof getStudentProgress>> | null>(null);
@@ -145,6 +229,8 @@ export function StudentDetailPanel({ userId }: { userId: string }) {
   return (
     <div className="space-y-4">
       <ProgressPanel userId={userId} />
+
+      <AssignedCoachCard userId={userId} />
 
       <StudentReportCard userId={userId} />
 

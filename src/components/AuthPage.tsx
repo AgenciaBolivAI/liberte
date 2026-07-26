@@ -13,8 +13,8 @@ import mobileBanner from "@/assets/bon-voyage-mobile-banner.png.asset.json";
 import liberteLogoFull from "@/assets/liberte-logo-full.png.asset.json";
 
 const signInSchema = z.object({
-  email: z.string().trim().email("Correo inválido"),
-  password: z.string().min(6, "La contraseña debe tener al menos 6 caracteres"),
+  email: z.string().trim().email("E-mail invalide"),
+  password: z.string().min(6, "Le mot de passe doit contenir au moins 6 caractères"),
 });
 
 export function AuthPage() {
@@ -48,10 +48,10 @@ export function AuthPage() {
         password: parsed.data.password,
       });
       if (error) {
-        toast.error("Correo o contraseña incorrectos.");
+        toast.error("E-mail ou mot de passe incorrects.");
         return;
       }
-      toast.success("¡Bon retour!");
+      toast.success("Bon retour !");
       navigate({ to: "/liberte-plataforma-834798234728482934254-student" });
     } finally {
       setLoading(false);
@@ -60,7 +60,7 @@ export function AuthPage() {
 
   async function handleForgot(e: React.FormEvent) {
     e.preventDefault();
-    const parsed = z.string().trim().email("Correo inválido").safeParse(email);
+    const parsed = z.string().trim().email("E-mail invalide").safeParse(email);
     if (!parsed.success) {
       toast.error(parsed.error.issues[0].message);
       return;
@@ -71,7 +71,7 @@ export function AuthPage() {
         redirectTo: `${window.location.origin}/reset-password`,
       });
       // Same message whether or not the account exists — no user enumeration.
-      toast.success("Si el correo existe, te enviamos un enlace para restablecer tu contraseña.");
+      toast.success("Si cet e-mail existe, on t’a envoyé un lien pour réinitialiser ton mot de passe.");
       setForgotMode(false);
     } finally {
       setLoading(false);
@@ -128,18 +128,18 @@ export function AuthPage() {
             className="mt-4 text-3xl font-bold tracking-tight"
             style={{ color: "#1E3A5F", fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif" }}
           >
-            {forgotMode ? "Restablecer contraseña" : "Inicia sesión"}
+            {forgotMode ? "Réinitialiser le mot de passe" : "Connexion"}
           </h1>
           <p className="mt-2 text-sm text-slate-500">
             {forgotMode
-              ? "Escribe tu correo y te enviaremos un enlace para crear una nueva contraseña."
-              : "Bienvenido/a de vuelta. Continúa tu programa donde lo dejaste."}
+              ? "Écris ton e-mail et on t’enverra un lien pour créer un nouveau mot de passe."
+              : "Bon retour ! Reprends ton programme là où tu l’avais laissé."}
           </p>
 
           <form onSubmit={forgotMode ? handleForgot : handleSubmit} className="mt-6 space-y-4">
             <div className="space-y-1.5">
               <Label htmlFor="email" className="text-slate-700">
-                Correo electrónico
+                E-mail
               </Label>
               <Input
                 id="email"
@@ -157,7 +157,7 @@ export function AuthPage() {
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
                 <Label htmlFor="password" className="text-slate-700">
-                  Contraseña
+                  Mot de passe
                 </Label>
                 <button
                   type="button"
@@ -165,7 +165,7 @@ export function AuthPage() {
                   className="text-xs font-semibold hover:underline"
                   style={{ color: "#4FB2EA" }}
                 >
-                  ¿Olvidaste tu contraseña?
+                  Mot de passe oublié ?
                 </button>
               </div>
               <div className="relative">
@@ -184,7 +184,7 @@ export function AuthPage() {
                   type="button"
                   onClick={() => setShowPass((v) => !v)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                  aria-label={showPass ? "Ocultar contraseña" : "Mostrar contraseña"}
+                  aria-label={showPass ? "Masquer le mot de passe" : "Afficher le mot de passe"}
                 >
                   {showPass ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
@@ -203,7 +203,7 @@ export function AuthPage() {
               ) : forgotMode ? (
                 "Enviar enlace"
               ) : (
-                "Iniciar sesión"
+                "Se connecter"
               )}
             </Button>
 
@@ -214,19 +214,19 @@ export function AuthPage() {
                 className="w-full text-center text-sm font-semibold hover:underline"
                 style={{ color: "#4FB2EA" }}
               >
-                ← Volver a iniciar sesión
+                ← Retour à la connexion
               </button>
             )}
           </form>
 
           <p className="mt-6 text-center text-sm text-slate-600">
-            ¿Nuevo/a en Liberté?{" "}
+            Nouveau / nouvelle chez Liberté ?{" "}
             <Link
               to="/liberte-frances-98273425-plataforma-834823"
               className="font-semibold hover:underline"
               style={{ color: "#4FB2EA" }}
             >
-              Crea tu cuenta
+              Crée ton compte
             </Link>
           </p>
 

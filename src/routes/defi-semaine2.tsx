@@ -895,8 +895,8 @@ function DefiSemaine2Page() {
           <div className="text-xs text-white/70">
             {stage !== "welcome" && stage !== "results" && (
               <>
-                {stage === "quiz" && `Pregunta ${quizIdx + 1} de ${QUIZ.length} · Sección: Quiz gramatical`}
-                {stage === "vocab" && `Pregunta ${vocabIdx + 1} de ${VOCAB.length} · Sección: Vocabulario`}
+                {stage === "quiz" && `Question ${quizIdx + 1} sur ${QUIZ.length} · Section : Quiz de grammaire`}
+                {stage === "vocab" && `Question ${vocabIdx + 1} sur ${VOCAB.length} · Section : Vocabulaire`}
                 {stage === "writing" && `Sección 3 · Producción escrita`}
                 {stage === "roleplay" && `Sección 4 · Roleplay con Coach IA`}
               </>
@@ -1012,8 +1012,8 @@ function Welcome({ onStart }: { onStart: () => void }) {
         Días 6 al 10 · Restaurante · Supermercado · Transporte
       </p>
       <div className="mx-auto mt-6 max-w-2xl rounded-2xl border border-white/10 bg-white/5 p-5 text-left text-white/90">
-        ¡Llegaste al final de la Semana 2! Este desafío evaluará todo lo que aprendiste en los
-        últimos 5 días. Tienes <b>100 puntos posibles</b>. Al terminar, recibirás tu informe
+        Te voilà à la fin de la Semaine 2 ! Ce défi évalue tout ce que tu as appris ces
+        5 derniers jours. Tu as <b>100 points possibles</b>. À la fin, tu recevras ton rapport
         personal de la semana.
       </div>
       <div className="mt-5 flex flex-wrap justify-center gap-2">
@@ -1069,7 +1069,7 @@ function QuizCard(props: {
       </div>
       <div className="rounded-2xl bg-white p-6 text-[#111] shadow-lg">
         <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-[#6B2340]">
-          Pregunta {index + 1} · 2 pts
+          Question {index + 1} · 2 pts
         </div>
         <h2 className="text-xl font-bold text-[#0F1B3C]">{q.q}</h2>
         <div className="mt-5 space-y-2">
@@ -1126,7 +1126,7 @@ function QuizCard(props: {
               className="h-11 rounded-xl px-6 font-bold"
               style={{ backgroundColor: WINE, color: "white" }}
             >
-              {index + 1 === total ? "Continuar" : "Siguiente pregunta"}
+              {index + 1 === total ? "Continuer" : "Question suivante"}
               <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
           </div>
@@ -1256,7 +1256,7 @@ function WritingStage(props: {
             className="h-12 rounded-xl px-6 font-bold"
             style={{ backgroundColor: WINE, color: "white" }}
           >
-            Continuar al roleplay <ArrowRight className="ml-2 h-4 w-4" />
+            Continuer vers le jeu de rôle <ArrowRight className="ml-2 h-4 w-4" />
           </Button>
         </div>
       )}
@@ -1377,7 +1377,7 @@ function RoleplayStage(props: {
               disabled={props.loading}
               className="h-10 rounded-xl border-slate-300 px-4 text-slate-700"
             >
-              Terminar roleplay
+              Terminer le jeu de rôle
             </Button>
           ) : (
             <Button
@@ -1385,7 +1385,7 @@ function RoleplayStage(props: {
               className="ml-auto h-11 rounded-xl px-6 font-bold"
               style={{ backgroundColor: WINE, color: "white" }}
             >
-              Ver mis resultados <ArrowRight className="ml-2 h-4 w-4" />
+              Voir mes résultats <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
           )}
         </div>
@@ -1443,7 +1443,7 @@ function Results(props: {
     total >= 90
       ? { color: GOLD, label: "EXCELLENCE — Niveau B1 en camino", pct: 100 }
       : total >= 75
-        ? { color: BLUE, label: "TRÈS BIEN — ¡Sólida base!", pct: 75 }
+        ? { color: BLUE, label: "TRÈS BIEN — Base solide !", pct: 75 }
         : total >= 60
           ? { color: MINT, label: "BIEN — Sigue practicando", pct: 50 }
           : { color: WINE, label: "COURAGE — Revisa los días de la semana", pct: 33 };
@@ -1481,7 +1481,7 @@ function Results(props: {
         className="mt-8 h-14 rounded-xl px-8 text-base font-bold"
         style={{ backgroundColor: WINE }}
       >
-        <Download className="mr-2 h-5 w-5" /> Descargar mi informe PDF
+        <Download className="mr-2 h-5 w-5" /> Télécharger mon rapport PDF
       </Button>
       {props.saved && (
         <p className="mt-3 text-xs text-white/60">

@@ -235,6 +235,7 @@ export type Database = {
       }
       day_state: {
         Row: {
+          seconds_spent: number
           current_lesson: string | null
           day_id: number
           done_lessons: Json
@@ -243,6 +244,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          seconds_spent?: number
           current_lesson?: string | null
           day_id: number
           done_lessons?: Json
@@ -251,6 +253,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          seconds_spent?: number
           current_lesson?: string | null
           day_id?: number
           done_lessons?: Json
@@ -262,6 +265,8 @@ export type Database = {
       }
       defi_results: {
         Row: {
+          overridden_at: string | null
+          overridden_by: string | null
           celebration_message: string | null
           created_at: string
           day_id: number
@@ -278,6 +283,8 @@ export type Database = {
           weak_points: Json
         }
         Insert: {
+          overridden_at?: string | null
+          overridden_by?: string | null
           celebration_message?: string | null
           created_at?: string
           day_id: number
@@ -294,6 +301,8 @@ export type Database = {
           weak_points?: Json
         }
         Update: {
+          overridden_at?: string | null
+          overridden_by?: string | null
           celebration_message?: string | null
           created_at?: string
           day_id?: number
@@ -464,8 +473,36 @@ export type Database = {
         }
         Relationships: []
       }
+      notifications: {
+        Row: {
+          created_at: string
+          id: string
+          kind: string
+          payload: Json
+          read_at: string | null
+          recipient_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          kind: string
+          payload?: Json
+          read_at?: string | null
+          recipient_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          kind?: string
+          payload?: Json
+          read_at?: string | null
+          recipient_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
+          assigned_coach: string | null
           approved_at: string | null
           approved_by: string | null
           avatar_url: string | null
@@ -486,6 +523,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          assigned_coach?: string | null
           approved_at?: string | null
           approved_by?: string | null
           avatar_url?: string | null
@@ -506,6 +544,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          assigned_coach?: string | null
           approved_at?: string | null
           approved_by?: string | null
           avatar_url?: string | null
@@ -772,6 +811,8 @@ export type Database = {
       }
       weekly_evaluations: {
         Row: {
+          overridden_at: string | null
+          overridden_by: string | null
           ai_report: Json
           created_at: string
           id: string
@@ -786,6 +827,8 @@ export type Database = {
           weekly_score: number
         }
         Insert: {
+          overridden_at?: string | null
+          overridden_by?: string | null
           ai_report?: Json
           created_at?: string
           id?: string
@@ -800,6 +843,8 @@ export type Database = {
           weekly_score?: number
         }
         Update: {
+          overridden_at?: string | null
+          overridden_by?: string | null
           ai_report?: Json
           created_at?: string
           id?: string
@@ -820,6 +865,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      add_day_seconds: {
+        Args: { _day_id: number; _seconds: number }
+        Returns: undefined
+      }
       delete_email: {
         Args: { message_id: number; queue_name: string }
         Returns: boolean

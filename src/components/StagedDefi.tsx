@@ -117,13 +117,13 @@ export function StagedDefi(props: StagedDefiProps) {
       const err = e as DOMException;
       const inIframe = typeof window !== "undefined" && window.self !== window.top;
       if (inIframe) {
-        setErrorMsg("El micrófono está bloqueado en la vista previa. Abre la app en una pestaña nueva (botón ↗ arriba a la derecha) o usa el enlace publicado para grabar.");
+        setErrorMsg("Le micro est bloqué dans l’aperçu. Ouvre l’app dans un nouvel onglet (bouton ↗ en haut à droite) ou utilise le lien publié pour enregistrer.");
       } else if (err?.name === "NotAllowedError") {
-        setErrorMsg("Bloqueaste el micrófono. Haz clic en el candado 🔒 de la barra de direcciones → Permitir micrófono → recarga.");
+        setErrorMsg("Tu as bloqué le micro. Clique sur le cadenas 🔒 de la barre d’adresse → Autoriser le micro → recharge la page.");
       } else if (err?.name === "NotFoundError") {
-        setErrorMsg("No detectamos ningún micrófono conectado.");
+        setErrorMsg("Aucun micro détecté.");
       } else {
-        setErrorMsg("No pudimos acceder al micrófono. Revisa los permisos del navegador.");
+        setErrorMsg("Impossible d’accéder au micro. Vérifie les autorisations du navigateur.");
       }
     }
 
@@ -159,7 +159,7 @@ export function StagedDefi(props: StagedDefiProps) {
         updateStage(i, { transcript: res.text });
       }
 
-      setProgressMsg("Evaluando tu desafío con la profesora IA…");
+      setProgressMsg("Évaluation de ton défi avec la professeure IA…");
       const evalRes = await evaluateDefi({
         data: {
           dayId,
@@ -253,22 +253,22 @@ export function StagedDefi(props: StagedDefiProps) {
                     onClick={() => playServeur(r.serveur)}
                     className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-blue hover:underline"
                   >
-                    <Volume2 className="h-3 w-3" /> Escuchar
+                    <Volume2 className="h-3 w-3" /> Écouter
                   </button>
                 </div>
               </div>
 
               <div className="mt-4 rounded-2xl border-2 border-gold/60 bg-gradient-to-br from-gold/15 via-gold/5 to-white p-4 shadow-soft sm:p-5">
                 <p className="inline-flex items-center gap-1.5 rounded-full bg-gold/20 px-3 py-1 text-[10px] font-extrabold tracking-widest text-navy uppercase">
-                  🎯 Tu misión — Di esto en francés
+                  🎯 Ta mission — Dis ceci en français
                 </p>
                 <p className="mt-3 font-display text-lg font-extrabold leading-snug text-navy sm:text-xl">
                   {r.hint}
                 </p>
                 <div className="mt-3 rounded-xl border border-dashed border-blue/40 bg-white/70 p-3">
-                  <p className="text-[10px] font-bold tracking-widest text-blue uppercase">💬 Ejemplo de apoyo</p>
+                  <p className="text-[10px] font-bold tracking-widest text-blue uppercase">💬 Exemple d’appui</p>
                   <p className="mt-1 text-sm italic text-navy/80">« {r.example} »</p>
-                  <p className="mt-1 text-[11px] text-muted-foreground">Puedes decirlo con tus propias palabras.</p>
+                  <p className="mt-1 text-[11px] text-muted-foreground">Tu peux le dire avec tes propres mots.</p>
                 </div>
               </div>
 
@@ -279,7 +279,7 @@ export function StagedDefi(props: StagedDefiProps) {
                   className={`grid h-14 w-14 place-items-center rounded-full text-white shadow-card transition disabled:opacity-40 ${
                     isRec ? "bg-red animate-pulse" : st.saved ? "bg-gold text-navy" : "bg-gradient-blue hover:scale-105"
                   }`}
-                  aria-label={isRec ? "Detener" : "Grabar"}
+                  aria-label={isRec ? "Arrêter" : "Enregistrer"}
                 >
                   {isRec ? <Square className="h-6 w-6" /> : st.saved ? <Check className="h-6 w-6" /> : <Mic className="h-6 w-6" />}
                 </button>
@@ -299,10 +299,10 @@ export function StagedDefi(props: StagedDefiProps) {
       <div className="rounded-3xl border-2 border-gold/40 bg-white p-6 shadow-card">
         <div className="flex items-center gap-2">
           <Sparkles className="h-5 w-5 text-gold" />
-          <p className="font-display text-lg font-extrabold text-navy">Subir mi desafío</p>
+          <p className="font-display text-lg font-extrabold text-navy">Envoyer mon défi</p>
         </div>
         <p className="mt-1 text-sm text-muted-foreground">
-          Cuando todas las etapas estén grabadas, envía tu desafío para recibir tu evaluación personalizada.
+          Quand toutes les étapes sont enregistrées, envoie ton défi pour recevoir ton évaluation personnalisée.
         </p>
 
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
@@ -319,7 +319,7 @@ export function StagedDefi(props: StagedDefiProps) {
             ) : result ? (
               <><Check className="mr-2 h-4 w-4" /> Enviado</>
             ) : (
-              <>📤 Subir mi desafío <Upload className="ml-2 h-4 w-4" /></>
+              <>📤 Envoyer mon défi <Upload className="ml-2 h-4 w-4" /></>
             )}
           </Button>
         </div>
@@ -333,7 +333,7 @@ export function StagedDefi(props: StagedDefiProps) {
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <PartyPopper className="h-6 w-6 text-gold" />
-              <h4 className="font-display text-2xl font-extrabold text-navy">¡Bravo ! Día {dayId} evaluado</h4>
+              <h4 className="font-display text-2xl font-extrabold text-navy">Bravo ! Jour {dayId} évalué</h4>
             </div>
             <div className="rounded-full bg-gradient-blue px-4 py-1 text-white font-extrabold">
               {result.score.toFixed(1)} / 10
@@ -365,11 +365,11 @@ export function StagedDefi(props: StagedDefiProps) {
                 <div className="mt-2 text-sm text-navy/90">
                   <p className="text-xs text-muted-foreground">Dijiste:</p>
                   <p className="italic">« {result.improvement.said || "—"} »</p>
-                  <p className="mt-1 text-xs text-muted-foreground">Versión corregida:</p>
+                  <p className="mt-1 text-xs text-muted-foreground">Version corrigée :</p>
                   <p className="font-semibold text-navy">« {result.improvement.corrected} »</p>
                 </div>
               ) : (
-                <p className="mt-2 text-sm text-navy/70">Sin correcciones importantes. ¡Impresionante!</p>
+                <p className="mt-2 text-sm text-navy/70">Pas de corrections importantes. Impressionnant !</p>
               )}
             </div>
           </div>
@@ -393,7 +393,7 @@ export function StagedDefi(props: StagedDefiProps) {
 
           {result.recommendation && (
             <div className="mt-3 rounded-2xl border border-gold/40 bg-gold/10 p-4 text-sm text-navy/90">
-              <p className="text-xs font-extrabold uppercase text-navy">Tu próximo paso</p>
+              <p className="text-xs font-extrabold uppercase text-navy">Ta prochaine étape</p>
               <p className="mt-1">💡 {result.recommendation}</p>
             </div>
           )}

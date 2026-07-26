@@ -2,8 +2,10 @@ import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { Calendar, GraduationCap, Home, LogOut, Mail, MessageCircle, Radio, Sparkles, Star, User } from "lucide-react";
 import logo from "@/assets/liberte-logo.png.asset.json";
 import { useAuth } from "@/lib/auth-context";
+import { useIsStaff } from "@/lib/use-staff";
 import { supabase } from "@/integrations/supabase/client";
 import { useStars } from "@/lib/progress";
+import { NotificationsBell, useUnreadMessages } from "@/components/NotificationsBell";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -23,7 +25,7 @@ const nav = [
   { to: "/calendar", label: "Calendrier", short: "Agenda", icon: Calendar },
   { to: "/clasesenvivo", label: "En direct", short: "Direct", icon: Radio },
   { to: "/conversation", label: "Tutor IA", short: "Tutor", icon: MessageCircle },
-  { to: "/mensajes", label: "Mensajes", short: "Msgs", icon: Mail },
+  { to: "/mensajes", label: "Messages", short: "Msgs", icon: Mail },
   { to: "/progress", label: "Mon progrès", short: "Progrès", icon: Sparkles },
   { to: "/profile", label: "Mon profil", short: "Profil", icon: User },
 ];
@@ -33,17 +35,22 @@ export function TopNav({ stars: starsProp }: { stars?: number } = {}) {
   const path = useRouterState({ select: (s) => s.location.pathname });
   const navigate = useNavigate();
   const { avatarUrl, fullName, user, isAdmin } = useAuth();
+  // Coaches (non-admin) get their own panel entry — the client reported that
+  // the teacher role had NO way to reach any panel from the nav.
+  const isStaff = useIsStaff();
   const { stars: liveStars } = useStars();
   const stars = starsProp ?? liveStars;
   const initial = (fullName || user?.email || "?").charAt(0).toUpperCase();
+  // Live unread count on the Messages nav item (client #7).
+  const unreadMsgs = useUnreadMessages(path);
 
   async function handleLogout() {
     try {
       await supabase.auth.signOut();
-      toast.success("Sesión cerrada");
+      toast.success("Session fermée");
       navigate({ to: "/liberte-log-in-983749824923465723", replace: true });
     } catch {
-      toast.error("No se pudo cerrar la sesión");
+      toast.error("Impossible de fermer la session");
     }
   }
 
@@ -66,7 +73,14 @@ export function TopNav({ stars: starsProp }: { stars?: number } = {}) {
                     : "text-white/80 hover:bg-white/10 hover:text-white"
                 }`}
               >
-                <n.icon className="h-4 w-4" />
+                <span className="relative">
+                  <n.icon className="h-4 w-4" />
+                  {n.to === "/mensajes" && unreadMsgs > 0 && (
+                    <span className="absolute -right-1.5 -top-1.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-gold px-0.5 text-[9px] font-bold text-navy">
+                      {unreadMsgs > 9 ? "9+" : unreadMsgs}
+                    </span>
+                  )}
+                </span>
                 {n.label}
               </Link>
             );
@@ -77,11 +91,12 @@ export function TopNav({ stars: starsProp }: { stars?: number } = {}) {
             <Star className="h-4 w-4 fill-gold text-gold" />
             <span>{stars}</span>
           </div>
+          <NotificationsBell />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                aria-label="Menú de cuenta"
+                aria-label="Menu du compte"
                 className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-full border border-white/25 bg-gradient-blue text-sm font-bold text-white shadow-soft focus:outline-none focus:ring-2 focus:ring-white/40"
               >
                 {avatarUrl ? <img src={avatarUrl} alt="" className="h-full w-full object-cover" /> : initial}
@@ -89,12 +104,12 @@ export function TopNav({ stars: starsProp }: { stars?: number } = {}) {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
               <DropdownMenuLabel className="truncate">
-                {fullName || user?.email || "Mi cuenta"}
+                {fullName || user?.email || "Mon compte"}
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => navigate({ to: "/profile" })}>
                 <User className="mr-2 h-4 w-4" />
-                Mi perfil
+                Mon profil
               </DropdownMenuItem>
               {isAdmin && (
                 <DropdownMenuItem onClick={() => navigate({ to: "/liberte-profesor-panel-9382745-admin" })}>
@@ -102,9 +117,15 @@ export function TopNav({ stars: starsProp }: { stars?: number } = {}) {
                   Panel del profesor
                 </DropdownMenuItem>
               )}
+              {isStaff && !isAdmin && (
+                <DropdownMenuItem onClick={() => navigate({ to: "/coach" })}>
+                  <GraduationCap className="mr-2 h-4 w-4" />
+                  Panel de seguimiento
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem onClick={handleLogout} className="text-destructive focus:text-destructive">
                 <LogOut className="mr-2 h-4 w-4" />
-                Cerrar sesión
+                Se déconnecter
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -122,7 +143,14 @@ export function TopNav({ stars: starsProp }: { stars?: number } = {}) {
                 active ? "text-blue" : "text-white/70"
               }`}
             >
-              <n.icon className="h-5 w-5 shrink-0" />
+              <span className="relative shrink-0">
+                <n.icon className="h-5 w-5" />
+                {n.to === "/mensajes" && unreadMsgs > 0 && (
+                  <span className="absolute -right-1.5 -top-1 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-gold px-0.5 text-[9px] font-bold text-navy">
+                    {unreadMsgs > 9 ? "9+" : unreadMsgs}
+                  </span>
+                )}
+              </span>
               <span className="w-full truncate text-center text-[10px] leading-tight">
                 {n.short ?? n.label}
               </span>

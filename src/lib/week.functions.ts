@@ -66,6 +66,44 @@ const PRONUNCIATION_TARGETS: Record<number, string> = {
   8: "remplissez [ʁɑ̃plise], cochez [koʃe], il dit que [ildikə], je voudrais savoir [ʒəvudʁɛsavwaʁ]",
 };
 
+/** Push a finished weekly report into the teacher's Mensajes inbox (sender =
+ *  the student, so the thread lives between the right two people). Recipients:
+ *  the student's assigned teacher, or every admin when none is assigned. */
+export async function sendWeeklyReportToTeacher(
+  supabaseAdmin: {
+    from: (t: string) => any; // eslint-disable-line @typescript-eslint/no-explicit-any
+  },
+  studentId: string,
+  weekNumber: number,
+  weeklyScore: number,
+  report: { verdict_title?: string; coach_summary?: string },
+): Promise<void> {
+  const { data: prof } = await supabaseAdmin
+    .from("profiles")
+    .select("full_name, email, assigned_coach")
+    .eq("id", studentId)
+    .maybeSingle();
+  let recipients: string[] = prof?.assigned_coach ? [prof.assigned_coach] : [];
+  if (!recipients.length) {
+    const { data: admins } = await supabaseAdmin.from("user_roles").select("user_id").eq("role", "admin");
+    recipients = [...new Set(((admins ?? []) as { user_id: string }[]).map((r) => r.user_id))];
+  }
+  recipients = recipients.filter((r) => r !== studentId);
+  if (!recipients.length) return;
+
+  const name = prof?.full_name || prof?.email || "Alumno/a";
+  const body =
+    `📊 Informe semanal automático — Semana ${weekNumber}\n` +
+    `Alumno/a: ${name}\n` +
+    `Nota semanal: ${Number(weeklyScore).toFixed(1)}/10` +
+    (report?.verdict_title ? ` · ${report.verdict_title}` : "") +
+    (report?.coach_summary ? `\n\n${String(report.coach_summary).slice(0, 3000)}` : "") +
+    `\n\nVer el detalle completo en el panel de seguimiento.`;
+  for (const rid of recipients) {
+    await supabaseAdmin.from("messages").insert({ sender_id: studentId, recipient_id: rid, body });
+  }
+}
+
 export const evaluateWeek = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) => {
@@ -137,7 +175,9 @@ export const evaluateWeek = createServerFn({ method: "POST" })
 - lecturas y una mini situación oral (PO) transcritas del audio real,
 - historial de la semana: puntuación de cada desafío final diario + errores/aciertos ya detectados en actividades diarias.
 
-Tu tarea: dar puntuaciones justas de PE y PO sobre 10, y generar un informe cálido en español (con ejemplos concretos citando lo que ESCRIBIÓ/DIJO el alumno). Detecta errores de pronunciación comparando la transcripción de las lecturas con el texto original, tomando como sonidos objetivo LOS DE ESTA SEMANA: ${PRONUNCIATION_TARGETS[data.weekNumber] ?? "los sonidos que aparecen en las lecturas de esta semana"}.
+Tu tarea: dar puntuaciones justas de PE y PO sobre 10, y generar un informe cálido en español (con ejemplos concretos citando lo que ESCRIBIÓ/DIJO el alumno).
+
+REGLA CLAVE sobre el audio: las lecturas llegan como TRANSCRIPCIÓN AUTOMÁTICA imperfecta, NO como audio. El reconocedor quita acentos, une/separa palabras, confunde homófonos y "normaliza" el francés — una transcripción distinta del texto NO prueba mala pronunciación. Señala como error de pronunciación SOLO diferencias que un reconocedor no produciría por sí solo (palabra completamente distinta, sílabas ausentes) y, ante la duda, cuenta a favor del alumno. PO se puntúa por COMUNICACIÓN: si completó la tarea y se le entiende, 7-10. Sonidos objetivo de esta semana (guía, no lista de fallos): ${PRONUNCIATION_TARGETS[data.weekNumber] ?? "los sonidos que aparecen en las lecturas de esta semana"}.
 
 Responde SOLO JSON con esta forma EXACTA:
 {
@@ -256,6 +296,16 @@ Reglas:
         { onConflict: "user_id,week_number" },
       );
 
+    // Deliver the report to the teacher's Mensajes inbox automatically (client
+    // request: the student report should reach their teacher in-platform, not by
+    // WhatsApp). Recipient = the student's assigned teacher; fallback = every
+    // admin. Best-effort: a delivery failure must never fail the evaluation.
+    try {
+      await sendWeeklyReportToTeacher(supabaseAdmin, context.userId, data.weekNumber, weeklyScore, finalReport);
+    } catch (e) {
+      console.error("[weekly] report delivery failed", e);
+    }
+
     return {
       weeklyScore,
       testScore,
@@ -296,4 +346,19 @@ export const getMyWeeklyEvaluation = createServerFn({ method: "POST" })
       .eq("week_number", data.weekNumber)
       .maybeSingle();
     return row;
+  });
+
+/** Every weekly evaluation of the logged-in student — powers the « Mes
+ *  rapports » list on /progress so past reports (and their PDFs) are always
+ *  findable, not only on the one-time result screen. */
+export const getMyWeeklyEvaluations = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { data, error } = await context.supabase
+      .from("weekly_evaluations")
+      .select("week_number, weekly_score, test_score, test_scores, ai_report, created_at")
+      .eq("user_id", context.userId)
+      .order("week_number", { ascending: true });
+    if (error) throw new Error(error.message);
+    return data ?? [];
   });

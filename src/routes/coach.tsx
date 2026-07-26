@@ -9,6 +9,7 @@ import { CalendarBoard } from "@/components/CalendarBoard";
 import { useCalendarEvents } from "@/lib/calendarEvents";
 import { TopNav } from "@/components/TopNav";
 import { StudentAnalytics } from "@/components/StudentAnalytics";
+import { ActivityFeed } from "@/components/ActivityFeed";
 
 export const Route = createFileRoute("/coach")({
   head: () => ({
@@ -92,7 +93,8 @@ function CoachPage() {
       {loadingRoster && <Loader2 className="h-6 w-6 animate-spin text-blue" />}
 
       {roster && (
-        <div className="mb-6">
+        <div className="mb-6 space-y-6">
+          <ActivityFeed onSelectStudent={(id) => setSelected(id)} />
           <CalendarBoard events={events} refresh={refresh} />
         </div>
       )}

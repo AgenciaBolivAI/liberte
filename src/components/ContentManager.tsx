@@ -172,29 +172,49 @@ export function ContentManager() {
       ) : (
         <>
           <ul className="mt-3 divide-y divide-border">
-            {/* Days 1-10: built-in (code), read-only here but visible + previewable. */}
-            {BUILTIN_DAYS.map((d) => (
-              <li key={`builtin-${d.day_id}`} className="flex items-center justify-between gap-3 py-2">
-                <div className="min-w-0">
-                  <span className="text-sm font-bold text-navy">
-                    Día {d.day_id} · Jour {d.day_id} · {d.label}
-                  </span>
-                  <span className="ml-2 rounded-full bg-success/15 px-2 py-0.5 text-[10px] font-bold text-success">Publicado</span>
-                  <span className="ml-1.5 rounded-full bg-navy/10 px-2 py-0.5 text-[10px] font-bold text-navy/70">Integrado</span>
-                  <p className="text-xs text-muted-foreground">Semana {weekOfAuthoredDay(d.day_id)} · diseño fijo (se edita en código)</p>
-                </div>
-                <div className="flex shrink-0 items-center gap-1">
-                  <Link
-                    to="/day/$dayId"
-                    params={{ dayId: String(d.day_id) }}
-                    aria-label="Ver como alumno"
-                    className="rounded-full p-2 text-navy/70 hover:bg-ice"
-                  >
-                    <Eye className="h-4 w-4" />
-                  </Link>
-                </div>
-              </li>
-            ))}
+            {/* Days 1-10: built-in design, now ALSO editable. Their current
+                content is pre-seeded as a draft RichDay; students keep seeing
+                the original until the teacher's edited version is PUBLISHED. */}
+            {BUILTIN_DAYS.map((d) => {
+              const row = days.find((r) => r.day_id === d.day_id);
+              const published = row?.status === "published";
+              return (
+                <li key={`builtin-${d.day_id}`} className="flex items-center justify-between gap-3 py-2">
+                  <div className="min-w-0">
+                    <span className="text-sm font-bold text-navy">
+                      Día {d.day_id} · Jour {d.day_id} · {d.label}
+                    </span>
+                    <span className="ml-2 rounded-full bg-success/15 px-2 py-0.5 text-[10px] font-bold text-success">Publicado</span>
+                    <span className={`ml-1.5 rounded-full px-2 py-0.5 text-[10px] font-bold ${published ? "bg-blue/10 text-blue" : "bg-navy/10 text-navy/70"}`}>
+                      {published ? "Versión editada activa" : "Integrado"}
+                    </span>
+                    <p className="text-xs text-muted-foreground">
+                      Semana {weekOfAuthoredDay(d.day_id)}
+                      {published
+                        ? " · los alumnos ven tu versión editada"
+                        : row
+                          ? " · borrador editado (publícalo para que lo vean los alumnos)"
+                          : " · diseño original (pulsa «Editar» para personalizarlo)"}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <Link
+                      to="/day/$dayId"
+                      params={{ dayId: String(d.day_id) }}
+                      aria-label="Ver como alumno"
+                      className="rounded-full p-2 text-navy/70 hover:bg-ice"
+                    >
+                      <Eye className="h-4 w-4" />
+                    </Link>
+                    {richIds.has(d.day_id) && (
+                      <Button size="sm" variant="outline" onClick={() => setEditingDay(d.day_id)}>
+                        Editar
+                      </Button>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
             {days.map((d) => (
               <li key={d.day_id} className="flex items-center justify-between gap-3 py-2">
                 <div className="min-w-0">

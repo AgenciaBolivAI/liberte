@@ -416,7 +416,7 @@ g("9b. Hands-free voice tutor");
   ok("loop hands the turn back automatically", conv.includes("listenRef.current()"));
   ok("empty/noise transcript re-listens instead of sending", conv.includes("if (!said)"));
   ok("voice mode opens with the spoken scene opener", conv.includes("scenario.opener_fr"));
-  ok("hang-up button ends the loop", conv.includes("Terminar conversación"));
+  ok("hang-up button ends the loop", conv.includes("Terminer la conversation"));
   ok("voice loop stops cleanly via ref guard", conv.includes("voiceOnRef"));
   ok("entry point is prominent", conv.includes("Conversar en voz con Lib"));
 
@@ -478,7 +478,7 @@ g("9b. Hands-free voice tutor");
   const dash = readFileSync("src/routes/liberte-plataforma-834798234728482934254-student.tsx", "utf8");
   ok("weeks 1-2 open to every student at launch", /: \[1, 2\]/.test(dash));
   ok("server-side tutor gate honours the launch window", readFileSync("src/lib/tutor.functions.ts", "utf8").includes("dayId <= OPEN_THROUGH_DAY"));
-  ok("weeks without content show 'próximamente'", dash.includes("LAST_WEEK_WITH_CONTENT") && dash.includes("Próximamente"));
+  ok("weeks without content show a coming-soon lock (in French)", dash.includes("LAST_WEEK_WITH_CONTENT") && dash.includes("Bientôt disponible"));
   ok("dashboard respects the student-preview toggle", dash.includes("bypassLocks"));
   const dayRoute = readFileSync("src/routes/day.$dayId.tsx", "utf8");
   ok("week-2 final challenge is reachable from day 10", dayRoute.includes('to="/defi-semaine2"'));
@@ -881,8 +881,8 @@ g("12c. Weeks 3-4 · days 11-20 render through the REAL lesson player");
      day.includes("Object.entries(WEEK34_META)") && day.includes("LESSONS_BY_DAY[id]") && day.includes("WEEK_TITLE_BY_DAY[id]"));
   ok("generic wrappers reuse the day-1-10 games",
      ["IntroLessonG", "VocabLessonG", "ClesLessonG", "DefiLessonG"].every((w) => day.includes(`function ${w}`)));
-  ok("LessonView dispatches days 11-40 to the generic wrappers",
-     day.includes("Number(dayId) >= 11 && Number(dayId) <= 40"));
+  ok("LessonView dispatches data-driven days (11-40 always; 1-10 when published) to the generic wrappers",
+     day.includes("!builtInDay && Number(dayId) <= 40 && richData"));
   ok("router sends registered days (1-20) to DayPage",
      day.includes("if (dayId in LESSONS_BY_DAY) return <DayPage") && day.includes("<AuthoredDayView"));
   ok("gym video wired for weeks 3-8", day.includes("(WEEK34[dayId] ?? MONTH2[dayId])?.gym"));
@@ -946,7 +946,7 @@ g("12c. Weeks 3-4 · days 11-20 render through the REAL lesson player");
      day.includes("useRichDay(dayId)") && day.includes("richDay ?? codeData"));
   const rde = readFileSync("src/components/RichDayEditor.tsx", "utf8");
   ok("rich editor covers every lesson section",
-     ["Vocabulario", "Flashcards", "Gramática", "Juegos de Vocabulario", "Juegos de Les clés", "Défi final"].every((s) => rde.includes(s)));
+     ["1 · Gym cérébral", "2 · Bienvenue", "3 · Vocabulaire — palabras", "3 · Vocabulaire — flashcards", "3 · Vocabulaire — juegos", "4 · Les Clés — gramática", "4 · Les Clés — juegos", "5 · Défi final"].every((s) => rde.includes(s)));
   ok("rich editor saves to authored_days.rich", rde.includes("saveRichDay"));
   const cmSrc2 = readFileSync("src/components/ContentManager.tsx", "utf8");
   ok("content manager routes rich days to the rich editor",
@@ -964,8 +964,28 @@ g("12c. Weeks 3-4 · days 11-20 render through the REAL lesson player");
      day.includes("registerDay(dayId, rich.meta)") && day.includes("function registerDay"));
   ok("content manager can create a full rich lesson (any day 11-120)",
      cmSrc2.includes("createRichDay") && cmSrc2.includes("Crear lección completa"));
-  ok("content manager lists built-in days 1-10 (read-only, so the list runs from day 1)",
-     cmSrc2.includes("BUILTIN_DAYS") && cmSrc2.includes("Integrado") && /day_id: 1,/.test(cmSrc2));
+  // Days 1-10 are now EDITABLE (client request): their built-in content is
+  // seeded as a draft RichDay; "Editar" opens the rich editor; students keep the
+  // original design until the teacher PUBLISHES the edited version.
+  ok("content manager lists days 1-10 AND lets the teacher edit them",
+     cmSrc2.includes("BUILTIN_DAYS") && /day_id: 1,/.test(cmSrc2) &&
+     /richIds\.has\(d\.day_id\) && \(\s*<Button size="sm" variant="outline" onClick=\{\(\) => setEditingDay\(d\.day_id\)\}/.test(cmSrc2));
+  const rcSrc = readFileSync("src/lib/rich-content.ts", "utf8");
+  ok("a days-1-10 rich row only takes over when PUBLISHED (drafts never change what students see)",
+     rcSrc.includes('n >= 11 || row.status === "published"'));
+  const dayGate = readFileSync("src/routes/day.$dayId.tsx", "utf8");
+  ok("bespoke 1-10 components render unless a published rich row exists",
+     dayGate.includes("const builtInDay = Number(dayId) <= 10 && !richDay") &&
+     (dayGate.match(/\{builtInDay && dayId === "/g) || []).length >= 38);
+  ok("published day 1 maps its bespoke 'cafe' step to the generic intro",
+     dayGate.includes('(lesson === "intro" || lesson === "cafe")'));
+  ok("day-2 cultural bonus still renders even when published",
+     /\{dayId === "2" && lesson === "bonus"/.test(dayGate));
+  const seed110 = readFileSync("supabase/migrations/20260726000000_seed_days1_10_rich.sql", "utf8");
+  ok("days 1-10 seeded as DRAFTS without clobbering teacher edits",
+     (seed110.match(/INSERT INTO public\.authored_days/g) || []).length === 10 &&
+     seed110.includes("'draft'") && seed110.includes("ON CONFLICT (day_id) DO NOTHING") &&
+     !seed110.includes("DELETE FROM"));
   ok("blank rich-day factory is shared", readFileSync("src/lib/rich-content.ts", "utf8").includes("export function blankRichDay"));
 
   // Tutor teaches the teacher-edited content: days 11+ override code vocab/grammar
@@ -1089,7 +1109,7 @@ g("12g. Peer messaging + regression guards for the client-reported bugs");
      /sendMessage[\s\S]{0,1600}requireApprovedStudent/.test(msgFns));
   const msgUi = readFileSync("src/routes/mensajes.tsx", "utf8");
   ok("Mensajes uses the universal directory + a search box",
-     msgUi.includes("getContacts") && !msgUi.includes("getStaffContacts") && msgUi.includes("Buscar profe o compañero"));
+     msgUi.includes("getContacts") && !msgUi.includes("getStaffContacts") && msgUi.includes("Chercher un prof ou un camarade"));
   ok("Mensajes shows role badges (profe vs compañero)", msgUi.includes("RoleBadge") && msgUi.includes("roleLabel"));
 }
 
@@ -1389,13 +1409,100 @@ g("12e. Re-audit fixes: paid-AI gates, star-minting, wildcard injection, misc");
   {
     const semSrc = readFileSync("src/routes/semaine.$weekId.tsx", "utf8");
     ok("weekly-test mic denial is handled (not a silent no-op)",
-       semSrc.includes("navigator.mediaDevices.getUserMedia") && semSrc.includes("No pudimos acceder al micrófono"));
+       semSrc.includes("navigator.mediaDevices.getUserMedia") && semSrc.includes("Impossible d’accéder au micro"));
   }
   ok("types.ts tutor_consume_message can return null (daily cap)",
      /tutor_consume_message[\s\S]{0,60}Returns: number \| null/.test(readFileSync("src/integrations/supabase/types.ts", "utf8")));
   ok("500 error page is Spanish", readFileSync("src/lib/error-page.ts", "utf8").includes('<html lang="es">'));
   ok("admin star bar uses the true max (weekly-eval stars included)",
      readFileSync("src/routes/liberte-profesor-panel-9382745-admin.tsx", "utf8").includes("TOTAL_DAYS * 4 + TOTAL_WEEKS * 3"));
+}
+
+/* ---------------- teacher suite + client-list features ---------------- */
+g("12i. Teacher suite: reports, notifications, time-on-task, videos, French chrome");
+{
+  const wk = readFileSync("src/lib/week.functions.ts", "utf8");
+  ok("weekly report auto-delivery helper is exported + called after the eval",
+     wk.includes("export async function sendWeeklyReportToTeacher") &&
+     wk.includes("await sendWeeklyReportToTeacher(supabaseAdmin"));
+  ok("week-2 result delivers the same report (parity — ai_report is no longer {})",
+     readFileSync("src/lib/defiSemaine2.functions.ts", "utf8").includes("sendWeeklyReportToTeacher(supabaseAdmin, userId, 2"));
+  ok("students can list every weekly evaluation (Mes rapports data source)",
+     wk.includes("getMyWeeklyEvaluations"));
+  const prog = readFileSync("src/routes/progress.tsx", "utf8");
+  ok("Mes rapports on /progress lists weeks + downloads the PDF",
+     prog.includes("MyReports") && prog.includes("getMyWeeklyEvaluations") && prog.includes("generateWeeklyPdf"));
+  const coachFns = readFileSync("src/lib/coach.functions.ts", "utf8");
+  ok("overrideScore audits who changed what (overridden_by/at) and gates on staff",
+     coachFns.includes("overrideScore") && coachFns.includes("overridden_by") && coachFns.includes("assertCoachOrAdmin"));
+  ok("setAssignedCoach validates the assignee holds a staff role",
+     /setAssignedCoach[\s\S]{0,1600}user_roles[\s\S]{0,400}coach/.test(coachFns));
+  ok("analytics aggregates per-week + total time-on-task",
+     coachFns.includes("secondsSpent") && coachFns.includes("seconds_spent"));
+  const ana = readFileSync("src/components/StudentAnalytics.tsx", "utf8");
+  ok("coach can override a weekly grade from the analytics grid (✏️)",
+     ana.includes("editWeeklyScore") && ana.includes("overrideScore"));
+  ok("analytics surfaces time-on-task", ana.includes("fmtTime") && ana.includes("Tiempo"));
+  ok("admin panel has the assigned-teacher selector",
+     (() => { const s = readFileSync("src/components/StudentDetailPanel.tsx", "utf8");
+              return s.includes("AssignedCoachCard") && s.includes("setAssignedCoach"); })());
+  const bell = readFileSync("src/components/NotificationsBell.tsx", "utf8");
+  ok("nav bell: realtime notifications + unread badge + mark-read",
+     bell.includes('table: "notifications"') && bell.includes("markAllRead") && bell.includes("useUnreadMessages"));
+  const nav = readFileSync("src/components/TopNav.tsx", "utf8");
+  ok("TopNav mounts the bell + unread Messages badge",
+     nav.includes("<NotificationsBell />") && nav.includes("useUnreadMessages(path)"));
+  ok("coach panel has the live activity feed",
+     readFileSync("src/routes/coach.tsx", "utf8").includes("ActivityFeed") &&
+     readFileSync("src/components/ActivityFeed.tsx", "utf8").includes('"coach-activity-feed"'));
+  const day12i = readFileSync("src/routes/day.$dayId.tsx", "utf8");
+  ok("day page heartbeat banks visible seconds via the atomic RPC",
+     day12i.includes('supabase.rpc("add_day_seconds"') && day12i.includes("visibilitychange"));
+
+  // Live schema: the migrations actually reached the project.
+  {
+    const { error: nErr } = await admin.from("notifications").select("id").limit(1);
+    ok("live DB: notifications table exists", !nErr, nErr?.message ?? "");
+    const { error: sErr } = await admin.from("day_state").select("seconds_spent").limit(1);
+    ok("live DB: day_state.seconds_spent exists", !sErr, sErr?.message ?? "");
+    const { error: rErr } = await admin.rpc("add_day_seconds", { _day_id: 1, _seconds: 0 });
+    ok("live DB: add_day_seconds RPC callable", !rErr, rErr?.message ?? "");
+    const { error: oErr } = await admin.from("weekly_evaluations").select("overridden_by").limit(1);
+    ok("live DB: override audit columns exist", !oErr, oErr?.message ?? "");
+    const { error: acErr } = await admin.from("profiles").select("assigned_coach").limit(1);
+    ok("live DB: profiles.assigned_coach exists", !acErr, acErr?.message ?? "");
+  }
+
+  // Videos (client #3/#8): optional per-section YouTube embeds.
+  ok("WeekDay carries optional per-section video embeds",
+     readFileSync("src/data/week34.ts", "utf8").includes("introVideo?: string"));
+  ok("editor accepts any YouTube URL shape and normalizes it",
+     readFileSync("src/components/RichDayEditor.tsx", "utf8").includes("toYouTubeEmbed") &&
+     readFileSync("src/lib/rich-content.ts", "utf8").includes("export function toYouTubeEmbed"));
+  ok("lesson wrappers render the per-section videos when set",
+     day12i.includes("data.introVideo && <VideoBlock") &&
+     day12i.includes("data.vocabVideo && <VideoBlock") &&
+     day12i.includes("data.clesVideo && <VideoBlock"));
+  {
+    const src = readFileSync("src/lib/rich-content.ts", "utf8");
+    const body = src.slice(src.indexOf("export function toYouTubeEmbed"));
+    const jsSrc = body.slice(0, body.indexOf("\n}") + 2)
+      .replace("export function toYouTubeEmbed(raw: string): string", "return function toYouTubeEmbed(raw)");
+    const fn = new Function(jsSrc)();
+    ok("toYouTubeEmbed: watch / youtu.be / shorts → embed; non-YouTube passes through",
+       fn("https://www.youtube.com/watch?v=AdJPOTR-CdU") === "https://www.youtube.com/embed/AdJPOTR-CdU" &&
+       fn("https://youtu.be/AdJPOTR-CdU") === "https://www.youtube.com/embed/AdJPOTR-CdU" &&
+       fn("https://www.youtube.com/shorts/AdJPOTR-CdU") === "https://www.youtube.com/embed/AdJPOTR-CdU" &&
+       fn("https://example.com/video.mp4") === "https://example.com/video.mp4");
+  }
+
+  // French chrome (client #6): student-facing spot-checks.
+  ok("student chrome is French (spot-checks)",
+     prog.includes("Mon progrès") &&
+     readFileSync("src/routes/mensajes.tsx", "utf8").includes("✉️ Messages") &&
+     nav.includes("Se déconnecter") &&
+     readFileSync("src/components/StagedDefi.tsx", "utf8").includes("Envoyer mon défi") &&
+     day12i.includes("Comment dit-on en français ?"));
 }
 
 /* ---------------- build output ---------------- */

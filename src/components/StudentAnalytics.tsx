@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
-import { AlertTriangle, Download, Loader2, Star, TrendingUp } from "lucide-react";
-import { getStudentAnalytics, type WeekAnalytics } from "@/lib/coach.functions";
+import { useEffect, useRef, useState } from "react";
+import { AlertTriangle, Clock, Download, Loader2, Pencil, Star, TrendingUp } from "lucide-react";
+import { getStudentAnalytics, overrideScore, type WeekAnalytics } from "@/lib/coach.functions";
 import { generateWeeklyPdf, type WeeklyReportData } from "@/lib/weekPdf";
 import { toast } from "sonner";
 
@@ -37,6 +37,14 @@ function scoreColor(n: number | null): string {
   return RED;
 }
 
+/** "1h 25m" / "12 min" / "—" — coach-friendly time-on-task. */
+function fmtTime(secs: number): string {
+  if (!secs || secs < 60) return secs > 0 ? "<1 min" : "—";
+  const mins = Math.round(secs / 60);
+  if (mins < 60) return `${mins} min`;
+  return `${Math.floor(mins / 60)}h ${mins % 60}m`;
+}
+
 /** Small inline bar — avoids pulling a chart lib into the coach bundle. */
 function Bar({ value, max = 100, color }: { value: number; max?: number; color: string }) {
   const pct = max > 0 ? Math.max(0, Math.min(100, (value / max) * 100)) : 0;
@@ -50,16 +58,44 @@ function Bar({ value, max = 100, color }: { value: number; max?: number; color: 
 export function StudentAnalytics({ userId, weeks = 8 }: { userId: string; weeks?: number }) {
   const [data, setData] = useState<Analytics | null>(null);
   const [err, setErr] = useState("");
+  const [reloadKey, setReloadKey] = useState(0);
+  const lastUserRef = useRef<string | null>(null);
 
   useEffect(() => {
     let alive = true;
-    setData(null);
+    // New student → spinner. Same student (override refresh) → keep the grid on-screen.
+    if (lastUserRef.current !== userId) {
+      setData(null);
+      lastUserRef.current = userId;
+    }
     setErr("");
     getStudentAnalytics({ data: { userId, weeks } })
       .then((d) => { if (alive) setData(d as Analytics); })
       .catch((e) => { if (alive) setErr(e instanceof Error ? e.message : "No se pudieron cargar las analíticas"); });
     return () => { alive = false; };
-  }, [userId, weeks]);
+  }, [userId, weeks, reloadKey]);
+
+  /** ✏️ Manual correction of a weekly grade (client #15: the AI grades too
+   *  strict — the teacher has the final word). */
+  async function editWeeklyScore(w: WeekAnalytics) {
+    const raw = window.prompt(
+      `Nueva nota de la Semana ${w.week} (0-10). La nota actual es ${w.weeklyScore?.toFixed(1) ?? "—"}.`,
+      w.weeklyScore?.toFixed(1) ?? "",
+    );
+    if (raw === null) return;
+    const score = Number(raw.replace(",", "."));
+    if (!Number.isFinite(score) || score < 0 || score > 10) {
+      toast.error("La nota debe estar entre 0 y 10");
+      return;
+    }
+    try {
+      await overrideScore({ data: { userId, kind: "weekly", targetId: w.week, score } });
+      toast.success(`Nota de la Semana ${w.week} actualizada a ${score.toFixed(1)}/10`);
+      setReloadKey((n) => n + 1);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "No se pudo guardar la nota");
+    }
+  }
 
   if (err) {
     return <p className="rounded-2xl border border-red/30 bg-red/5 p-4 text-sm text-red">{err}</p>;
@@ -132,12 +168,13 @@ export function StudentAnalytics({ userId, weeks = 8 }: { userId: string; weeks?
   return (
     <div className="space-y-4">
       {/* Headline numbers */}
-      <div className="grid gap-3 sm:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-5">
         {[
           { label: "Días completados", value: `${totals.daysDone}`, icon: <TrendingUp className="h-4 w-4" style={{ color: BLUE }} /> },
           { label: "Estrellas", value: `${totals.stars}`, icon: <Star className="h-4 w-4" style={{ color: GOLD }} /> },
           { label: "Tests semanales", value: `${totals.weeklyTestsTaken}`, icon: null },
           { label: "Media semanal", value: avgWeekly === null ? "—" : `${avgWeekly.toFixed(1)}/10`, icon: null },
+          { label: "Tiempo en la plataforma", value: fmtTime(totals.secondsSpent), icon: <Clock className="h-4 w-4" style={{ color: BLUE }} /> },
         ].map((c) => (
           <div key={c.label} className="rounded-2xl border border-border bg-white p-3">
             <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
@@ -166,6 +203,7 @@ export function StudentAnalytics({ userId, weeks = 8 }: { userId: string; weeks?
               <th className="p-3">Défis</th>
               <th className="p-3">Test semanal</th>
               <th className="p-3">Precisión</th>
+              <th className="p-3">Tiempo</th>
               <th className="p-3">⭐</th>
               <th className="p-3">A reforzar</th>
               <th className="p-3" />
@@ -191,8 +229,19 @@ export function StudentAnalytics({ userId, weeks = 8 }: { userId: string; weeks?
                   {w.defiAvg === null ? "—" : `${w.defiAvg.toFixed(1)}/10`}
                 </td>
                 <td className="p-3">
-                  <span className="font-extrabold" style={{ color: scoreColor(w.weeklyScore) }}>
-                    {w.weeklyScore === null ? "—" : `${w.weeklyScore.toFixed(1)}/10`}
+                  <span className="inline-flex items-center gap-1">
+                    <span className="font-extrabold" style={{ color: scoreColor(w.weeklyScore) }}>
+                      {w.weeklyScore === null ? "—" : `${w.weeklyScore.toFixed(1)}/10`}
+                    </span>
+                    {w.weeklyScore !== null && (
+                      <button
+                        onClick={() => void editWeeklyScore(w)}
+                        title="Corregir la nota manualmente"
+                        className="rounded-full p-1 text-navy/50 transition hover:bg-navy/10 hover:text-navy"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                    )}
                   </span>
                   {w.testScores && (
                     <p className="mt-0.5 text-[10px] text-muted-foreground">
@@ -208,6 +257,7 @@ export function StudentAnalytics({ userId, weeks = 8 }: { userId: string; weeks?
                     </>
                   )}
                 </td>
+                <td className="p-3 text-xs font-semibold text-navy">{fmtTime(w.secondsSpent)}</td>
                 <td className="p-3 font-semibold text-navy">{w.stars || "—"}</td>
                 <td className="p-3 max-w-[220px]">
                   {w.weakPoints.length ? (

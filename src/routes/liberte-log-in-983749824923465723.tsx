@@ -4,11 +4,11 @@ import { AuthPage } from "@/components/AuthPage";
 export const Route = createFileRoute("/liberte-log-in-983749824923465723")({
   head: () => ({
     meta: [
-      { title: "Crea tu cuenta — Liberté Instituto de Francés" },
+      { title: "Connexion — Liberté Institut de Français" },
       {
         name: "description",
         content:
-          "Regístrate en Liberté y accede a tus lecciones, ejercicios y progreso en cualquier momento.",
+          "Connecte-toi à Liberté pour accéder à tes leçons, exercices et progrès à tout moment.",
       },
     ],
   }),

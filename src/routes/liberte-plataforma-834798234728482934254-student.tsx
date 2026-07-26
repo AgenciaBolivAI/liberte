@@ -19,7 +19,7 @@ import mascot from "@/assets/liberte-mascot.png.asset.json";
 import { useAuth } from "@/lib/auth-context";
 import { supabase } from "@/integrations/supabase/client";
 import { weekOverride } from "@/lib/content-access";
-import { WEEKS_WITH_CONTENT, type AccessOverride } from "@/lib/unlock";
+import { WEEKS_WITH_CONTENT, furthestUnlockedDay, type AccessOverride } from "@/lib/unlock";
 import { useDayCompletions, useStars, TOTAL_WEEKS, DAYS_PER_WEEK, TOTAL_DAYS } from "@/lib/progress";
 import { UpcomingClassPopup } from "@/components/UpcomingClassPopup";
 
@@ -28,10 +28,10 @@ const MONTH_COVERS = [mois1.url, mois2.url, mois3.url, mois4.url, mois5.url, moi
 export const Route = createFileRoute("/liberte-plataforma-834798234728482934254-student")({
   head: () => ({
     meta: [
-      { title: "Liberté — Instituto de Francés" },
-      { name: "description", content: "Tu programa de 6 meses para hablar francés. Aprende día a día con Liberté." },
-      { property: "og:title", content: "Liberté — Instituto de Francés" },
-      { property: "og:description", content: "Aprende francés en 6 meses, día a día." },
+      { title: "Liberté — Institut de Français" },
+      { name: "description", content: "Ton programme de 6 mois pour parler français. Apprends jour après jour avec Liberté." },
+      { property: "og:title", content: "Liberté — Institut de Français" },
+      { property: "og:description", content: "Apprends le français en 6 mois, jour après jour." },
     ],
   }),
   component: Home,
@@ -147,6 +147,11 @@ function Home() {
   // Real progress: fraction of the 120-day journey completed. Ensure at least 1%
   // once the student is on the active first week so the bar reflects real motion.
   const progressPct = Math.max(daysPercent, currentWeek ? Math.round((1 / (TOTAL_WEEKS * DAYS_PER_WEEK)) * 100) : 0);
+  // Where the main button takes the student: the first day they have NOT yet
+  // finished (was hardcoded to "1", which dragged everyone back to Day 1 · gym).
+  // The day page then auto-resumes their saved lesson within that day.
+  // Plain computation (NOT a hook — we're below conditional returns here).
+  const resumeDay = furthestUnlockedDay(new Set(completedDayIds));
 
   return (
     <div
@@ -218,10 +223,10 @@ function Home() {
               </span>
               <Link
                 to="/day/$dayId"
-                params={{ dayId: "1" }}
+                params={{ dayId: String(resumeDay) }}
                 className="inline-flex items-center gap-2 rounded-full bg-white px-4 py-2.5 text-xs font-bold text-navy shadow-card transition hover:translate-y-[-1px] hover:bg-ice sm:px-5 sm:text-sm"
               >
-                Entrer dans le Jour 1 <ArrowRight className="h-4 w-4" />
+                {resumeDay > 1 ? `Continuer · Jour ${resumeDay}` : "Entrer dans le Jour 1"} <ArrowRight className="h-4 w-4" />
               </Link>
             </div>
           </div>
@@ -368,7 +373,7 @@ function WeekCard({
         </div>
         <div>
           <p className="font-display text-lg font-extrabold drop-shadow">{monthName}</p>
-          <p className="text-[11px] text-white/75">Próximamente</p>
+          <p className="text-[11px] text-white/75">Bientôt disponible</p>
         </div>
       </div>
     );
@@ -461,7 +466,7 @@ function WeekCard({
               ? w.daysUntilUnlock === 1
                 ? "Disponible dans 1 jour"
                 : `Disponible dans ${w.daysUntilUnlock} jours`
-              : "Bloqueado por tu profesor"}
+              : "Bloqué par ton professeur"}
           </p>
         )}
       </div>

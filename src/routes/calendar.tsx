@@ -8,7 +8,7 @@ import { KIND_STYLE, localTime, useCalendarEvents, type CalendarEvent } from "@/
 import { CalendarBoard } from "@/components/CalendarBoard";
 
 export const Route = createFileRoute("/calendar")({
-  head: () => ({ meta: [{ title: "Calendario — Liberté" }] }),
+  head: () => ({ meta: [{ title: "Calendrier — Liberté" }] }),
   component: CalendarPage,
 });
 
@@ -22,7 +22,7 @@ export default function CalendarPage() {
   const upcoming = [...events]
     .filter((e) => new Date(e.startUtc).getTime() + e.durationMin * 60_000 > today.getTime())
     .sort((a, b) => new Date(a.startUtc).getTime() - new Date(b.startUtc).getTime())
-    .slice(0, 8);
+    .slice(0, 10);
 
   return (
     <div
@@ -43,7 +43,7 @@ export default function CalendarPage() {
         </div>
 
         <div className="mt-8 grid gap-3">
-          <h2 className="font-display text-xl font-extrabold text-white">Próximos eventos</h2>
+          <h2 className="font-display text-xl font-extrabold text-white">Prochains événements</h2>
           {upcoming.map((e) => {
             const style = KIND_STYLE[e.kind];
             const isRepos = e.kind === "repos";
@@ -109,21 +109,21 @@ export default function CalendarPage() {
             )}
             {open.zoomId && (
               <div className="mt-3 rounded-xl bg-ice p-3 text-sm text-navy">
-                <p className="font-semibold">ID de reunión</p>
+                <p className="font-semibold">ID de réunion</p>
                 <p className="tabular-nums">{open.zoomId}</p>
               </div>
             )}
             {open.zoomUrl && (
               <Button asChild className="mt-4 w-full bg-gradient-blue text-white">
                 <a href={open.zoomUrl} target="_blank" rel="noreferrer">
-                  <Video className="mr-2 h-4 w-4" /> Entrar a clase (Zoom)
+                  <Video className="mr-2 h-4 w-4" /> Rejoindre le cours (Zoom)
                 </a>
               </Button>
             )}
             {open.materialTo && (
               <Button asChild variant="outline" className="mt-2 w-full border-navy text-navy hover:bg-ice">
                 <Link to={open.materialTo}>
-                  <BookOpen className="mr-2 h-4 w-4" /> Material de la clase
+                  <BookOpen className="mr-2 h-4 w-4" /> Matériel du cours
                 </Link>
               </Button>
             )}

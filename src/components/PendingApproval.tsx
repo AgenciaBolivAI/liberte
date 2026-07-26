@@ -23,14 +23,14 @@ export function PendingApproval() {
       <div className="w-full max-w-md rounded-3xl bg-card p-8 text-center shadow-card">
         <img src={mascot.url} alt="Liberté" className="mx-auto h-24 w-auto" />
         <p className="mt-4 text-xs font-extrabold tracking-widest text-gold uppercase">
-          Cuenta en revisión
+          Compte en cours de vérification
         </p>
         <h1 className="mt-2 font-display text-2xl font-extrabold text-navy">
-          ¡Ya casi, {user?.user_metadata?.full_name?.split(" ")[0] || "bienvenue"}! 🎉
+          Presque, {user?.user_metadata?.full_name?.split(" ")[0] || "bienvenue"} ! 🎉
         </h1>
         <p className="mt-3 text-sm text-navy/80">
-          Tu cuenta fue creada correctamente. El equipo de Liberté está revisando tu inscripción y
-          activará tu acceso muy pronto — te avisaremos por correo.
+          Ton compte a bien été créé. L’équipe Liberté vérifie ton inscription et
+          activera ton accès très bientôt — on te préviendra par e-mail.
         </p>
         <div className="mt-6 flex flex-col gap-2">
           <Button
@@ -50,7 +50,7 @@ export function PendingApproval() {
             onClick={() => supabase.auth.signOut()}
             className="h-11 rounded-xl border-navy/20 text-navy"
           >
-            <LogOut className="mr-2 h-4 w-4" /> Cerrar sesión
+            <LogOut className="mr-2 h-4 w-4" /> Se déconnecter
           </Button>
         </div>
       </div>

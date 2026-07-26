@@ -27,7 +27,7 @@ export function TelegramConnect() {
       // The student links in Telegram out-of-band; re-check shortly after.
       setTimeout(() => void load(), 5000);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "No se pudo iniciar la conexión");
+      toast.error(e instanceof Error ? e.message : "Impossible de démarrer la connexion");
     } finally {
       setBusy(false);
     }
@@ -74,7 +74,7 @@ export function TelegramConnect() {
           </div>
         ) : (
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <span className="text-sm text-muted-foreground">Aún no conectado.</span>
+            <span className="text-sm text-muted-foreground">Pas encore connecté.</span>
             <Button
               onClick={() => void connect()}
               disabled={busy}

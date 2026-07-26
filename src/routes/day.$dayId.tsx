@@ -276,7 +276,7 @@ function DynamicDayGate({ dayId }: { dayId: string }) {
     return (
       <div className="grid min-h-[60vh] place-items-center">
         <div className="flex items-center gap-2 text-navy/70">
-          <PlayCircle className="h-5 w-5 animate-pulse text-blue" /> Cargando el día…
+          <PlayCircle className="h-5 w-5 animate-pulse text-blue" /> Chargement du jour…
         </div>
       </div>
     );
@@ -488,7 +488,12 @@ function DayPage() {
   const [done, setDone] = useState<Record<string, boolean>>({});
   const [completedDays, setCompletedDays] = useState<number[]>([]);
   const completed = order.filter((k) => done[k]).length;
-  const progress = Math.round((completed / order.length) * 100);
+  // "Ton progrès" reflects POSITION, not only «Suivant» clicks: with free
+  // sidebar navigation a student could sit on lesson 4 with the bar at 0%
+  // (client complaint "la barra de progreso no está activa"). Whichever is
+  // further wins: completed lessons or the lesson currently being viewed.
+  const lessonIdx = Math.max(0, order.indexOf(lesson));
+  const progress = Math.round((Math.max(completed, lessonIdx) / order.length) * 100);
 
   const activeWeek = WEEK_OF_DAY[activeDay] ?? 1;
   const { user } = useAuth();
@@ -725,7 +730,7 @@ function DayPage() {
       if (alive) {
         applyPendingLesson();
         setHydrateFailed(true);
-        toast.error("No pudimos cargar tu progreso guardado. Revisa tu conexión y recarga la página.");
+        toast.error("Impossible de charger ta progression enregistrée. Vérifie ta connexion et recharge la page.");
       }
     })();
     return () => { alive = false; };
@@ -809,6 +814,38 @@ function DayPage() {
       flush(); // unmount (route change)
     };
   }, []);
+
+  // Time-on-task heartbeat: every 30s of VISIBLE time on this day, atomically
+  // add the elapsed seconds to day_state.seconds_spent (add_day_seconds RPC —
+  // update-only, so it just no-ops until the first autosave creates the row).
+  // Feeds the coach analytics "tiempo dedicado". Hidden tabs don't count, and
+  // impersonation (readOnly) never touches the student's row.
+  useEffect(() => {
+    if (!userId || readOnly) return;
+    let last = Date.now();
+    const flushSeconds = () => {
+      const secs = Math.round((Date.now() - last) / 1000);
+      last = Date.now();
+      if (secs < 5) return; // ignore noise (rapid re-renders, instant unmounts)
+      void persist(
+        "day_seconds",
+        () => supabase.rpc("add_day_seconds", { _day_id: Number(activeDay), _seconds: Math.min(secs, 300) }),
+        { silent: true },
+      );
+    };
+    const tick = () => {
+      if (document.visibilityState !== "visible") { last = Date.now(); return; }
+      flushSeconds();
+    };
+    const iv = setInterval(tick, 30_000);
+    const onVis = () => { if (document.visibilityState === "hidden") flushSeconds(); else last = Date.now(); };
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      clearInterval(iv);
+      document.removeEventListener("visibilitychange", onVis);
+      flushSeconds(); // leaving the day: bank the tail
+    };
+  }, [userId, activeDay, readOnly]);
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -1002,7 +1039,7 @@ function DayPage() {
           <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-3 text-left opacity-70">
             <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white/10 text-sm">🎉</span>
             <div className="min-w-0 flex-1">
-              <p className="text-[10px] font-bold tracking-widest text-sky/70 uppercase">Se abre al completar la semana</p>
+              <p className="text-[10px] font-bold tracking-widest text-sky/70 uppercase">S’ouvre quand tu termines la semaine</p>
               <p className="truncate text-sm font-bold text-white">Le défi de la semaine</p>
             </div>
             <Lock className="h-3.5 w-3.5 shrink-0 text-white/40" />
@@ -1048,7 +1085,7 @@ function DayPage() {
             onClick={() => navigate({ to: "/day/$dayId", params: { dayId: String(lastOpen) } })}
             className="mt-6 inline-flex items-center gap-2 rounded-full bg-gradient-blue px-6 py-3 font-display font-extrabold text-white shadow-card"
           >
-            Continuar en el Jour {lastOpen} <ArrowRight className="h-4 w-4" />
+            Continuer au Jour {lastOpen} <ArrowRight className="h-4 w-4" />
           </button>
         </div>
       </div>
@@ -1061,7 +1098,7 @@ function DayPage() {
         <button
           onClick={() => setSidebarOpen(true)}
           className="neon-index-btn inline-flex items-center gap-2 rounded-full border-2 border-blue bg-gradient-blue px-5 py-2.5 font-display text-sm font-extrabold text-white"
-          aria-label="Abrir el índice"
+          aria-label="Ouvrir le sommaire"
         >
           <BookOpen className="h-4 w-4" /> Índice
         </button>
@@ -1133,7 +1170,7 @@ function DayPage() {
                 <p className="text-xs font-bold tracking-widest text-gold uppercase">Fin de la Semaine 1</p>
                 <h3 className="mt-1 font-display text-2xl font-extrabold text-navy">🎉 Le défi de la semaine t'attend</h3>
                 <p className="mt-1 text-sm text-navy/80">
-                  Un momento para celebrar y descubrir todo lo que ya sabes decir en francés — con tu informe listo para tu coach.
+                  Un moment pour célébrer et découvrir tout ce que tu sais déjà dire en français — avec ton rapport prêt pour ton coach.
                 </p>
                 <Link
                   to="/semaine/$weekId"
@@ -1152,7 +1189,7 @@ function DayPage() {
                 <p className="text-xs font-bold tracking-widest text-gold uppercase">Fin de la Semaine 2</p>
                 <h3 className="mt-1 font-display text-2xl font-extrabold text-navy">🏆 Le Défi Final de la Semaine 2</h3>
                 <p className="mt-1 text-sm text-navy/80">
-                  100 puntos: quiz, vocabulario, escritura y roleplay con la Coach IA — con tu informe PDF al final.
+                  100 points : quiz, vocabulaire, écriture et jeu de rôle avec la Coach IA — avec ton rapport PDF à la fin.
                 </p>
                 <Link
                   to="/defi-semaine2"
@@ -1223,7 +1260,7 @@ function PlusInlineView({
           onClick={onBackToIndex}
           className="inline-flex items-center gap-2 rounded-full border border-border bg-white px-5 py-2.5 text-sm font-semibold text-navy shadow-soft transition hover:bg-ice"
         >
-          Volver al índice
+          Retour au sommaire
         </button>
         <button
           onClick={onNext ?? undefined}
@@ -1271,6 +1308,11 @@ function LessonView({
     ? { ...codeSeed, meta: WEEK34_META[dayId] ?? MONTH2_META[dayId] }
     : null;
   const richData = richDay ?? codeData;
+  // Days 1-10 render their hand-built components UNLESS the teacher published an
+  // edited version (useRichDay only returns 1-10 rows when status='published'),
+  // in which case the same data-driven wrappers as days 11-40 take over. This is
+  // what makes the flagship days editable without touching them by default.
+  const builtInDay = Number(dayId) <= 10 && !richDay;
 
   // Video gate: every native video in this lesson must be watched to the end
   // before "Suivant" unlocks. Already-completed lessons aren't re-gated.
@@ -1341,62 +1383,66 @@ function LessonView({
 
         <div className="mt-6">
           {lesson === "gym" && <GymCerebral dayId={dayId} />}
-          {dayId === "1" && lesson === "cafe" && <CafeWelcome />}
-          {dayId === "1" && lesson === "vocab" && <VocabLesson onAward={onAward} />}
-          {dayId === "1" && lesson === "cles" && <ClesLesson onAward={onAward} />}
-          {dayId === "1" && lesson === "defi" && <DefiLesson onAward={onAward} onDone={onComplete} />}
+          {builtInDay && dayId === "1" && lesson === "cafe" && <CafeWelcome />}
+          {builtInDay && dayId === "1" && lesson === "vocab" && <VocabLesson onAward={onAward} />}
+          {builtInDay && dayId === "1" && lesson === "cles" && <ClesLesson onAward={onAward} />}
+          {builtInDay && dayId === "1" && lesson === "defi" && <DefiLesson onAward={onAward} onDone={onComplete} />}
 
-          {dayId === "2" && lesson === "intro" && <IntroDay2 />}
-          {dayId === "2" && lesson === "vocab" && <VocabLessonDay2 onAward={onAward} />}
-          {dayId === "2" && lesson === "cles" && <ClesLessonDay2 onAward={onAward} />}
-          {dayId === "2" && lesson === "defi" && <DefiLessonDay2 onAward={onAward} onDone={onComplete} />}
+          {builtInDay && dayId === "2" && lesson === "intro" && <IntroDay2 />}
+          {builtInDay && dayId === "2" && lesson === "vocab" && <VocabLessonDay2 onAward={onAward} />}
+          {builtInDay && dayId === "2" && lesson === "cles" && <ClesLessonDay2 onAward={onAward} />}
+          {builtInDay && dayId === "2" && lesson === "defi" && <DefiLessonDay2 onAward={onAward} onDone={onComplete} />}
+          {/* The cultural bonus is bespoke-only content with no editable
+              counterpart — keep it rendering even when day 2 is published. */}
           {dayId === "2" && lesson === "bonus" && <BonusLessonDay2 onAward={onAward} onDone={onComplete} />}
 
-          {dayId === "3" && lesson === "intro" && <IntroDay3 />}
-          {dayId === "3" && lesson === "vocab" && <VocabLessonDay3 onAward={onAward} />}
-          {dayId === "3" && lesson === "cles" && <ClesLessonDay3 onAward={onAward} />}
-          {dayId === "3" && lesson === "defi" && <DefiLessonDay3 onAward={onAward} onDone={onComplete} />}
+          {builtInDay && dayId === "3" && lesson === "intro" && <IntroDay3 />}
+          {builtInDay && dayId === "3" && lesson === "vocab" && <VocabLessonDay3 onAward={onAward} />}
+          {builtInDay && dayId === "3" && lesson === "cles" && <ClesLessonDay3 onAward={onAward} />}
+          {builtInDay && dayId === "3" && lesson === "defi" && <DefiLessonDay3 onAward={onAward} onDone={onComplete} />}
 
-          {dayId === "4" && lesson === "intro" && <IntroDay4 />}
-          {dayId === "4" && lesson === "vocab" && <VocabLessonDay4 onAward={onAward} />}
-          {dayId === "4" && lesson === "cles" && <ClesLessonDay4 onAward={onAward} />}
-          {dayId === "4" && lesson === "defi" && <DefiLessonDay4 onAward={onAward} onDone={onComplete} />}
+          {builtInDay && dayId === "4" && lesson === "intro" && <IntroDay4 />}
+          {builtInDay && dayId === "4" && lesson === "vocab" && <VocabLessonDay4 onAward={onAward} />}
+          {builtInDay && dayId === "4" && lesson === "cles" && <ClesLessonDay4 onAward={onAward} />}
+          {builtInDay && dayId === "4" && lesson === "defi" && <DefiLessonDay4 onAward={onAward} onDone={onComplete} />}
 
-          {dayId === "5" && lesson === "intro" && <IntroDay5 />}
-          {dayId === "5" && lesson === "vocab" && <VocabLessonDay5 onAward={onAward} />}
-          {dayId === "5" && lesson === "cles" && <ClesLessonDay5 onAward={onAward} />}
-          {dayId === "5" && lesson === "defi" && <DefiLessonDay5 onAward={onAward} onDone={onComplete} />}
+          {builtInDay && dayId === "5" && lesson === "intro" && <IntroDay5 />}
+          {builtInDay && dayId === "5" && lesson === "vocab" && <VocabLessonDay5 onAward={onAward} />}
+          {builtInDay && dayId === "5" && lesson === "cles" && <ClesLessonDay5 onAward={onAward} />}
+          {builtInDay && dayId === "5" && lesson === "defi" && <DefiLessonDay5 onAward={onAward} onDone={onComplete} />}
 
-          {dayId === "6" && lesson === "intro" && <IntroDay6 />}
-          {dayId === "6" && lesson === "vocab" && <VocabLessonDay6 onAward={onAward} />}
-          {dayId === "6" && lesson === "cles" && <ClesLessonDay6 onAward={onAward} />}
-          {dayId === "6" && lesson === "defi" && <DefiLessonDay6 onAward={onAward} onDone={onComplete} />}
+          {builtInDay && dayId === "6" && lesson === "intro" && <IntroDay6 />}
+          {builtInDay && dayId === "6" && lesson === "vocab" && <VocabLessonDay6 onAward={onAward} />}
+          {builtInDay && dayId === "6" && lesson === "cles" && <ClesLessonDay6 onAward={onAward} />}
+          {builtInDay && dayId === "6" && lesson === "defi" && <DefiLessonDay6 onAward={onAward} onDone={onComplete} />}
 
-          {dayId === "7" && lesson === "intro" && <IntroDay7 />}
-          {dayId === "7" && lesson === "vocab" && <VocabLessonDay7 onAward={onAward} />}
-          {dayId === "7" && lesson === "cles" && <ClesLessonDay7 onAward={onAward} />}
-          {dayId === "7" && lesson === "defi" && <DefiLessonDay7 onAward={onAward} onDone={onComplete} />}
+          {builtInDay && dayId === "7" && lesson === "intro" && <IntroDay7 />}
+          {builtInDay && dayId === "7" && lesson === "vocab" && <VocabLessonDay7 onAward={onAward} />}
+          {builtInDay && dayId === "7" && lesson === "cles" && <ClesLessonDay7 onAward={onAward} />}
+          {builtInDay && dayId === "7" && lesson === "defi" && <DefiLessonDay7 onAward={onAward} onDone={onComplete} />}
 
-          {dayId === "8" && lesson === "intro" && <IntroDay8 />}
-          {dayId === "8" && lesson === "vocab" && <VocabLessonDay8 onAward={onAward} />}
-          {dayId === "8" && lesson === "cles" && <ClesLessonDay8 onAward={onAward} />}
-          {dayId === "8" && lesson === "defi" && <DefiLessonDay8 onAward={onAward} onDone={onComplete} />}
+          {builtInDay && dayId === "8" && lesson === "intro" && <IntroDay8 />}
+          {builtInDay && dayId === "8" && lesson === "vocab" && <VocabLessonDay8 onAward={onAward} />}
+          {builtInDay && dayId === "8" && lesson === "cles" && <ClesLessonDay8 onAward={onAward} />}
+          {builtInDay && dayId === "8" && lesson === "defi" && <DefiLessonDay8 onAward={onAward} onDone={onComplete} />}
 
-          {dayId === "9" && lesson === "intro" && <IntroDay9 />}
-          {dayId === "9" && lesson === "vocab" && <VocabLessonDay9 onAward={onAward} />}
-          {dayId === "9" && lesson === "cles" && <ClesLessonDay9 onAward={onAward} />}
-          {dayId === "9" && lesson === "defi" && <DefiLessonDay9 onAward={onAward} onDone={onComplete} />}
+          {builtInDay && dayId === "9" && lesson === "intro" && <IntroDay9 />}
+          {builtInDay && dayId === "9" && lesson === "vocab" && <VocabLessonDay9 onAward={onAward} />}
+          {builtInDay && dayId === "9" && lesson === "cles" && <ClesLessonDay9 onAward={onAward} />}
+          {builtInDay && dayId === "9" && lesson === "defi" && <DefiLessonDay9 onAward={onAward} onDone={onComplete} />}
 
-          {dayId === "10" && lesson === "intro" && <IntroDay10 />}
-          {dayId === "10" && lesson === "vocab" && <VocabLessonDay10 onAward={onAward} />}
-          {dayId === "10" && lesson === "cles" && <ClesLessonDay10 onAward={onAward} />}
-          {dayId === "10" && lesson === "defi" && <DefiLessonDay10 onAward={onAward} onDone={onComplete} />}
+          {builtInDay && dayId === "10" && lesson === "intro" && <IntroDay10 />}
+          {builtInDay && dayId === "10" && lesson === "vocab" && <VocabLessonDay10 onAward={onAward} />}
+          {builtInDay && dayId === "10" && lesson === "cles" && <ClesLessonDay10 onAward={onAward} />}
+          {builtInDay && dayId === "10" && lesson === "defi" && <DefiLessonDay10 onAward={onAward} onDone={onComplete} />}
 
-          {/* Days 11-20 · Weeks 3-4 — generic wrappers fed by the DB rich content
-              (teacher-editable) or the WEEK34 code fallback; same design as 1-10. */}
-          {Number(dayId) >= 11 && Number(dayId) <= 40 && richData && (
+          {/* Data-driven lessons: days 11-40 always; days 1-10 ONLY when the
+              teacher published an edited version (builtInDay false ⇒ richDay is
+              the published row). Same design either way. Day 1's bespoke "cafe"
+              step maps to the generic intro. */}
+          {!builtInDay && Number(dayId) <= 40 && richData && (
             <>
-              {lesson === "intro" && <IntroLessonG data={richData} />}
+              {(lesson === "intro" || lesson === "cafe") && <IntroLessonG data={richData} />}
               {lesson === "vocab" && <VocabLessonG data={richData} dayId={dayId} onAward={onAward} />}
               {lesson === "cles" && <ClesLessonG data={richData} dayId={dayId} onAward={onAward} />}
               {lesson === "defi" && <DefiLessonG data={richData} dayId={dayId} onAward={onAward} onDone={onComplete} />}
@@ -1445,12 +1491,12 @@ function DayCompleteBlock({ dayId, nextDayId, nextDayLabel, onGoNextDay, readOnl
 
   async function handleMark() {
     if (readOnly) return; // impersonating: would write to the admin's own row
-    if (!user) { toast.error("Inicia sesión para guardar tu progreso"); return; }
+    if (!user) { toast.error("Connecte-toi pour enregistrer ta progression"); return; }
     setSaving(true);
     try {
       await markDayCompleted(user.id, dayNum, WEEK_OF_DAY[dayId] ?? 1);
       await refresh();
-      toast.success("¡Día marcado como terminado! +2 ⭐");
+      toast.success("Jour marqué comme terminé ! +2 ⭐");
       confetti({ particleCount: 80, spread: 70, origin: { y: 0.6 } });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "No se pudo guardar");
@@ -1469,7 +1515,7 @@ function DayCompleteBlock({ dayId, nextDayId, nextDayLabel, onGoNextDay, readOnl
       ) : !alreadyMarked ? (
         <>
           <h3 className="mt-2 font-display text-xl font-extrabold text-navy sm:text-2xl">
-            Marca este día como terminado para sumar tu progreso
+            Marque ce jour comme terminé pour valider ta progression
           </h3>
           <button
             type="button"
@@ -1477,11 +1523,11 @@ function DayCompleteBlock({ dayId, nextDayId, nextDayLabel, onGoNextDay, readOnl
             disabled={saving}
             className="mt-4 inline-flex items-center justify-center gap-2 rounded-full border-2 border-gold bg-gradient-to-r from-gold to-[oklch(0.78_0.14_80)] px-8 py-3 font-display text-base font-extrabold text-navy shadow-card transition hover:brightness-105 disabled:opacity-60"
           >
-            {saving ? "Guardando…" : "✓ Marquer le jour comme terminé (+2 ⭐)"}
+            {saving ? "Enregistrement…" : "✓ Marquer le jour comme terminé (+2 ⭐)"}
           </button>
         </>
       ) : (
-        <p className="mt-2 font-display text-lg font-extrabold text-navy">✓ Día registrado en tu progreso</p>
+        <p className="mt-2 font-display text-lg font-extrabold text-navy">✓ Jour enregistré dans ta progression</p>
       )}
       {nextDayId && nextDayLabel && (
         <>
@@ -2044,7 +2090,7 @@ function WritingGame({ items, onAward, dayId = 0, section = "vocab" }: {
       </div>
       {pending && (
         <div className="rounded-xl border border-blue/30 bg-blue/10 p-3 text-sm text-navy">
-          Tu respuesta quedó guardada, la corrección llegará en un momento.
+          Ta réponse est enregistrée, la correction arrive dans un instant.
         </div>
       )}
       {correction && <FeedbackCard c={correction} />}
@@ -2082,7 +2128,7 @@ function useRecorder() {
       rec.start();
       setRecording(true);
     } catch {
-      alert("No pudimos acceder al micrófono. Revisa los permisos del navegador.");
+      alert("Impossible d’accéder au micro. Vérifie les autorisations du navigateur.");
     }
   };
   const stop = () => {
@@ -2138,6 +2184,15 @@ function SpeakingGame({ items, onAward, dayId = 0, section = "vocab" }: {
       const { transcribeStage, correctActivity } = await import("@/lib/defi.functions");
       const audioBase64 = await blobToBase64(rec.blob);
       const t = (await transcribeStage({ data: { audioBase64, mimeType: rec.mimeType } })) as { text: string };
+      // Empty transcript = the mic didn't pick anything up. Before, this threw in
+      // correctActivity and fell into the "la corrección llegará en un momento"
+      // dead end (it never arrived). Tell the student and let them re-record.
+      if (!t.text?.trim()) {
+        rec.reset();
+        setStatus("🎤 On n’a pas entendu l’audio. Rapproche-toi du micro et réessaie.");
+        playTone("no");
+        return;
+      }
       setStatus("Corrigiendo… ✨");
       const c = (await correctActivity({
         data: {
@@ -2146,14 +2201,15 @@ function SpeakingGame({ items, onAward, dayId = 0, section = "vocab" }: {
         },
       })) as Correction;
       setCorrection(c);
+      setStatus("");
       playTone(c.resultado === "incorrecto" ? "no" : "ok");
       if (c.resultado !== "incorrecto") setScore((s) => s + 1);
     } catch {
       setPending(true);
+      setStatus("");
       playTone("ok");
     } finally {
       setBusy(false);
-      setStatus("");
     }
   };
 
@@ -2168,7 +2224,7 @@ function SpeakingGame({ items, onAward, dayId = 0, section = "vocab" }: {
     <div className="space-y-4 rounded-2xl border border-border bg-card p-5 shadow-soft">
       <p className="text-xs font-semibold text-muted-foreground">Parler · {i + 1}/{items.length}</p>
       <div className="rounded-xl bg-ice p-4">
-        <p className="text-xs font-bold tracking-widest text-blue uppercase">Situación</p>
+        <p className="text-xs font-bold tracking-widest text-blue uppercase">Situation</p>
         <p className="mt-1 text-sm text-navy">{cur.situation}</p>
       </div>
       <div className="rounded-xl border border-blue/30 bg-white p-4">
@@ -2189,7 +2245,7 @@ function SpeakingGame({ items, onAward, dayId = 0, section = "vocab" }: {
           {rec.recording ? <Square className="h-8 w-8" /> : <Mic className="h-8 w-8" />}
         </button>
         <p className="text-xs text-muted-foreground">
-          {rec.recording ? "Grabando… toca para detener." : rec.url ? "Escucha tu grabación:" : "Toca para grabar tu respuesta."}
+          {rec.recording ? "Enregistrement… touche pour arrêter." : rec.url ? "Écoute ton enregistrement :" : "Touche pour enregistrer ta réponse."}
         </p>
         {rec.url && <audio src={rec.url} controls className="w-full max-w-md" />}
       </div>
@@ -2209,7 +2265,7 @@ function SpeakingGame({ items, onAward, dayId = 0, section = "vocab" }: {
       </div>
       {pending && (
         <div className="rounded-xl border border-blue/30 bg-blue/10 p-3 text-sm text-navy">
-          Tu respuesta quedó guardada, la corrección llegará en un momento.
+          Ta réponse est enregistrée, la correction arrive dans un instant.
         </div>
       )}
       {correction && <FeedbackCard c={correction} />}
@@ -2275,7 +2331,7 @@ function DefiLesson({ onAward, onDone }: { onAward: (n?: number) => void; onDone
       dayId={1}
       title="Le Petit Liberté, Paris"
       subtitle="Tu primera conversación real en el café: saluda, pide y paga en francés."
-      eyebrow="Défi final · Misión París"
+      eyebrow="Défi final · Mission Paris"
       avatar="🤵"
       steps={defiRoleplay}
       criteria={DAY1_CRITERIA}
@@ -2401,7 +2457,7 @@ function FlashQuizGame({ onAward }: { onAward: (n?: number) => void }) {
       <div className="mt-4 flex flex-col items-center gap-2 rounded-2xl bg-gradient-blue p-8 text-white">
         <span className="text-6xl">{cur.emoji}</span>
         <p className="font-display text-lg font-bold">{cur.concept}</p>
-        <p className="text-xs text-white/70">¿Cómo se dice en français ?</p>
+        <p className="text-xs text-white/70">Comment dit-on en français ?</p>
       </div>
       <div className="mt-4 grid gap-2 sm:grid-cols-3">
         {cur.options.map((o, idx) => {
@@ -2518,7 +2574,7 @@ function BonusLessonDay2({ onAward, onDone }: { onAward: (n?: number) => void; o
           <div className="grid h-14 w-14 shrink-0 place-items-center rounded-full bg-gradient-to-br from-gold to-[#D7C1A9] text-2xl">🏅</div>
           <div className="flex-1">
             <p className="font-display text-lg font-extrabold text-navy">Insignia « Curieux culturel »</p>
-            <p className="text-sm text-muted-foreground">Marca este bonus como visto y súmalo a tu perfil.</p>
+            <p className="text-sm text-muted-foreground">Marque ce bonus comme vu et ajoute-le à ton profil.</p>
           </div>
           <Button onClick={claim} disabled={claimed} className="bg-gradient-to-r from-gold to-[#D7C1A9] text-navy">
             {claimed ? <><Check className="mr-1 h-4 w-4" /> Desbloqueado</> : <>Reclamar <Star className="ml-1 h-4 w-4 fill-navy" /></>}
@@ -2665,7 +2721,7 @@ function FlashQuizGameDay3({ onAward }: { onAward: (n?: number) => void }) {
       <div className="mt-4 flex flex-col items-center gap-2 rounded-2xl bg-gradient-blue p-8 text-white">
         <span className="text-6xl">{cur.emoji}</span>
         <p className="font-display text-lg font-bold">{cur.concept}</p>
-        <p className="text-xs text-white/70">¿Cómo se dice en français ?</p>
+        <p className="text-xs text-white/70">Comment dit-on en français ?</p>
       </div>
       <div className="mt-4 grid gap-2 sm:grid-cols-3">
         {shuffled.options.map((o, idx) => {
@@ -2870,7 +2926,7 @@ function FlashQuizGameDay4({ onAward }: { onAward: (n?: number) => void }) {
       <div className="mt-4 flex flex-col items-center gap-2 rounded-2xl bg-gradient-blue p-8 text-white">
         <span className="text-6xl">{cur.emoji}</span>
         <p className="font-display text-lg font-bold">{cur.concept}</p>
-        <p className="text-xs text-white/70">¿Cómo se dice en français ?</p>
+        <p className="text-xs text-white/70">Comment dit-on en français ?</p>
       </div>
       <div className="mt-4 grid gap-2 sm:grid-cols-3">
         {cur.options.map((o, idx) => {
@@ -3074,7 +3130,7 @@ function FlashQuizGameDay5({ onAward }: { onAward: (n?: number) => void }) {
       <div className="mt-4 flex flex-col items-center gap-2 rounded-2xl bg-gradient-blue p-8 text-white">
         <span className="text-6xl">{cur.emoji}</span>
         <p className="font-display text-lg font-bold">{cur.concept}</p>
-        <p className="text-xs text-white/70">¿Cómo se dice en français ?</p>
+        <p className="text-xs text-white/70">Comment dit-on en français ?</p>
       </div>
       <div className="mt-4 grid gap-2 sm:grid-cols-3">
         {cur.options.map((o, idx) => {
@@ -3282,7 +3338,7 @@ function FlashQuizGameDay6({ onAward }: { onAward: (n?: number) => void }) {
       <div className="mt-4 flex flex-col items-center gap-2 rounded-2xl bg-gradient-blue p-8 text-white">
         <span className="text-6xl">{cur.emoji}</span>
         <p className="font-display text-lg font-bold">{cur.concept}</p>
-        <p className="text-xs text-white/70">¿Cómo se dice en français ?</p>
+        <p className="text-xs text-white/70">Comment dit-on en français ?</p>
       </div>
       <div className="mt-4 grid gap-2 sm:grid-cols-3">
         {cur.options.map((o, idx) => {
@@ -3365,7 +3421,7 @@ function DefiLessonDay6({ onAward, onDone }: { onAward: (n?: number) => void; on
       dayId={6}
       title="Restaurant · Partie 2"
       subtitle="Cena en un restaurante parisino con amigos: restricciones, un error en la cuenta y el pago separado."
-      eyebrow="Défi final · Reto entregable"
+      eyebrow="Défi final · Ta mission"
       avatar="🍽️"
       steps={day6DefiSteps}
       criteria={DAY6_CRITERIA}
@@ -3457,7 +3513,7 @@ function FlashQuizG({ items, onAward }: { items: WeekDay["flashQuiz"]; onAward: 
       <div className="mt-4 flex flex-col items-center gap-2 rounded-2xl bg-gradient-blue p-8 text-white">
         <span className="text-6xl">{cur.emoji}</span>
         <p className="font-display text-lg font-bold">{cur.concept}</p>
-        <p className="text-xs text-white/70">¿Cómo se dice en français ?</p>
+        <p className="text-xs text-white/70">Comment dit-on en français ?</p>
       </div>
       <div className="mt-4 grid gap-2 sm:grid-cols-3">
         {cur.options.map((o, idx) => {
@@ -3488,6 +3544,7 @@ function IntroLessonG({ data }: { data: RichDay }) {
   return (
     <div className="space-y-5">
       <LiberteSpeak message={data.meta?.intro ?? "Bienvenue ! On commence ensemble ?"} />
+      {data.introVideo && <VideoBlock src={data.introVideo} title="🎬 Vidéo du jour" />}
     </div>
   );
 }
@@ -3496,6 +3553,8 @@ function VocabLessonG({ data, dayId, onAward }: { data: RichDay; dayId: string; 
   return (
     <div className="space-y-6">
       <LiberteSpeak message="30 mots pour la situation du jour. Explore les cartes, puis les 4 mini-jeux." />
+
+      {data.vocabVideo && <VideoBlock src={data.vocabVideo} title="📚 Vocabulaire — vidéo" />}
 
       <FlashGridG items={data.vocabulary} />
 
@@ -3525,6 +3584,7 @@ function VocabLessonG({ data, dayId, onAward }: { data: RichDay; dayId: string; 
 function ClesLessonG({ data, dayId, onAward }: { data: RichDay; dayId: string; onAward: (n?: number) => void }) {
   return (
     <div className="space-y-6">
+      {data.clesVideo && <VideoBlock src={data.clesVideo} title="🗝️ Les Clés — vidéo" />}
       <div className="rounded-2xl border-2 border-gold/40 bg-gradient-to-br from-ice to-white p-5 shadow-card">
         <div className="flex items-center gap-2">
           <Star className="h-5 w-5 fill-gold text-gold" />
@@ -3562,7 +3622,7 @@ function DefiLessonG({ data, dayId, onAward, onDone }: { data: RichDay; dayId: s
       dayId={Number(dayId)}
       title={data.meta.defiTitle}
       subtitle={data.meta.defiSubtitle}
-      eyebrow="Défi final · Reto entregable"
+      eyebrow="Défi final · Ta mission"
       avatar={data.meta.defiAvatar}
       steps={data.defiSteps}
       criteria={data.defiCriteria}
@@ -3688,7 +3748,7 @@ function FlashQuizGameDay7({ onAward }: { onAward: (n?: number) => void }) {
       <div className="mt-4 flex flex-col items-center gap-2 rounded-2xl bg-gradient-blue p-8 text-white">
         <span className="text-6xl">{cur.emoji}</span>
         <p className="font-display text-lg font-bold">{cur.concept}</p>
-        <p className="text-xs text-white/70">¿Cómo se dice en français ?</p>
+        <p className="text-xs text-white/70">Comment dit-on en français ?</p>
       </div>
       <div className="mt-4 grid gap-2 sm:grid-cols-3">
         {cur.options.map((o, idx) => {
@@ -3771,7 +3831,7 @@ function DefiLessonDay7({ onAward, onDone }: { onAward: (n?: number) => void; on
       dayId={7}
       title="Supermarché · Partie 1"
       subtitle="Entras a un supermercado francés y preguntas dónde están 2 secciones diferentes, usando « Où se trouve… ? », « Il y a… ? » e « Il n'y a pas de… »."
-      eyebrow="Défi final · Reto entregable"
+      eyebrow="Défi final · Ta mission"
       avatar="🛒"
       steps={day7DefiSteps}
       criteria={DAY7_CRITERIA}
@@ -3980,7 +4040,7 @@ function DefiLessonDay8({ onAward, onDone }: { onAward: (n?: number) => void; on
       dayId={8}
       title="Faire les courses"
       subtitle="Haz la compra semanal completa usando devoir + infinitivo y partitivos correctos con productos de varias secciones."
-      eyebrow="Défi final · Reto entregable"
+      eyebrow="Défi final · Ta mission"
       avatar="🛒"
       steps={day8DefiSteps}
       criteria={DAY8_CRITERIA}
@@ -4187,7 +4247,7 @@ function DefiLessonDay9({ onAward, onDone }: { onAward: (n?: number) => void; on
       dayId={9}
       title="Au guichet du métro"
       subtitle="Compra un billete y pregunta por la línea y la dirección para llegar a tu destino, usando en / à / par correctamente."
-      eyebrow="Défi final · Reto entregable"
+      eyebrow="Défi final · Ta mission"
       avatar="🚇"
       steps={day9DefiSteps}
       criteria={DAY9_CRITERIA}
@@ -4392,7 +4452,7 @@ function DefiLessonDay10({ onAward, onDone }: { onAward: (n?: number) => void; o
       dayId={10}
       title="En taxi à Paris"
       subtitle="Toma un taxi : da la dirección, pregunta la duración y el precio, y explica un trayecto con 2 medios de transporte."
-      eyebrow="Défi final · Reto entregable · ¡Fin de Semana 2!"
+      eyebrow="Défi final · Ta mission · Fin de la Semaine 2 !"
       avatar="🚕"
       steps={day10DefiSteps}
       criteria={DAY10_CRITERIA}

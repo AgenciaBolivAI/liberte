@@ -46,13 +46,13 @@ export async function persist(
     const { error } = await run();
     if (error) {
       console.error(`[persist:${label}]`, error.message);
-      if (!opts.silent) notify(opts.message ?? "No pudimos guardar tu progreso. Revisa tu conexión.");
+      if (!opts.silent) notify(opts.message ?? "Impossible d’enregistrer ta progression. Vérifie ta connexion.");
       return false;
     }
     return true;
   } catch (e) {
     console.error(`[persist:${label}]`, e);
-    if (!opts.silent) notify(opts.message ?? "No pudimos guardar tu progreso. Revisa tu conexión.");
+    if (!opts.silent) notify(opts.message ?? "Impossible d’enregistrer ta progression. Vérifie ta connexion.");
     return false;
   }
 }

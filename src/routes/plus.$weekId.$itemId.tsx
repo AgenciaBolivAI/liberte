@@ -93,7 +93,7 @@ function PlusItemPage() {
     return (
       <div className="mx-auto max-w-lg p-8 text-center">
         <p className="text-sm text-muted-foreground">Recurso no encontrado.</p>
-        <Link to="/day/$dayId" params={{ dayId: "1" }} className="mt-4 inline-block text-blue underline">Volver</Link>
+        <Link to="/day/$dayId" params={{ dayId: "1" }} className="mt-4 inline-block text-blue underline">Retour</Link>
       </div>
     );
   }
@@ -112,7 +112,7 @@ function PlusItemPage() {
             params={{ dayId: String((Number(weekId) - 1) * 5 + 1) }}
             className="inline-flex items-center gap-1 text-xs font-semibold text-navy/70 hover:text-navy"
           >
-            <ArrowLeft className="h-4 w-4" /> Volver al programa
+            <ArrowLeft className="h-4 w-4" /> Retour au programme
           </Link>
           <p className="font-display text-sm font-extrabold text-navy">Semaine {weekId}</p>
           <span className="w-24" />

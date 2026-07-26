@@ -1,11 +1,19 @@
 // French TTS helper with play/pause toggle.
-// Uses the browser Web Speech API (works on Chrome, Safari, iOS, Android).
-// Falls back to Google Translate TTS via <audio> if the synthesis API is
-// unavailable.
 //
-// iOS/Android critical rule: `speechSynthesis.speak()` MUST be called
-// synchronously within the user gesture. Any `await` between the click and
-// `.speak()` breaks the gesture and the utterance is silently dropped.
+// Voice quality path (students called the robotic browser voice "muy molesta —
+// no se puede practicar con la voz automática"): every phrase is first
+// requested from the server's OpenAI TTS (same natural voice as the tutor),
+// cached, and played as MP3. The browser Web Speech API / Google-Translate
+// audio remain ONLY as fallbacks when the server voice is unavailable
+// (offline, unapproved account, very long text).
+//
+// iOS/Android critical rule: audio MUST start within the user gesture. The
+// synthesis fallback calls `.speak()` synchronously; the MP3 path calls
+// `unlockAudioPlayback()` synchronously inside the gesture so the awaited
+// server response may start playback afterwards.
+
+import { speakText } from "@/lib/tts.functions";
+import { unlockAudioPlayback } from "@/lib/audio";
 
 let currentAudio: HTMLAudioElement | null = null;
 let currentText: string | null = null;
@@ -113,8 +121,42 @@ function speakViaAudio(text: string, rate = 0.95): boolean {
   }
 }
 
-/** Play; if the same text is already playing, stop it (toggle). Synchronous
- * to preserve the mobile user-gesture requirement. */
+/* ---------------- natural server voice (OpenAI TTS) ---------------- */
+
+// Session cache: exercise phrases repeat constantly ("Écouter le modèle",
+// listening items) — one server call per distinct text per session.
+const mp3Cache = new Map<string, string>();
+const MAX_SERVER_TEXT = 300;
+// Monotonic click counter so a slow TTS response can't play over whatever the
+// student clicked afterwards.
+let speakSeq = 0;
+
+function playMp3(b64: string, text: string, rate: number): boolean {
+  try {
+    const audio = new Audio(`data:audio/mp3;base64,${b64}`);
+    audio.playbackRate = rate;
+    audio.onended = () => {
+      if (currentText === text) { currentText = null; currentAudio = null; notify(); }
+    };
+    currentAudio = audio;
+    currentText = text;
+    notify();
+    void audio.play().catch(() => {
+      if (currentText === text) { currentText = null; currentAudio = null; notify(); }
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function speakLocalFallback(text: string, rate: number): void {
+  const ok = speakViaSynthesis(text, rate);
+  if (!ok) speakViaAudio(text, rate);
+}
+
+/** Play; if the same text is already playing, stop it (toggle). The natural
+ * server voice is preferred; the browser voice only covers failures. */
 export function speakFr(text: string, _rate = 0.95): void {
   if (typeof window === "undefined") return;
   if (currentText === text) {
@@ -122,8 +164,39 @@ export function speakFr(text: string, _rate = 0.95): void {
     return;
   }
   stopFr();
-  const ok = speakViaSynthesis(text, _rate);
-  if (!ok) speakViaAudio(text, _rate);
+  const my = ++speakSeq;
+
+  // Long texts (mascot paragraphs) skip the server (input cap) → browser voice.
+  if (text.length > MAX_SERVER_TEXT) {
+    speakLocalFallback(text, _rate);
+    return;
+  }
+
+  const cached = mp3Cache.get(text);
+  if (cached) {
+    playMp3(cached, text, _rate);
+    return;
+  }
+
+  // Unlock synchronously inside the gesture so the awaited MP3 may start later.
+  unlockAudioPlayback();
+  // Mark as "speaking" immediately for the toggle/spinner UIs.
+  currentText = text;
+  notify();
+  void speakText({ data: { text } })
+    .then(({ audio }) => {
+      if (speakSeq !== my || currentText !== text) return; // user moved on
+      if (audio) {
+        mp3Cache.set(text, audio);
+        playMp3(audio, text, _rate);
+      } else {
+        speakLocalFallback(text, _rate);
+      }
+    })
+    .catch(() => {
+      if (speakSeq !== my || currentText !== text) return;
+      speakLocalFallback(text, _rate);
+    });
 }
 
 export function hasFrenchVoice(): boolean {

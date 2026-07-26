@@ -10,11 +10,11 @@ import eiffelBg from "@/assets/paris-eiffel-bg.jpg";
 export const Route = createFileRoute("/clasesenvivo/")({
   head: () => ({
     meta: [
-      { title: "Clases en Vivo · Liberté" },
+      { title: "Cours en direct · Liberté" },
       {
         name: "description",
         content:
-          "Biblioteca de todas las clases en vivo del programa Liberté: 6 meses, 8 clases por mes y talleres inmersivos.",
+          "Bibliothèque de tous les cours en direct du programme Liberté : 6 mois, 8 cours par mois et ateliers immersifs.",
       },
     ],
   }),
@@ -105,10 +105,10 @@ const MONTHS = [
 ];
 
 const TALLERES: { code: string; title: string; to?: string; emoji: string }[] = [
-  { code: "Taller 1", title: "Le Présent", to: "/clasesenvivo/taller1", emoji: "✍️" },
-  { code: "Taller 2", title: "Próximamente", emoji: "🎯" },
-  { code: "Taller 3", title: "Próximamente", emoji: "🎯" },
-  { code: "Taller 4", title: "Próximamente", emoji: "🎯" },
+  { code: "Atelier 1", title: "Le Présent", to: "/clasesenvivo/taller1", emoji: "✍️" },
+  { code: "Atelier 2", title: "Bientôt disponible", emoji: "🎯" },
+  { code: "Atelier 3", title: "Bientôt disponible", emoji: "🎯" },
+  { code: "Atelier 4", title: "Bientôt disponible", emoji: "🎯" },
 ];
 
 type RecordedClass = {
@@ -137,11 +137,11 @@ const RECORDED_CLASSES: RecordedClass[] = [
     title: "Clase Europa #2",
     href: "https://fathom.video/share/TiL-9or41myitN_bsuKuk9Q5XfKf4_zd",
   },
-  { number: 2, date: "Próximamente", title: "Por confirmar" },
-  { number: 3, date: "Próximamente", title: "Por confirmar" },
-  { number: 3, date: "Próximamente", title: "Por confirmar" },
-  { number: 4, date: "Próximamente", title: "Por confirmar" },
-  { number: 4, date: "Próximamente", title: "Por confirmar" },
+  { number: 2, date: "Bientôt disponible", title: "À confirmer" },
+  { number: 3, date: "Bientôt disponible", title: "À confirmer" },
+  { number: 3, date: "Bientôt disponible", title: "À confirmer" },
+  { number: 4, date: "Bientôt disponible", title: "À confirmer" },
+  { number: 4, date: "Bientôt disponible", title: "À confirmer" },
 ];
 
 function Cover({ card }: { card: ClassCard }) {
@@ -205,7 +205,7 @@ function ClassTile({ card }: { card: ClassCard }) {
               className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider"
               style={{ color: "#6B7280" }}
             >
-              <Lock className="h-3.5 w-3.5" /> Próximamente
+              <Lock className="h-3.5 w-3.5" /> Bientôt disponible
             </span>
           ) : (
             <span
@@ -284,7 +284,7 @@ function RecordedClassTile({ cls }: { cls: RecordedClass }) {
               className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider"
               style={{ color: "#6B7280" }}
             >
-              <Lock className="h-3.5 w-3.5" /> Próximamente
+              <Lock className="h-3.5 w-3.5" /> Bientôt disponible
             </span>
           )}
         </div>
@@ -340,7 +340,7 @@ function TallerTile({ item }: { item: (typeof TALLERES)[number] }) {
           className="text-[11px] font-bold uppercase tracking-wider mt-1"
           style={{ color: active ? RED : "#6B7280" }}
         >
-          {active ? item.title : "Próximamente"}
+          {active ? item.title : "Bientôt disponible"}
         </p>
       </div>
     </div>
@@ -410,7 +410,7 @@ function ClasesEnVivoHub() {
             Clases en Vivo
           </h1>
           <p className="mt-3 text-base sm:text-lg text-white/90 max-w-2xl">
-            Tus 2 clases semanales, siempre disponibles.
+            Tes 2 cours par semaine, toujours disponibles.
           </p>
         </div>
       </header>
@@ -441,7 +441,7 @@ function ClasesEnVivoHub() {
                 {!m.unlocked && <Lock className="h-3.5 w-3.5" />}
                 {m.label}
                 {!m.unlocked && (
-                  <span className="text-[10px] font-bold opacity-70">Próximamente</span>
+                  <span className="text-[10px] font-bold opacity-70">Bientôt disponible</span>
                 )}
               </button>
             );
@@ -460,9 +460,9 @@ function ClasesEnVivoHub() {
         ) : (
           <div className="rounded-2xl border-2 border-dashed p-10 text-center" style={{ borderColor: "rgba(61,85,137,0.25)" }}>
             <Lock className="h-8 w-8 mx-auto mb-3" style={{ color: NAVY }} />
-            <p className="text-lg font-extrabold" style={{ color: NAVY }}>Próximamente</p>
+            <p className="text-lg font-extrabold" style={{ color: NAVY }}>Bientôt disponible</p>
             <p className="text-sm mt-1" style={{ color: "#6B7280" }}>
-              Este mes se desbloqueará más adelante.
+              Ce mois se débloquera plus tard.
             </p>
           </div>
         )}
@@ -475,7 +475,7 @@ function ClasesEnVivoHub() {
             className="font-[var(--font-display)] font-extrabold text-2xl sm:text-3xl"
             style={{ color: NAVY }}
           >
-            Talleres Inmersivos
+            Ateliers Immersifs
           </h2>
           <span className="text-xs font-bold uppercase tracking-wider" style={{ color: BLUE }}>
             Bonus
