@@ -84,6 +84,51 @@ test("a student PAST the week gets in even without that exact day's row", async 
   }
 });
 
+/** THE screenshot the client sent: a student who finished the week but has a
+ *  HOLE in the middle (Mayra: days 1,2,4,5 — no day 3). The sidebar tile
+ *  demanded ALL FIVE days, so it showed the padlock «S'ouvre quand tu termines
+ *  la semaine» even though she is on day 5 and the route would let her in.
+ *  Checked twice: as the student, and through the teacher's "ver como alumno"
+ *  preview (the exact view in the screenshot). */
+test("sidebar tile opens for a student with a missing middle day — direct and via teacher preview", async ({ page, browser }) => {
+  test.setTimeout(240_000);
+  const holey = await createStudent(admin);
+  const teacher = await createStudent(admin);
+  try {
+    for (const d of [1, 2, 4, 5]) {
+      await admin.from("day_completions").insert({ user_id: holey.id, day_id: d, week_number: 1 });
+    }
+    // 1) The student's own view.
+    await login(page, holey);
+    await page.goto("/day/2");
+    await expect(page.getByRole("link", { name: /Le défi de la semaine/ })).toBeVisible({ timeout: 25_000 });
+    await expect(page.getByText("S’ouvre quand tu termines la semaine")).toHaveCount(0);
+
+    // 2) The teacher previewing that student ("Viendo como … · solo lectura").
+    //    A fresh CONTEXT: the Supabase session lives in localStorage, so
+    //    reusing the page would stay signed in as the student.
+    await admin.from("user_roles").insert({ user_id: teacher.id, role: "admin" });
+    const ctx = await browser.newContext();
+    const tp = await ctx.newPage();
+    try {
+      await login(tp, teacher);
+      await tp.evaluate(([uid, name]) => {
+        localStorage.setItem("liberte:preview-mode", "as-user");
+        localStorage.setItem("liberte:preview-user", uid);
+        localStorage.setItem("liberte:preview-name", name);
+      }, [holey.id, "Repro Holey"]);
+      await tp.goto("/day/2");
+      await expect(tp.getByText(/Viendo como/)).toBeVisible({ timeout: 25_000 });
+      await expect(tp.getByRole("link", { name: /Le défi de la semaine/ })).toBeVisible({ timeout: 25_000 });
+    } finally {
+      await ctx.close();
+    }
+  } finally {
+    await deleteStudent(admin, holey.id);
+    await deleteStudent(admin, teacher.id);
+  }
+});
+
 test("a coach opens the weekly challenge without any progress of their own", async ({ page }) => {
   test.setTimeout(180_000);
   const coach = await createStudent(admin);
