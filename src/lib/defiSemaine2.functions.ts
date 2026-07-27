@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { callChat } from "@/lib/ai";
 import { assertWeekNotLocked } from "@/lib/content-access.functions";
+import { requireApprovedStudent } from "@/lib/approval";
 
 const callAI = (system: string, user: string) => callChat(system, user);
 
@@ -138,9 +139,39 @@ type Week2Report = {
 
 export const saveWeek2Result = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: unknown) => input as Week2Report)
+  .inputValidator((input: unknown) => {
+    // The client computes the scores; the SERVER decides their bounds — this
+    // row mints +3 stars and auto-messages the teacher, so it must not accept
+    // arbitrary numbers.
+    const d = input as Week2Report;
+    const clamp = (v: unknown, max: number) => Math.max(0, Math.min(max, Math.round(Number(v) || 0)));
+    return {
+      quizScore: clamp(d?.quizScore, 40),
+      vocabScore: clamp(d?.vocabScore, 20),
+      writingScore: clamp(d?.writingScore, 30),
+      roleplayScore: clamp(d?.roleplayScore, 10),
+      totalScore: clamp(d?.totalScore, 100),
+      byTopic: (d?.byTopic ?? {}) as Week2Report["byTopic"],
+      responses: d?.responses ?? {},
+    } satisfies Week2Report;
+  })
   .handler(async ({ data, context }) => {
     const { userId } = context;
+    // This write was the weakest in the weekly system: NO gate at all. Now it
+    // uses the SAME decision as the route gate and evaluateWeek
+    // (computeWeekAccess: staff bypass, teacher lock, reached-end-of-week).
+    await requireApprovedStudent(context);
+    {
+      const { computeWeekAccess } = await import("@/lib/week.functions");
+      const access = await computeWeekAccess(context, 2);
+      if (!access.unlocked) {
+        throw new Error(
+          access.lockedByTeacher
+            ? "La Semana 2 está bloqueada por tu profesor. 🔒"
+            : "Termina el Día 10 antes de guardar el desafío de la Semana 2.",
+        );
+      }
+    }
     // A real (small) AI report so week 2 has parity with every other week: the
     // coach panel and the auto-sent teacher message read `ai_report`, which used
     // to be `{}` here — the only week with an empty report.

@@ -1,5 +1,9 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import {
+  aiText, aiTextList, aiStrengths, aiErrors, aiPronunciation,
+  type AiStrength, type AiError, type AiPronunciation,
+} from "@/lib/ai-text";
 
 // Coach: unlock/lock a student's weeks. Grants are written to `content_access`
 // (a per-user week "open" override) — the SAME system the day route, the tutor
@@ -144,6 +148,19 @@ export type WeekAnalytics = {
   status: "pending" | "in_progress" | "evaluated" | "complete";
   /** Weak points the AI flagged in this week's défis (deduped, max 5). */
   weakPoints: string[];
+  /** The stored weekly AI report, normalized for display/export. Null until the
+   *  week is evaluated. The PDF export used to IGNORE this and invent a summary
+   *  from aggregates, which made the printable version less accurate than the
+   *  in-platform report. */
+  report: {
+    verdictTitle: string;
+    verdictMessage: string;
+    strengths: AiStrength[];
+    commonErrors: AiError[];
+    improvements: string[];
+    pronunciation: AiPronunciation[];
+    coachSummary: string;
+  } | null;
 };
 
 const DAYS_PER_WEEK = 5;
@@ -242,12 +259,27 @@ export const getStudentAnalytics = createServerFn({ method: "POST" })
       }
       if (wEval) lastActivityAt = latest(lastActivityAt, wEval.created_at as string);
 
+      // Coerced: `weak_points` is AI-authored jsonb and its items are not always
+      // strings — printing them raw rendered "[object Object]" in the grid.
       const weakPoints = Array.from(
         new Set(
-          wDefis.flatMap((r) => (Array.isArray(r.weak_points) ? (r.weak_points as string[]) : []))
-            .concat(wActs.map((r) => String(r.punto_debil ?? "")).filter(Boolean)),
+          wDefis.flatMap((r) => aiTextList(r.weak_points, 5))
+            .concat(wActs.map((r) => aiText(r.punto_debil)).filter(Boolean)),
         ),
       ).slice(0, 5);
+
+      const rep = (wEval?.ai_report ?? null) as Record<string, unknown> | null;
+      const report = rep
+        ? {
+            verdictTitle: aiText(rep.verdict_title),
+            verdictMessage: aiText(rep.verdict_message),
+            strengths: aiStrengths(rep.strengths),
+            commonErrors: aiErrors(rep.common_errors),
+            improvements: aiTextList(rep.improvements, 6),
+            pronunciation: aiPronunciation(rep.pronunciation),
+            coachSummary: aiText(rep.coach_summary),
+          }
+        : null;
 
       const status: WeekAnalytics["status"] =
         doneDays.size === 0 && !wEval ? "pending"
@@ -271,6 +303,7 @@ export const getStudentAnalytics = createServerFn({ method: "POST" })
         lastActivityAt,
         status,
         weakPoints,
+        report,
       });
     }
 

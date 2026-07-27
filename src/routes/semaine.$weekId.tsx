@@ -10,8 +10,9 @@ import { Input } from "@/components/ui/input";
 import { useAuth } from "@/lib/auth-context";
 import { supabase } from "@/integrations/supabase/client";
 import { persist } from "@/lib/persist";
-import { evaluateWeek, getCompletedDays, transcribeAudio, markWeeklyPdfGenerated, getMyWeeklyEvaluation } from "@/lib/week.functions";
+import { evaluateWeek, getWeekChallengeAccess, transcribeAudio, markWeeklyPdfGenerated, getMyWeeklyEvaluation, type WeekAccess } from "@/lib/week.functions";
 import { generateWeeklyPdf, type WeeklyReportData } from "@/lib/weekPdf";
+import { aiText, aiTextList, aiStrengths, aiErrors, aiPronunciation } from "@/lib/ai-text";
 import { speakFr, stopFr } from "@/lib/speak";
 import { TopNav } from "@/components/TopNav";
 
@@ -345,21 +346,24 @@ function WeekPage() {
     if (weekNumber === 2) navigate({ to: "/defi-semaine2", replace: true });
   }, [weekNumber, navigate]);
 
+  const [access, setAccess] = useState<WeekAccess | null>(null);
+
   useEffect(() => {
     if (loading || !user) return;
     setGateLoading(true);
     setGateFailed(false);
     (async () => {
       try {
-        const [days, prev] = await Promise.all([
-          getCompletedDays(),
+        // ONE source of truth shared with the server-side submit gate: last day
+        // done (completion OR défi) / existing evaluation / admin — and a
+        // teacher 'locked' override blocks (mirrors assertWeekNotLocked so
+        // entering and submitting can never disagree). Week 2 → /defi-semaine2.
+        const [acc, prev] = await Promise.all([
+          getWeekChallengeAccess({ data: { weekNumber } }),
           getMyWeeklyEvaluation({ data: { weekNumber } }),
         ]);
-        // Unlocks once the LAST day of the week is complete — day marked done
-        // OR défi submitted (getCompletedDays unions both, same rule as the
-        // server-side evaluateWeek gate). Week 2 lives on /defi-semaine2.
-        const ok = isAdmin || Boolean(prev) || days.includes(weekNumber * 5);
-        setUnlocked(ok);
+        setAccess(acc);
+        setUnlocked(acc.unlocked);
         setExisting(prev);
       } catch {
         // The read failed — we don't KNOW they're locked. Offer a retry.
@@ -401,6 +405,20 @@ function WeekPage() {
     );
   }
 
+  if (!unlocked && access?.lockedByTeacher) {
+    return (
+      <div className="mx-auto max-w-lg p-6">
+        <div className="rounded-3xl border-2 border-gold/40 bg-white p-8 text-center shadow-card">
+          <div className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-navy text-white">🔒</div>
+          <h1 className="mt-4 font-display text-2xl font-extrabold text-navy">Semaine verrouillée</h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Ton professeur a verrouillé la <strong>Semaine {weekNumber}</strong> pour le moment. Écris-lui si tu penses que c'est une erreur.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   if (!unlocked) {
     return (
       <div className="mx-auto max-w-lg p-6">
@@ -408,7 +426,7 @@ function WeekPage() {
           <div className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-navy text-white">🎉</div>
           <h1 className="mt-4 font-display text-2xl font-extrabold text-navy">Le défi de la semaine te espera</h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            Termine le <strong>Défi Final du Jour {weekNumber * 5}</strong> pour ouvrir <strong>Le défi de la semaine {weekNumber}</strong> y celebrar tu progreso.
+            Termine le <strong>Jour {weekNumber * 5}</strong> pour ouvrir <strong>Le défi de la semaine {weekNumber}</strong> y celebrar tu progreso.
           </p>
           <Button onClick={() => navigate({ to: "/day/$dayId", params: { dayId: String(weekNumber * 5) } })} className="mt-6 bg-gradient-blue text-white">
             Aller au Jour {weekNumber * 5}
@@ -908,7 +926,16 @@ function ResultView({ data, studentName, weekNumber }: {
   weekNumber: number;
 }) {
   const [downloading, setDownloading] = useState(false);
-  const r = data.report;
+  // Coerce the AI sections before rendering: stored reports can hold objects
+  // where strings are typed (that is how "[object Object]" reached a report).
+  const r = {
+    ...data.report,
+    strengths: aiStrengths(data.report.strengths),
+    common_errors: aiErrors(data.report.common_errors),
+    improvements: aiTextList(data.report.improvements, 6),
+    pronunciation: aiPronunciation(data.report.pronunciation),
+    coach_summary: aiText(data.report.coach_summary),
+  };
 
   const download = async () => {
     setDownloading(true);

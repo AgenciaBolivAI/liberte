@@ -7,6 +7,7 @@ import { getWeeks } from "@/data/program";
 import { StudentReportCard } from "@/components/StudentReportCard";
 import { MessageThread } from "@/components/MessageThread";
 import { supabase } from "@/integrations/supabase/client";
+import { aiText, aiTextList, aiErrors } from "@/lib/ai-text";
 import { toast } from "sonner";
 
 type Detail = Awaited<ReturnType<typeof getStudentResults>>;
@@ -283,9 +284,11 @@ export function StudentDetailPanel({ userId }: { userId: string }) {
       )}
 
       {results.map((r) => {
-        const strengths = Array.isArray(r.strengths) ? (r.strengths as string[]) : [];
-        const errors = Array.isArray(r.errors) ? (r.errors as { stage: number; said: string; corrected: string }[]) : [];
-        const weak = Array.isArray(r.weak_points) ? (r.weak_points as string[]) : [];
+        // AI-authored jsonb: coerce, never String() — items are not always
+        // strings, and printing one raw shows "[object Object]".
+        const strengths = aiTextList(r.strengths, 8);
+        const errors = aiErrors(r.errors, 8);
+        const weak = aiTextList(r.weak_points, 8);
         return (
           <div key={r.id} className="rounded-2xl border border-border bg-white p-4 sm:p-5 shadow-soft">
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -340,7 +343,7 @@ export function StudentDetailPanel({ userId }: { userId: string }) {
             )}
             {r.recommendation && (
               <div className="mt-3 rounded-xl border border-gold/40 bg-gold/10 p-3 text-xs text-navy/90">
-                💡 <span className="font-semibold">Recomendación:</span> {r.recommendation}
+                💡 <span className="font-semibold">Recomendación:</span> {aiText(r.recommendation)}
               </div>
             )}
           </div>

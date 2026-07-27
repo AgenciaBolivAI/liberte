@@ -464,7 +464,7 @@ g("9b. Hands-free voice tutor");
   ok("signup admin email uses a static reply-to", sup.includes('reply_to: "hola@libertefrances.com"'));
   // Audit M1: grading writes go through the service role.
   const defiSrc = readFileSync("src/lib/defi.functions.ts", "utf8");
-  ok("defi_results written via service role", defiSrc.includes('supabaseAdmin\n      .from("defi_results")'));
+  ok("defi_results written via service role", defiSrc.replace(/\r\n/g, "\n").includes('supabaseAdmin\n      .from("defi_results")'));
 
   // Launch: the day route applies the product flags so lessons are all open
   // and the video gate is off — regardless of active-day (root-cause fix).
@@ -1249,7 +1249,9 @@ g("12h. Progress persistence (REAL writes + the state machine)");
   const byWeek = wk.slice(wk.indexOf("const VARIANTS_BY_WEEK"), wk.indexOf("const VARIANTS_BY_WEEK") + 400);
   ok("weeks 1 and 3-8 are all registered (every content week is evaluated)",
      [1, 3, 4, 5, 6, 7, 8].every((w) => new RegExp(`\\b${w}:\\s*(VARIANTS|WEEK${w}_VARIANTS)`).test(byWeek)));
-  ok("the week gate is week-agnostic (unlocks 5-8 like 3-4)", wk.includes("days.includes(weekNumber * 5)"));
+  ok("the week gate is week-agnostic (unlocks 5-8 like 3-4)",
+     wk.includes("getWeekChallengeAccess({ data: { weekNumber } })") ||
+     wk.includes("days.includes(weekNumber * 5)"));
 
   const coachFns = readFileSync("src/lib/coach.functions.ts", "utf8");
   ok("coach analytics server fn exists and is coach/admin-gated",
@@ -1354,7 +1356,9 @@ g("12d. Audit fixes: security hardening, weekly eval, coach unlock, cleanup");
   const sem = readFileSync("src/routes/semaine.$weekId.tsx", "utf8");
   ok("weekly test has real content for weeks 3 and 4",
      sem.includes("WEEK3_VARIANTS") && sem.includes("WEEK4_VARIANTS") && sem.includes("VARIANTS_BY_WEEK"));
-  ok("weekly unlock generalized to any week (day N*5)", sem.includes("days.includes(weekNumber * 5)"));
+  ok("weekly unlock generalized to any week (lastDay = weekNumber*5 via the shared access fn)",
+     sem.includes("getWeekChallengeAccess({ data: { weekNumber } })") &&
+     readFileSync("src/lib/week.functions.ts", "utf8").includes("const lastDay = weekNumber * 5;"));
   const wk = readFileSync("src/lib/week.functions.ts", "utf8");
   ok("evaluateWeek reads the correct days for any week (not just week 1)",
      wk.includes("(data.weekNumber - 1) * 5 + i + 1") && !wk.includes("weekNumber === 1 ? [1, 2, 3, 4, 5] : []"));
@@ -1551,7 +1555,7 @@ g("12i. Teacher suite: reports, notifications, time-on-task, videos, French chro
        d2.includes("ok: false as const") && d2.includes("setGateFailed(true)") && d2.includes("Réessayer"));
     const sem = readFileSync("src/routes/semaine.$weekId.tsx", "utf8");
     ok("semaine gate: retry on failure + an existing evaluation always unlocks",
-       sem.includes("setGateFailed(!isAdmin)") && sem.includes("Boolean(prev)") && sem.includes("Réessayer"));
+       sem.includes("setGateFailed(!isAdmin)") && sem.includes("Réessayer") && readFileSync("src/lib/week.functions.ts", "utf8").includes("s.hasEvaluation || reachedEndOfWeek"));
   }
 
   // Report 5: the error pages' "home" went to the public landing, which shows
@@ -1596,6 +1600,142 @@ g("12i. Teacher suite: reports, notifications, time-on-task, videos, French chro
   ok("day_state backfill script exists (dry-run default, only fills missing/empty rows)",
      (() => { const b = readFileSync("scripts/backfill-day-state.mjs", "utf8");
               return b.includes("--apply") && b.includes("never touch it") && b.includes("onConflict: \"user_id,day_id\""); })());
+}
+
+/* ---------------- 12j. Student AI report + week-gate unification + stale-chunk recovery ---------------- */
+g("12j. Student AI report · per-week challenge gates · stale-chunk recovery");
+{
+  // ---- A: the report is stored and visible to BOTH roles ----
+  const mig = readFileSync("supabase/migrations/20260727000000_ai_student_reports.sql", "utf8");
+  ok("ai_student_reports migration: PK per user, SELECT-only grant, own+staff read policies",
+     mig.includes("user_id uuid PRIMARY KEY") &&
+     mig.includes("updated_at timestamptz NOT NULL DEFAULT now()") &&
+     mig.includes("GRANT SELECT ON public.ai_student_reports TO authenticated") &&
+     !/GRANT ALL ON public\.ai_student_reports TO authenticated/.test(mig) &&
+     mig.includes("own ai report read") && mig.includes("staff ai report read"));
+  const rep = readFileSync("src/lib/report.functions.ts", "utf8");
+  ok("getMyAIReport: approval-gated, live stats every call, 24h cached narrative",
+     rep.includes("getMyAIReport") && rep.includes("requireApprovedStudent") &&
+     rep.includes("REPORT_TTL_MS = 24 * 60 * 60 * 1000") &&
+     rep.includes("gatherStudentData(uid)"));
+  ok("a failed/empty generation is never stored or served as fresh",
+     rep.includes("return report.resumen ? report : null;") &&
+     rep.includes("storedUsable = Boolean(stored && stored.resumen)"));
+  ok("mensaje_sugerido is stripped SERVER-side for students (teacher's draft message)",
+     rep.includes('{ ...report, mensaje_sugerido: "" }'));
+  ok("teacher generations persist too, so both roles see the same report",
+     /getStudentAIReport[\s\S]{0,700}storeReport\(data\.userId, built/.test(rep));
+  const cardSrc = readFileSync("src/components/StudentReportCard.tsx", "utf8");
+  ok("«Mon rapport IA» card: French labels, no suggested-message section, cooldown shown",
+     cardSrc.includes("MyAIReportCard") && cardSrc.includes("Mon rapport IA") &&
+     cardSrc.includes("prochaine actualisation possible") &&
+     /STUDENT_LABELS[\s\S]{0,900}recomendaciones: "Recommandations",\n  \},/.test(cardSrc));
+  ok("/progress mounts the student report card",
+     readFileSync("src/routes/progress.tsx", "utf8").includes("<MyAIReportCard />"));
+
+  // ---- B: ONE gate rule for every week, behaviorally tested per week ----
+  const wk12j = readFileSync("src/lib/week.functions.ts", "utf8");
+  {
+    const start = wk12j.indexOf("export function decideWeekAccess");
+    const body = wk12j.slice(start, wk12j.indexOf("\n}", start) + 2)
+      .replace(/export function decideWeekAccess\([\s\S]*?\): WeekAccess \{/,
+               "return function decideWeekAccess(weekNumber, s) {");
+    const decide = new Function(body)();
+    let allWeeksOk = true;
+    for (let w = 1; w <= 8; w++) {
+      const last = w * 5;
+      const S = (o) => decide(w, { isStaff: false, hasEvaluation: false, maxDoneDay: 0, override: undefined, ...o });
+      const none = S({});
+      const midWeek = S({ maxDoneDay: last - 1 });            // inside the week → still locked
+      const exact = S({ maxDoneDay: last });                   // finished the last day
+      const past = S({ maxDoneDay: last + 3 });                // ALREADY BEYOND this week
+      const evald = S({ hasEvaluation: true });                // revisit an evaluated week
+      const staff = S({ isStaff: true });                      // coach OR admin
+      const staffLocked = S({ isStaff: true, override: "locked" });
+      const open0 = S({ override: "open" });                   // zero work + 'open' override
+      const lockD = S({ maxDoneDay: last, override: "locked" });
+      const okW =
+        !none.unlocked && none.lastDay === last &&
+        !midWeek.unlocked &&                                   // one day short stays locked
+        exact.unlocked && past.unlocked &&                     // reached OR passed the week
+        evald.unlocked &&
+        staff.unlocked && staffLocked.unlocked &&              // staff always in
+        !open0.unlocked && !open0.lockedByTeacher &&           // 'open' ≠ evaluation authorization
+        !lockD.unlocked && lockD.lockedByTeacher;              // teacher lock beats a finished day
+      if (!okW) { allWeeksOk = false; ok(`week ${w} gate matrix`, false, JSON.stringify({ none, midWeek, exact, past, evald, staff, staffLocked, open0, lockD })); }
+    }
+    ok("decideWeekAccess matrix holds for EVERY week 1-8 (9 states each)", allWeeksOk);
+    ok("a student PAST the week gets in even without that exact day (prod bug: day 8, no day 5)",
+       decide(1, { isStaff: false, hasEvaluation: false, maxDoneDay: 8, override: undefined }).unlocked);
+    ok("coaches are staff, not students (prod bug: 'no abre ni para el coach')",
+       decide(1, { isStaff: true, hasEvaluation: false, maxDoneDay: 0, override: undefined }).unlocked);
+    const bad = decide(0, { isStaff: true, hasEvaluation: true, maxDoneDay: 99, override: undefined });
+    const bad2 = decide(25, { isStaff: true, hasEvaluation: true, maxDoneDay: 99, override: undefined });
+    ok("invalid week numbers are locked, never a throw", !bad.unlocked && !bad2.unlocked);
+  }
+  ok("getWeekChallengeAccess: validates weekNumber, surfaces read errors (retry screen, not silent-lock)",
+     wk12j.includes("getWeekChallengeAccess") &&
+     wk12j.includes("n >= 1 && n <= 24 ? n : 0") &&
+     /if \(evalRes\.error\) throw/.test(wk12j) && /if \(dcRes\.error\) throw/.test(wk12j) && /if \(drRes\.error\) throw/.test(wk12j));
+  ok("ONE server decision shared by the route gate AND both submit gates",
+     wk12j.includes("export async function computeWeekAccess") &&
+     wk12j.includes("await computeWeekAccess(context, data.weekNumber)") &&
+     readFileSync("src/lib/defiSemaine2.functions.ts", "utf8").includes("computeWeekAccess(context, 2)"));
+  ok("staff = coach OR admin (both roles queried server-side)",
+     wk12j.includes(String.fromCharCode(95) + "role: " + JSON.stringify("coach")) &&
+     wk12j.includes(String.fromCharCode(95) + "role: " + JSON.stringify("admin")) &&
+     wk12j.includes("isStaff: Boolean(coachRes.data) || Boolean(adminRes.data)"));
+  ok("progress rule is reached-end-of-week (max done day), not that exact day",
+     wk12j.includes("maxDoneDay >= lastDay") && wk12j.includes("Math.max(...days)"));
+  ok("/semaine gate consumes the shared access fn (+ teacher-locked screen)",
+     (() => { const s = readFileSync("src/routes/semaine.$weekId.tsx", "utf8");
+              return s.includes("getWeekChallengeAccess({ data: { weekNumber } })") &&
+                     s.includes("Semaine verrouillée") && !s.includes("getCompletedDays()"); })());
+  ok("/defi-semaine2 gate consumes the shared access fn (+ teacher-locked screen)",
+     (() => { const s = readFileSync("src/routes/defi-semaine2.tsx", "utf8");
+              return s.includes("getWeekChallengeAccess({ data: { weekNumber: 2 } })") &&
+                     s.includes("Semaine verrouillée") && !s.includes("getCompletedDays()"); })());
+  ok("saveWeek2Result is finally gated (approval + shared access decision + clamped scores)",
+     (() => { const s = readFileSync("src/lib/defiSemaine2.functions.ts", "utf8");
+              return /saveWeek2Result[\s\S]{0,2500}requireApprovedStudent\(context\)/.test(s) &&
+                     /saveWeek2Result[\s\S]{0,2500}computeWeekAccess\(context, 2\)/.test(s) &&
+                     /saveWeek2Result[\s\S]{0,2500}access\.unlocked/.test(s) &&
+                     s.includes("clamp(d?.totalScore, 100)"); })());
+  ok("day-page tile mirrors the route rule (reached end of week) instead of all-5-days",
+     (() => { const d = readFileSync("src/routes/day.$dayId.tsx", "utf8");
+              return d.includes("const weekChallengeOpen = maxDoneDay >= weekLastDay || isAdmin") &&
+                     d.includes("{weekChallengeOpen ? (") &&
+                     d.includes("S’ouvre au Jour {weekLastDay}"); })());
+
+  // ---- C: stale-chunk auto-recovery + the silent completion write ----
+  const cli = readFileSync("src/client.tsx", "utf8");
+  ok("src/client.tsx: preloadError → one guarded reload (no preventDefault, storage try/catch)",
+     cli.includes('window.addEventListener("vite:preloadError"') &&
+     cli.includes("hydrateRoot") && cli.includes("<StartClient />") &&
+     !cli.split("\n").some((l) => !l.trim().startsWith("//") && l.includes(".preventDefault(")) &&
+     cli.includes("sessionStorage.getItem") && cli.includes("60_000"));
+  ok("défi auto-backfill failures now toast (catch scoped to the write only)",
+     (() => { const d = readFileSync("src/routes/day.$dayId.tsx", "utf8");
+              return d.includes("Ton jour n'a pas pu être enregistré") &&
+                     /markDayCompleted\(user\.id, dayNum, activeWeek\)\s*\n\s*\.then\(\s*\n\s*\(\) => refreshDays\(\)\.catch/.test(d); })());
+  // PROD CRASH (user console: "Cannot read properties of undefined (reading
+  // 'emoji')" on /day/3): in-place day switches kept the previous day's lesson
+  // key ("cafe"/"bonus"), LessonView's find() came back undefined, and the
+  // render crashed BEFORE the reset effect could run. Two-layer fix:
+  ok("day switch resets an alien lesson key DURING render (not in an effect)",
+     (() => { const d = readFileSync("src/routes/day.$dayId.tsx", "utf8");
+              return /const \[renderedDay, setRenderedDay\] = useState\(activeDay\);\s*\n\s*if \(renderedDay !== activeDay\) \{\s*\n\s*setRenderedDay\(activeDay\);\s*\n\s*if \(!order\.includes\(lesson\)\) setLesson\(order\[0\]\);/.test(d); })());
+  ok("LessonView can never render an undefined lesson meta",
+     readFileSync("src/routes/day.$dayId.tsx", "utf8").includes("lessons.find((l) => l.key === lesson) ?? lessons[0]"));
+  ok("the crashing journey is an e2e (day-1 'cafe' → day 3, day-2 'bonus' → day 4)",
+     (() => { const sm = readFileSync("e2e/day-smoke.spec.ts", "utf8");
+              return sm.includes("Bienvenue au café") && sm.includes("Le Petit Plus") &&
+                     sm.includes("never crashes"); })());
+  ok("every-week e2e + day smoke exist (weeks 1-8 gates driven with a real student)",
+     (() => { const w = readFileSync("e2e/week-gates.spec.ts", "utf8");
+              return w.includes("[1, 3, 4, 5, 6, 7, 8]") && w.includes("Commencer ma Fête !") &&
+                     w.includes('access: "locked"') && w.includes("Puntos:") &&
+                     readFileSync("e2e/day-smoke.spec.ts", "utf8").includes("encore verrouillé"); })());
 }
 
 /* ---------------- build output ---------------- */

@@ -13,7 +13,7 @@ import {
   saveWeek2Result,
   getMyWeek2Result,
 } from "@/lib/defiSemaine2.functions";
-import { getCompletedDays } from "@/lib/week.functions";
+import { getWeekChallengeAccess, type WeekAccess } from "@/lib/week.functions";
 import { generateWeek2Pdf } from "@/lib/week2Pdf";
 import { TopNav } from "@/components/TopNav";
 
@@ -547,6 +547,7 @@ function DefiSemaine2Page() {
   // forever (flaky mobile networks hit this): it renders a retry screen.
   const [gateFailed, setGateFailed] = useState(false);
   const [hydrateAttempt, setHydrateAttempt] = useState(0);
+  const [access, setAccess] = useState<WeekAccess | null>(null);
 
   const studentName =
     (profile?.full_name && profile.full_name.trim()) || fullName || user?.email || "Alumno";
@@ -563,22 +564,23 @@ function DefiSemaine2Page() {
     (async () => {
       let readOk = false;
       try {
-        const [done, daysRes] = await Promise.all([
+        const [done, accRes] = await Promise.all([
           getMyWeek2Result(),
           // Keep the failure distinguishable: "the read failed" must not be
-          // treated as "the student completed zero days" (that rendered the
-          // lock screen to fully-qualified students on flaky connections).
-          getCompletedDays()
-            .then((d) => ({ ok: true as const, days: d }))
-            .catch(() => ({ ok: false as const, days: [] as number[] })),
+          // treated as "locked" (that rendered the lock screen to fully-
+          // qualified students on flaky connections).
+          getWeekChallengeAccess({ data: { weekNumber: 2 } })
+            .then((a) => ({ ok: true as const, access: a as WeekAccess | null }))
+            .catch(() => ({ ok: false as const, access: null as WeekAccess | null })),
         ]);
         if (!alive) return;
-        // Same gate as the week-1 défi: finish the last day of the week first
-        // (day marked complete OR défi submitted — getCompletedDays unions both,
-        // matching the server-side evaluateWeek gate and the day-page sidebar).
-        const qualifies = isAdmin || Boolean(done) || daysRes.days.includes(10);
+        // ONE source of truth shared with /semaine and the server submit gates:
+        // day 10 done (completion OR défi) / existing evaluation / admin, and a
+        // teacher 'locked' override blocks non-admins.
+        setAccess(accRes.access);
+        const qualifies = isAdmin || Boolean(done) || Boolean(accRes.access?.unlocked);
         setUnlocked(qualifies);
-        if (!qualifies && !daysRes.ok) {
+        if (!qualifies && !accRes.ok) {
           setGateFailed(true); // show "réessayer", never the lock screen
           return;
         }
@@ -911,6 +913,20 @@ function DefiSemaine2Page() {
     );
   }
 
+  if (!unlocked && access?.lockedByTeacher) {
+    return (
+      <div style={{ backgroundColor: NAVY }} className="flex min-h-screen items-center justify-center px-4 text-white">
+        <div className="max-w-lg rounded-3xl border border-white/15 bg-white/5 p-8 text-center">
+          <div className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-white/10 text-2xl">🔒</div>
+          <h1 className="mt-4 text-2xl font-black">Semaine verrouillée</h1>
+          <p className="mt-2 text-sm text-white/75">
+            Ton professeur a verrouillé la <strong>Semaine 2</strong> pour le moment. Écris-lui si tu penses que c'est une erreur.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   if (!unlocked) {
     return (
       <div style={{ backgroundColor: NAVY }} className="flex min-h-screen items-center justify-center px-4 text-white">
@@ -918,10 +934,10 @@ function DefiSemaine2Page() {
           <div className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-white/10 text-2xl">🎉</div>
           <h1 className="mt-4 text-2xl font-black">Le défi de la semaine 2 t'attend</h1>
           <p className="mt-2 text-sm text-white/75">
-            Termina el <strong>Défi Final del Día 10</strong> para abrir el desafío de la Semana 2.
+            Termine le <strong>Jour 10</strong> pour ouvrir le défi de la Semaine 2.
           </p>
           <Button asChild className="mt-6 h-11 rounded-xl px-6 font-bold" style={{ backgroundColor: BLUE }}>
-            <Link to="/day/$dayId" params={{ dayId: "10" }}>Ir al Día 10</Link>
+            <Link to="/day/$dayId" params={{ dayId: "10" }}>Aller au Jour 10</Link>
           </Button>
         </div>
       </div>

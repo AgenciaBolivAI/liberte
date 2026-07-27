@@ -74,6 +74,30 @@ export type Database = {
         }
         Relationships: []
       }
+      ai_student_reports: {
+        Row: {
+          generated_by: string | null
+          report: Json
+          stats: Json
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          generated_by?: string | null
+          report?: Json
+          stats?: Json
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          generated_by?: string | null
+          report?: Json
+          stats?: Json
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       authored_blocks: {
         Row: {
           day_id: number

@@ -477,6 +477,19 @@ function DayPage() {
 
   const [openDay, setOpenDay] = useState<number>(Number(activeDay));
   const [lesson, setLesson] = useState<LessonKey>(order[0]);
+  // PROD CRASH FIX (the /day/3 error-boundary screenshots): switching days
+  // in-place keeps this component instance, so `lesson` could still hold the
+  // PREVIOUS day's key ("cafe" on day 1, "bonus" on day 2) while the new day's
+  // lesson list doesn't contain it — LessonView's `lessons.find(...)` returned
+  // undefined and `.emoji` threw BEFORE the hydration effect could reset the
+  // state (a crashed render never reaches effects). Adjusting state DURING
+  // render (React's sanctioned pattern) closes the race: React re-renders this
+  // component with the safe value before any child renders.
+  const [renderedDay, setRenderedDay] = useState(activeDay);
+  if (renderedDay !== activeDay) {
+    setRenderedDay(activeDay);
+    if (!order.includes(lesson)) setLesson(order[0]);
+  }
   const [stars, setStars] = useState(0);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [plusOpen, setPlusOpen] = useState(false);
@@ -565,10 +578,18 @@ function DayPage() {
   );
 
   const currentDayUnlocked = isDayUnlocked(Number(activeDay));
-  // The weekly challenge ("défi de la semaine") unlocks only once EVERY day of
-  // the active week is completed — not just the last day.
+  // Every day of the active week done — used for the end-of-week CELEBRATION
+  // banners only.
   const weekDayIds = DAYS_META.filter((d) => d.week === activeWeek).map((d) => d.id);
   const weekComplete = weekDayIds.length > 0 && weekDayIds.every((id) => doneDays.has(id));
+  // The sidebar tile must open exactly when the /semaine route will: the
+  // student has REACHED THE END of the week (furthest finished day >= the
+  // week's last day). Demanding that exact day locked out students already on
+  // day 8/11 whose day-5 row was lost; demanding all 5 days (the older rule)
+  // made the tile disagree with the route in the other direction.
+  const weekLastDay = activeWeek * 5;
+  const maxDoneDay = doneDays.size ? Math.max(...doneDays) : 0;
+  const weekChallengeOpen = maxDoneDay >= weekLastDay || isAdmin;
 
   // Lessons within a reachable day are all navigable unless sequential gating
   // is explicitly turned back on. This fixes the "only lesson 1 available, but
@@ -869,9 +890,20 @@ function DayPage() {
       // includes défi days, which would skip this backfill and with it the
       // +2 ⭐ day-completion award.
       if (user && !completionDays.includes(dayNum)) {
+        // markDayCompleted already swallows duplicate-key errors internally, so
+        // anything caught here is a REAL failure (RLS, offline) — a silent
+        // catch meant the day never counted and the +2⭐ never minted, with
+        // zero signal ("terminé el día y no me lo contó"). Catch is scoped to
+        // the WRITE only: a refreshDays hiccup must not fake a save failure.
         markDayCompleted(user.id, dayNum, activeWeek)
-          .then(() => refreshDays())
-          .catch(() => { /* ignore duplicates */ });
+          .then(
+            () => refreshDays().catch(() => { /* list refresh is cosmetic */ }),
+            () => {
+              toast.error(
+                "Ton jour n'a pas pu être enregistré. Vérifie ta connexion et utilise le bouton « Marquer le jour comme terminé ».",
+              );
+            },
+          );
       }
     }
   };
@@ -1009,8 +1041,9 @@ function DayPage() {
           )}
         </div>
 
-        {/* Le défi de la semaine — unlocks once every day of the week is done */}
-        {weekComplete ? (
+        {/* Le défi de la semaine — same rule as the /semaine route: the week's
+            LAST day done (marked complete OR défi submitted). */}
+        {weekChallengeOpen ? (
           activeWeek === 2 ? (
             <Link
               to="/defi-semaine2"
@@ -1039,7 +1072,7 @@ function DayPage() {
           <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-3 text-left opacity-70">
             <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white/10 text-sm">🎉</span>
             <div className="min-w-0 flex-1">
-              <p className="text-[10px] font-bold tracking-widest text-sky/70 uppercase">S’ouvre quand tu termines la semaine</p>
+              <p className="text-[10px] font-bold tracking-widest text-sky/70 uppercase">S’ouvre au Jour {weekLastDay}</p>
               <p className="truncate text-sm font-bold text-white">Le défi de la semaine</p>
             </div>
             <Lock className="h-3.5 w-3.5 shrink-0 text-white/40" />
@@ -1297,7 +1330,10 @@ function LessonView({
   nextDayId: string | null;
   onGoNextDay: () => void;
 }) {
-  const meta = lessons.find((l) => l.key === lesson)!;
+  // Belt and braces for the same crash: NEVER render with an undefined meta.
+  // If an alien lesson key ever slips through again, fall back to lesson 1
+  // visually for one frame instead of taking the whole route down.
+  const meta = lessons.find((l) => l.key === lesson) ?? lessons[0];
   // Use the preview-aware flag so "Ver como alumno" actually exercises the gate.
   const { bypassLocks, readOnly } = useAdminPreview();
 

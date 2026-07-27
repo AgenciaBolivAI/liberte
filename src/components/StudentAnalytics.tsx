@@ -134,6 +134,14 @@ export function StudentAnalytics({ userId, weeks = 8 }: { userId: string; weeks?
         return Number(s[k] ?? s[k.toLowerCase()] ?? 0);
       };
       const score = w.weeklyScore ?? 0;
+      // The REAL evaluation written when the student took the weekly test.
+      // This export used to ignore it and invent a summary from aggregates,
+      // which made the PDF less accurate than the in-platform AI report.
+      const ai = w.report;
+      const aggregateSummary =
+        `Semana ${w.week}: ${w.daysDone}/${w.daysTotal} días completados` +
+        (w.defiAvg !== null ? `, media de los desafíos ${w.defiAvg.toFixed(1)}/10` : "") +
+        (w.accuracy !== null ? `, ${w.accuracy}% de aciertos` : "") + ".";
       const report: WeeklyReportData = {
         studentName: profile?.full_name || profile?.email || "Alumno/a",
         weekNumber: w.week,
@@ -142,20 +150,23 @@ export function StudentAnalytics({ userId, weeks = 8 }: { userId: string; weeks?
         daysTotal: w.daysTotal,
         weeklyScore: score,
         compScores: { CO: pick("CO"), CE: pick("CE"), PE: pick("PE"), PO: pick("PO") },
-        strengths: w.accuracy !== null && w.accuracy >= 70
-          ? [{ title: "Precisión en los ejercicios", example: `${w.accuracy}% de aciertos esta semana` }]
-          : [],
-        commonErrors: [],
-        improvements: w.weakPoints,
-        pronunciation: [],
-        coachSummary:
-          `Semana ${w.week}: ${w.daysDone}/${w.daysTotal} días completados` +
-          (w.defiAvg !== null ? `, media de los desafíos ${w.defiAvg.toFixed(1)}/10` : "") +
-          (w.accuracy !== null ? `, ${w.accuracy}% de aciertos` : "") + ".",
+        strengths: ai?.strengths.length
+          ? ai.strengths
+          : w.accuracy !== null && w.accuracy >= 70
+            ? [{ title: "Precisión en los ejercicios", example: `${w.accuracy}% de aciertos esta semana` }]
+            : [],
+        commonErrors: ai?.commonErrors ?? [],
+        improvements: ai?.improvements.length ? ai.improvements : w.weakPoints,
+        pronunciation: ai?.pronunciation ?? [],
+        coachSummary: ai?.coachSummary
+          ? `${ai.coachSummary}\n\n${aggregateSummary}`
+          : aggregateSummary,
         verdict:
-          score >= 8.5 ? { title: "EXCELLENCE", message: "Nivel muy sólido. ¡Seguimos!" }
-          : score >= 6 ? { title: "TRÈS BIEN", message: "Buen avance; refuerza los puntos señalados." }
-          : { title: "COURAGE", message: "Repasa los días de la semana y vuelve a intentarlo." },
+          ai?.verdictTitle
+            ? { title: ai.verdictTitle, message: ai.verdictMessage }
+            : score >= 8.5 ? { title: "EXCELLENCE", message: "Nivel muy sólido. ¡Seguimos!" }
+            : score >= 6 ? { title: "TRÈS BIEN", message: "Buen avance; refuerza los puntos señalados." }
+            : { title: "COURAGE", message: "Repasa los días de la semana y vuelve a intentarlo." },
       };
       generateWeeklyPdf(report).save(
         `liberte-semana-${w.week}-${(profile?.full_name || "alumno").replace(/\s+/g, "-").toLowerCase()}.pdf`,

@@ -3,6 +3,7 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { callChat, transcribeFr } from "@/lib/ai";
 import { assertDayNotLocked } from "@/lib/content-access.functions";
 import { requireApprovedStudent } from "@/lib/approval";
+import { aiText, aiTextList } from "@/lib/ai-text";
 
 /* ---------------- Correct one open activity (PE or PO) ---------------- */
 
@@ -272,11 +273,14 @@ Tono cálido, profesional, en español.`;
           score_10: score,
           hits,
           misses,
-          strengths: parsed.strengths ?? [],
+          // Coerced before storage: the model does not always honour "array of
+          // strings", and raw objects rendered as "[object Object]" in the
+          // student's result screen and the coach panel.
+          strengths: aiTextList(parsed.strengths, 4),
           errors,
-          weak_points: parsed.weak_points ?? [],
-          recommendation: parsed.recommendation ?? "",
-          celebration_message: parsed.celebration_message ?? "",
+          weak_points: aiTextList(parsed.weak_points, 4),
+          recommendation: aiText(parsed.recommendation),
+          celebration_message: aiText(parsed.celebration_message),
           stages: stagesRecord,
         },
         { onConflict: "user_id,day_id" },
@@ -289,11 +293,11 @@ Tono cálido, profesional, en español.`;
         score_10: score,
         hits,
         misses,
-        strengths: parsed.strengths ?? [],
+        strengths: aiTextList(parsed.strengths, 4),
         errors,
-        weak_points: parsed.weak_points ?? [],
-        recommendation: parsed.recommendation ?? "",
-        celebration_message: parsed.celebration_message ?? "",
+        weak_points: aiTextList(parsed.weak_points, 4),
+        recommendation: aiText(parsed.recommendation),
+        celebration_message: aiText(parsed.celebration_message),
         stages: stagesRecord,
       });
     }
@@ -303,11 +307,15 @@ Tono cálido, profesional, en español.`;
       hits,
       misses,
       total: data.criteria.length,
-      strengths: parsed.strengths ?? [],
-      improvement: parsed.improvement ?? { said: "", corrected: "" },
-      celebration_message: parsed.celebration_message ?? "",
-      recommendation: parsed.recommendation ?? "",
-      weak_points: parsed.weak_points ?? [],
+      // Same coercion on the way to the student's result screen.
+      strengths: aiTextList(parsed.strengths, 4),
+      improvement: {
+        said: aiText(parsed.improvement?.said),
+        corrected: aiText(parsed.improvement?.corrected),
+      },
+      celebration_message: aiText(parsed.celebration_message),
+      recommendation: aiText(parsed.recommendation),
+      weak_points: aiTextList(parsed.weak_points, 4),
       matched_criteria: matched,
       stages: stagesRecord,
     };

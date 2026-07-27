@@ -6,6 +6,7 @@ import { Star, Flame, Trophy, Calendar, FileText, Download } from "lucide-react"
 import { useStars, useDayCompletions, TOTAL_DAYS, TOTAL_WEEKS } from "@/lib/progress";
 import { useAdminPreview } from "@/lib/admin-preview";
 import { AdminPreviewBanner } from "@/components/AdminPreviewBanner";
+import { MyAIReportCard } from "@/components/StudentReportCard";
 import { useAuth } from "@/lib/auth-context";
 import { getMyWeeklyEvaluations } from "@/lib/week.functions";
 import { generateWeeklyPdf, type WeeklyReportData } from "@/lib/weekPdf";
@@ -94,6 +95,10 @@ function ProgressPage() {
             </div>
           ))}
         </div>
+
+        {/* Client 2026-07-26: the AI report is for the STUDENT too, not only
+            the teacher — same stored report, French chrome, 24h cooldown. */}
+        {!viewAsUserId && <MyAIReportCard />}
 
         {/* #5 / #12: every past weekly report, always findable + downloadable */}
         {!viewAsUserId && <MyReports />}

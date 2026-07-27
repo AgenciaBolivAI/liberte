@@ -1,4 +1,5 @@
 import { jsPDF } from "jspdf";
+import { aiText, aiTextList, aiStrengths, aiErrors, aiPronunciation } from "@/lib/ai-text";
 
 export type WeeklyReportData = {
   studentName: string;
@@ -21,7 +22,18 @@ const GOLD: [number, number, number] = [201, 168, 76];
 const GREY: [number, number, number] = [90, 96, 110];
 const LIGHT: [number, number, number] = [240, 242, 248];
 
-export function generateWeeklyPdf(d: WeeklyReportData): jsPDF {
+export function generateWeeklyPdf(input: WeeklyReportData): jsPDF {
+  // Normalize AI-authored sections at the boundary. Rows written before the
+  // report pipeline coerced its output can hold objects where strings are
+  // typed; printing those raw put "[object Object]" on the page.
+  const d: WeeklyReportData = {
+    ...input,
+    strengths: aiStrengths(input.strengths),
+    commonErrors: aiErrors(input.commonErrors),
+    improvements: aiTextList(input.improvements, 6),
+    pronunciation: aiPronunciation(input.pronunciation),
+    coachSummary: aiText(input.coachSummary),
+  };
   const doc = new jsPDF({ unit: "pt", format: "a4" });
   const W = doc.internal.pageSize.getWidth();
   const H = doc.internal.pageSize.getHeight();

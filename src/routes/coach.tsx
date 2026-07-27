@@ -10,6 +10,7 @@ import { useCalendarEvents } from "@/lib/calendarEvents";
 import { TopNav } from "@/components/TopNav";
 import { StudentAnalytics } from "@/components/StudentAnalytics";
 import { ActivityFeed } from "@/components/ActivityFeed";
+import { aiText, aiTextList, aiErrors } from "@/lib/ai-text";
 
 export const Route = createFileRoute("/coach")({
   head: () => ({
@@ -274,9 +275,11 @@ function StudentDetail({ detail, userId }: { detail: Detail; userId: string }) {
       )}
 
       {results.map((r) => {
-        const strengths = Array.isArray(r.strengths) ? (r.strengths as string[]) : [];
-        const errors = Array.isArray(r.errors) ? (r.errors as { stage: number; said: string; corrected: string }[]) : [];
-        const weak = Array.isArray(r.weak_points) ? (r.weak_points as string[]) : [];
+        // AI-authored jsonb: coerce, never String() — items are not always
+        // strings, and printing one raw shows "[object Object]".
+        const strengths = aiTextList(r.strengths, 8);
+        const errors = aiErrors(r.errors, 8);
+        const weak = aiTextList(r.weak_points, 8);
         return (
           <div key={r.id} className="rounded-2xl border border-border bg-white p-5 shadow-soft">
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -331,7 +334,7 @@ function StudentDetail({ detail, userId }: { detail: Detail; userId: string }) {
             )}
             {r.recommendation && (
               <div className="mt-3 rounded-xl border border-gold/40 bg-gold/10 p-3 text-xs text-navy/90">
-                💡 <span className="font-semibold">Recomendación:</span> {r.recommendation}
+                💡 <span className="font-semibold">Recomendación:</span> {aiText(r.recommendation)}
               </div>
             )}
           </div>
