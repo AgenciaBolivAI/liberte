@@ -1738,6 +1738,105 @@ g("12j. Student AI report · per-week challenge gates · stale-chunk recovery");
                      readFileSync("e2e/day-smoke.spec.ts", "utf8").includes("encore verrouillé"); })());
 }
 
+
+/* ---------------- 12k. Admin control of the weekly challenge + device analytics ---------------- */
+g("12k. Reto final: admin open/lock switch . desktop vs mobile analytics");
+{
+  const wk12k = readFileSync("src/lib/week.functions.ts", "utf8");
+
+  // ---- Teacher's direct switch over the weekly challenge ----
+  const mig12k = readFileSync("supabase/migrations/20260727000001_week_challenge_access.sql", "utf8");
+  ok("migration adds the week_challenge target type (both CHECK constraints)",
+     mig12k.includes("'day', 'week', 'week_challenge'") &&
+     mig12k.includes("target_type = 'week_challenge' AND target_id BETWEEN 1 AND 24"));
+  ok("setContentAccess accepts week_challenge (id range 1..24)",
+     (() => { const c = readFileSync("src/lib/content-access.functions.ts", "utf8");
+              return c.includes('d?.targetType === "week_challenge" ? "week_challenge"') &&
+                     c.includes('targetType === "day" ? 120 : 24'); })());
+  ok("the gate reads BOTH override kinds (week days vs the challenge itself)",
+     wk12k.includes('override: pick("week")') && wk12k.includes('challengeOverride: pick("week_challenge")'));
+  ok("admin UI: per-week auto/open/locked control, mounted in both panels",
+     (() => { const c = readFileSync("src/components/WeekChallengeControl.tsx", "utf8");
+              return c.includes('targetType: "week_challenge"') && c.includes("Reto final de cada semana") &&
+                     readFileSync("src/components/StudentDetailPanel.tsx", "utf8").includes("<WeekChallengeControl userId={userId} />") &&
+                     readFileSync("src/routes/coach.tsx", "utf8").includes("<WeekChallengeControl userId={userId} />"); })());
+  {
+    const start = wk12k.indexOf("export function decideWeekAccess");
+    const body = wk12k.slice(start, wk12k.indexOf("\n}", start) + 2)
+      .replace(/export function decideWeekAccess\([\s\S]*?\): WeekAccess \{/,
+               "return function decideWeekAccess(weekNumber, s) {");
+    const decide = new Function(body)();
+    let allOk = true;
+    for (let w = 1; w <= 8; w++) {
+      const S = (o) => decide(w, { isStaff: false, hasEvaluation: false, maxDoneDay: 0, override: undefined, ...o });
+      const forcedOpen = S({ challengeOverride: "open" });
+      const forcedLock = S({ maxDoneDay: w * 5, challengeOverride: "locked" });
+      const beatsWeekLock = S({ override: "locked", challengeOverride: "open" });
+      const staffWins = S({ isStaff: true, challengeOverride: "locked" });
+      const okW = forcedOpen.unlocked && forcedOpen.forcedOpen &&
+                  !forcedLock.unlocked && forcedLock.lockedByTeacher &&
+                  beatsWeekLock.unlocked && staffWins.unlocked;
+      if (!okW) { allOk = false; ok(`week ${w} challenge-override matrix`, false, JSON.stringify({ forcedOpen, forcedLock, beatsWeekLock, staffWins })); }
+    }
+    ok("admin can force-open AND force-lock the reto for EVERY week 1-8", allOk);
+  }
+
+  // ---- Desktop vs mobile analytics ----
+  const migDev = readFileSync("supabase/migrations/20260727000002_user_devices.sql", "utf8");
+  ok("user_devices: server-only writes via SECURITY DEFINER RPC pinned to auth.uid()",
+     migDev.includes("CREATE TABLE IF NOT EXISTS public.user_devices") &&
+     migDev.includes("SECURITY DEFINER") && migDev.includes("VALUES (auth.uid(), _device)") &&
+     migDev.includes("GRANT SELECT ON public.user_devices TO authenticated") &&
+     !/GRANT ALL ON public.user_devices TO authenticated/.test(migDev));
+  {
+    const dev = readFileSync("src/lib/device.ts", "utf8");
+    const start = dev.indexOf("export function detectDevice");
+    const body = dev.slice(start, dev.indexOf("\n}", start) + 2)
+      .replace(/export function detectDevice\([\s\S]*?\): DeviceKind \{/,
+               "return function detectDevice(ua, opts = {}) {");
+    const detect = new Function(body)();
+    const IPHONE = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1";
+    const ANDROID = "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Mobile Safari/537.36";
+    const ANDROID_TAB = "Mozilla/5.0 (Linux; Android 13; SM-X700) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36";
+    const IPAD = "Mozilla/5.0 (iPad; CPU OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/604.1";
+    const IPAD_DESKTOP = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15";
+    const WIN = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36";
+    const MAC = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36";
+    ok("detectDevice classifies real user agents (phone/tablet/desktop, incl. iPadOS desktop-mode)",
+       detect(IPHONE, { touchPoints: 5, width: 390 }) === "mobile" &&
+       detect(ANDROID, { touchPoints: 5, width: 412 }) === "mobile" &&
+       detect(ANDROID_TAB, { touchPoints: 5, width: 1200 }) === "tablet" &&
+       detect(IPAD, { touchPoints: 5, width: 1024 }) === "tablet" &&
+       detect(IPAD_DESKTOP, { touchPoints: 5, width: 1024 }) === "tablet" &&
+       detect(WIN, { touchPoints: 0, width: 1920 }) === "desktop" &&
+       detect(MAC, { touchPoints: 0, width: 1680 }) === "desktop" &&
+       detect("", {}) === "desktop");
+  }
+  ok("device recorded once per session, via the RPC (never a direct table write)",
+     (() => { const d = readFileSync("src/lib/device.ts", "utf8");
+              return d.includes('supabase.rpc("record_device"') && d.includes("sessionStorage.getItem(key)") &&
+                     !d.includes('from("user_devices")'); })());
+  ok("TopNav records the device for every signed-in page",
+     readFileSync("src/components/TopNav.tsx", "utf8").includes("useRecordDevice()"));
+  ok("analytics returns distinct users per device (dual-device users flagged, not hidden)",
+     (() => { const a = readFileSync("src/lib/admin.functions.ts", "utf8");
+              return a.includes("devices: { desktop: number; mobile: number; tablet: number; both: number; totalUsers: number }") &&
+                     a.includes('from("user_devices")') && a.includes("byDevice[kind].add(r.user_id)"); })());
+  ok("admin analytics renders the desktop/mobile card",
+     (() => { const c = readFileSync("src/components/AdminAnalytics.tsx", "utf8");
+              return c.includes("function DeviceSplit") && c.includes("<DeviceSplit devices={data.devices}") &&
+                     c.includes("Escritorio") && c.includes("Movil".replace("Movil", "M\u00f3vil")); })());
+
+  {
+    const { error: dErr } = await admin.from("user_devices").select("user_id").limit(1);
+    ok("live DB: user_devices table exists", !dErr, dErr?.message ?? "");
+    const { error: rErr } = await admin.rpc("record_device", { _device: "desktop" });
+    ok("live DB: record_device RPC callable", !rErr, rErr?.message ?? "");
+    const { error: caErr } = await admin.from("content_access").select("target_type").eq("target_type", "week_challenge").limit(1);
+    ok("live DB: content_access accepts the week_challenge target type", !caErr, caErr?.message ?? "");
+  }
+}
+
 /* ---------------- build output ---------------- */
 g("12. Build output");
 {

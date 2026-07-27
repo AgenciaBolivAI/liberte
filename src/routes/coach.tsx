@@ -10,6 +10,7 @@ import { useCalendarEvents } from "@/lib/calendarEvents";
 import { TopNav } from "@/components/TopNav";
 import { StudentAnalytics } from "@/components/StudentAnalytics";
 import { ActivityFeed } from "@/components/ActivityFeed";
+import { WeekChallengeControl } from "@/components/WeekChallengeControl";
 import { aiText, aiTextList, aiErrors } from "@/lib/ai-text";
 
 export const Route = createFileRoute("/coach")({
@@ -228,6 +229,8 @@ function StudentDetail({ detail, userId }: { detail: Detail; userId: string }) {
   return (
     <div className="space-y-4">
       <ProgressPanel userId={userId} />
+
+      <WeekChallengeControl userId={userId} />
       {/* Week-by-week analytics: the coach evaluates progress here instead of
           having to download a PDF (the PDF is still available per week). */}
       <div className="rounded-3xl border border-border bg-white p-5 shadow-soft">

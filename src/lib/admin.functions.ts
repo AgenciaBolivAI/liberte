@@ -261,6 +261,9 @@ export type AdminAnalytics = {
   activitySeries: { date: string; completions: number; activities: number; defis: number }[];
   starsByReason: { reason: string; total: number }[];
   topStudents: { id: string; name: string; stars: number; days: number }[];
+  /** Distinct USERS per device kind, seen inside the selected range ("all" =
+   *  ever). `both` = users counted in more than one bucket. */
+  devices: { desktop: number; mobile: number; tablet: number; both: number; totalUsers: number };
   recentActivity: {
     type: "lead" | "signup" | "day" | "defi" | "week" | "stars";
     who: string;
@@ -312,7 +315,7 @@ export const getAdminAnalytics = createServerFn({ method: "POST" })
       return scoped.order(col, { ascending: false }).limit(MAX_ROWS);
     };
 
-    const [profiles, leads, completions, activities, defis, weeklies, stars, tutor] =
+    const [profiles, leads, completions, activities, defis, weeklies, stars, tutor, devices] =
       await Promise.all([
         supabaseAdmin
           .from("profiles")
@@ -342,6 +345,15 @@ export const getAdminAnalytics = createServerFn({ method: "POST" })
         supabaseAdmin
           .from("tutor_usage")
           .select("user_id, usage_date, message_count")
+          .then(
+            (r) => r,
+            () => ({ data: [], error: null }),
+          ),
+        // Device split. Tolerates a missing table (pre-migration) like tutor_usage.
+        supabaseAdmin
+          .from("user_devices")
+          .select("user_id, device, last_seen")
+          .limit(100_000)
           .then(
             (r) => r,
             () => ({ data: [], error: null }),
@@ -541,8 +553,33 @@ export const getAdminAnalytics = createServerFn({ method: "POST" })
       .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
       .slice(0, 20);
 
+    // Desktop vs mobile: DISTINCT users per device, counted inside the selected
+    // range by last_seen ("all" = ever). A user who uses both is counted in
+    // each bucket AND once in `both`, so the buckets never hide dual use.
+    const deviceRows = (devices.data ?? []) as { user_id: string; device: string; last_seen: string }[];
+    const byDevice: Record<"desktop" | "mobile" | "tablet", Set<string>> = {
+      desktop: new Set(), mobile: new Set(), tablet: new Set(),
+    };
+    const seenAny = new Set<string>();
+    for (const r of deviceRows) {
+      if (since && new Date(r.last_seen).getTime() < since) continue;
+      const kind = r.device === "mobile" || r.device === "tablet" ? r.device : "desktop";
+      byDevice[kind].add(r.user_id);
+      seenAny.add(r.user_id);
+    }
+    const inTwo = [...seenAny].filter(
+      (u) => [byDevice.desktop, byDevice.mobile, byDevice.tablet].filter((s) => s.has(u)).length > 1,
+    ).length;
+
     return {
       range: data.range,
+      devices: {
+        desktop: byDevice.desktop.size,
+        mobile: byDevice.mobile.size,
+        tablet: byDevice.tablet.size,
+        both: inTwo,
+        totalUsers: seenAny.size,
+      },
       kpis: {
         newStudents,
         newLeads,

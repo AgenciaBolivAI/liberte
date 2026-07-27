@@ -45,3 +45,14 @@ export function weekOverride(
     rows.find((r) => r.scope === scope && r.target_type === "week" && r.target_id === weekId)?.access;
   return at("user") ?? at("global");
 }
+
+/** Teacher's DIRECT switch for a week's «reto final» ('week_challenge' rows).
+ *  Per-student beats global. Undefined = follow the normal progress rule. */
+export function weekChallengeOverride(
+  weekId: number,
+  rows: readonly AccessOverride[],
+): AccessValue | undefined {
+  const at = (scope: "global" | "user") =>
+    rows.find((r) => r.scope === scope && r.target_type === "week_challenge" && r.target_id === weekId)?.access;
+  return at("user") ?? at("global");
+}

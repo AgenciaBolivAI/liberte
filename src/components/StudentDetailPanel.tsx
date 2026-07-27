@@ -5,6 +5,7 @@ import { getStudentResults } from "@/lib/defi.functions";
 import { getStudentProgress, unlockWeek, lockWeek, setAssignedCoach } from "@/lib/coach.functions";
 import { getWeeks } from "@/data/program";
 import { StudentReportCard } from "@/components/StudentReportCard";
+import { WeekChallengeControl } from "@/components/WeekChallengeControl";
 import { MessageThread } from "@/components/MessageThread";
 import { supabase } from "@/integrations/supabase/client";
 import { aiText, aiTextList, aiErrors } from "@/lib/ai-text";
@@ -230,6 +231,8 @@ export function StudentDetailPanel({ userId }: { userId: string }) {
   return (
     <div className="space-y-4">
       <ProgressPanel userId={userId} />
+
+      <WeekChallengeControl userId={userId} />
 
       <AssignedCoachCard userId={userId} />
 

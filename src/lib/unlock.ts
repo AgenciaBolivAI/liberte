@@ -47,7 +47,7 @@ export type AccessValue = "open" | "locked";
  *  `content_access` table; readers filter to (global + the current user). */
 export type AccessOverride = {
   scope: "global" | "user";
-  target_type: "day" | "week";
+  target_type: "day" | "week" | "week_challenge";
   target_id: number;
   access: AccessValue;
 };

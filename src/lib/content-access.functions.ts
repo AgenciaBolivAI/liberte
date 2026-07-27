@@ -139,9 +139,12 @@ export const setContentAccess = createServerFn({ method: "POST" })
       access?: string;
     };
     const scope: "global" | "user" = d?.scope === "user" ? "user" : "global";
-    const targetType: "day" | "week" = d?.targetType === "week" ? "week" : "day";
+    const targetType: "day" | "week" | "week_challenge" =
+      d?.targetType === "week" ? "week"
+      : d?.targetType === "week_challenge" ? "week_challenge"
+      : "day";
     const targetId = Number(d?.targetId);
-    const maxId = targetType === "week" ? 24 : 120;
+    const maxId = targetType === "day" ? 120 : 24;
     if (!Number.isInteger(targetId) || targetId < 1 || targetId > maxId) {
       throw new Error(`targetId 1..${maxId} required`);
     }

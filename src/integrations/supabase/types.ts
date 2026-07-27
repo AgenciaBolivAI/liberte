@@ -98,6 +98,30 @@ export type Database = {
         }
         Relationships: []
       }
+      user_devices: {
+        Row: {
+          device: string
+          first_seen: string
+          last_seen: string
+          user_id: string
+          visits: number
+        }
+        Insert: {
+          device: string
+          first_seen?: string
+          last_seen?: string
+          user_id: string
+          visits?: number
+        }
+        Update: {
+          device?: string
+          first_seen?: string
+          last_seen?: string
+          user_id?: string
+          visits?: number
+        }
+        Relationships: []
+      }
       authored_blocks: {
         Row: {
           day_id: number
@@ -889,6 +913,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      record_device: {
+        Args: { _device: string }
+        Returns: undefined
+      }
       add_day_seconds: {
         Args: { _day_id: number; _seconds: number }
         Returns: undefined

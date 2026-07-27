@@ -41,6 +41,8 @@ export type WeekAccess = {
   reachedEndOfWeek: boolean;
   hasEvaluation: boolean;
   isStaff: boolean;
+  /** The teacher force-opened this challenge ('week_challenge' = 'open'). */
+  forcedOpen: boolean;
 };
 
 /** Pure decision — unit-tested for every week. RULES:
@@ -60,7 +62,16 @@ export type WeekAccess = {
  *    weeklyScore forever, mint +3 stars and auto-message the teacher. */
 export function decideWeekAccess(
   weekNumber: number,
-  s: { isStaff: boolean; hasEvaluation: boolean; maxDoneDay: number; override: "open" | "locked" | undefined },
+  s: {
+    isStaff: boolean;
+    hasEvaluation: boolean;
+    maxDoneDay: number;
+    /** 'week' override — "may START this week's days early". */
+    override: "open" | "locked" | undefined;
+    /** 'week_challenge' override — the teacher's DIRECT switch for the reto
+     *  final. Wins over everything below staff. */
+    challengeOverride?: "open" | "locked" | undefined;
+  },
 ): WeekAccess {
   const lastDay = weekNumber * 5;
   const maxDoneDay = Number(s.maxDoneDay) || 0;
@@ -71,11 +82,16 @@ export function decideWeekAccess(
     reachedEndOfWeek,
     hasEvaluation: s.hasEvaluation,
     isStaff: s.isStaff,
+    forcedOpen: s.challengeOverride === "open",
   };
   if (!Number.isInteger(weekNumber) || weekNumber < 1 || weekNumber > 24) {
-    return { unlocked: false, lockedByTeacher: false, ...base, lastDay: 0, reachedEndOfWeek: false };
+    return { unlocked: false, lockedByTeacher: false, ...base, lastDay: 0, reachedEndOfWeek: false, forcedOpen: false };
   }
   if (s.isStaff) return { unlocked: true, lockedByTeacher: false, ...base };
+  // The teacher's explicit switch on the challenge itself beats both the
+  // progress rule and the week-days override, in both directions.
+  if (s.challengeOverride === "locked") return { unlocked: false, lockedByTeacher: true, ...base };
+  if (s.challengeOverride === "open") return { unlocked: true, lockedByTeacher: false, ...base };
   if (s.override === "locked") return { unlocked: false, lockedByTeacher: true, ...base };
   return { unlocked: s.hasEvaluation || reachedEndOfWeek, lockedByTeacher: false, ...base };
 }
@@ -104,13 +120,17 @@ export async function computeWeekAccess(
   if (dcRes.error) throw new Error(dcRes.error.message);
   if (drRes.error) throw new Error(drRes.error.message);
   const days = [...(dcRes.data ?? []), ...(drRes.data ?? [])].map((r: { day_id: number }) => Number(r.day_id));
-  const at = (scope: "global" | "user") =>
-    overrides.find((r) => r.scope === scope && r.target_type === "week" && r.target_id === weekNumber)?.access;
+  const pick = (targetType: "week" | "week_challenge") => {
+    const at = (scope: "global" | "user") =>
+      overrides.find((r) => r.scope === scope && r.target_type === targetType && r.target_id === weekNumber)?.access;
+    return at("user") ?? at("global"); // a per-student row beats the global switch
+  };
   return decideWeekAccess(weekNumber, {
     isStaff: Boolean(coachRes.data) || Boolean(adminRes.data),
     hasEvaluation: Boolean(evalRes.data),
     maxDoneDay: days.length ? Math.max(...days) : 0,
-    override: at("user") ?? at("global"),
+    override: pick("week"),
+    challengeOverride: pick("week_challenge"),
   });
 }
 
@@ -125,8 +145,8 @@ export const getWeekChallengeAccess = createServerFn({ method: "POST" })
   .handler(async ({ data, context }): Promise<WeekAccess> => {
     if (data.weekNumber === 0) {
       return {
-        unlocked: false, lockedByTeacher: false, lastDay: 0,
-        maxDoneDay: 0, reachedEndOfWeek: false, hasEvaluation: false, isStaff: false,
+        unlocked: false, lockedByTeacher: false, lastDay: 0, maxDoneDay: 0,
+        reachedEndOfWeek: false, hasEvaluation: false, isStaff: false, forcedOpen: false,
       };
     }
     return computeWeekAccess(context, data.weekNumber);

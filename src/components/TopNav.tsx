@@ -7,6 +7,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useStars } from "@/lib/progress";
 import { NotificationsBell, useUnreadMessages } from "@/components/NotificationsBell";
 import { useNewBuildNudge } from "@/lib/use-new-build";
+import { useRecordDevice } from "@/lib/device";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -47,6 +48,8 @@ export function TopNav({ stars: starsProp }: { stars?: number } = {}) {
   // Long-lived tabs must learn a new build shipped (stale bundles kept
   // re-reporting already-fixed bugs).
   useNewBuildNudge();
+  // Desktop/mobile split for the admin analytics (once per browser session).
+  useRecordDevice();
 
   async function handleLogout() {
     try {

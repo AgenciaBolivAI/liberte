@@ -220,6 +220,8 @@ export function AdminAnalytics() {
 
           {drill && <DrillPanel metric={drill} data={data} onClose={() => setDrill(null)} />}
 
+          <DeviceSplit devices={data.devices} range={range} />
+
           <div className="mt-4 grid gap-4 lg:grid-cols-2">
             <div className="rounded-3xl border border-white/15 bg-card p-5 shadow-card">
               <h3 className="font-display text-sm font-extrabold text-navy">📈 Crecimiento — leads y cuentas por día</h3>
@@ -367,6 +369,67 @@ const DRILL_TITLE: Record<string, string> = {
   avgDefiScore: "Nota media défi",
   tutorMessages: "Mensajes al tutor IA",
 };
+
+/** Desktop vs mobile split (admin request): distinct users per device kind,
+ *  within the selected range. A user on two devices appears in both bars and
+ *  is called out separately, so the numbers are never silently double-counted. */
+function DeviceSplit({ devices, range }: { devices: Analytics["devices"]; range: Range }) {
+  const rangeLabel = RANGES.find((r) => r.key === range)?.label ?? "";
+  const bars: { key: string; label: string; value: number; color: string }[] = [
+    { key: "desktop", label: "💻 Escritorio", value: devices.desktop, color: C_BLUE },
+    { key: "mobile", label: "📱 Móvil", value: devices.mobile, color: C_GREEN },
+    { key: "tablet", label: "📲 Tablet", value: devices.tablet, color: C_GOLD },
+  ];
+  const max = Math.max(1, ...bars.map((b) => b.value));
+  const pct = (n: number) => (devices.totalUsers > 0 ? Math.round((n / devices.totalUsers) * 100) : 0);
+
+  return (
+    <div className="mt-4 rounded-3xl border border-white/15 bg-card p-5 shadow-card">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h3 className="font-display text-sm font-extrabold text-navy">
+          💻📱 Dispositivos — alumnos por tipo de equipo
+        </h3>
+        <span className="text-[11px] text-muted-foreground">
+          {devices.totalUsers} usuario{devices.totalUsers === 1 ? "" : "s"} · {rangeLabel}
+        </span>
+      </div>
+
+      {devices.totalUsers === 0 ? (
+        <p className="mt-3 rounded-xl bg-ice px-3 py-2.5 text-sm text-navy">
+          Todavía sin datos en este periodo. Se registra el dispositivo la primera vez que cada
+          alumno abre la plataforma en una sesión.
+        </p>
+      ) : (
+        <>
+          <div className="mt-4 space-y-3">
+            {bars.map((b) => (
+              <div key={b.key}>
+                <div className="flex items-baseline justify-between text-xs">
+                  <span className="font-semibold text-navy">{b.label}</span>
+                  <span className="text-muted-foreground">
+                    <b className="text-navy">{b.value}</b> · {pct(b.value)}%
+                  </span>
+                </div>
+                <div className="mt-1 h-2.5 w-full overflow-hidden rounded-full bg-navy/10">
+                  <div
+                    className="h-full rounded-full transition-all"
+                    style={{ width: `${(b.value / max) * 100}%`, backgroundColor: b.color }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+          {devices.both > 0 && (
+            <p className="mt-3 text-[11px] text-muted-foreground">
+              {devices.both} alumno{devices.both === 1 ? "" : "s"} usa{devices.both === 1 ? "" : "n"} más
+              de un dispositivo (se cuenta en cada barra).
+            </p>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
 
 function DrillPanel({ metric, data, onClose }: { metric: string; data: Analytics; onClose: () => void }) {
   const title = DRILL_TITLE[metric] ?? metric;
