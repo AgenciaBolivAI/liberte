@@ -3,7 +3,7 @@ import { CalendarPlus, Loader2, Pencil, Trash2, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import type { CalendarEvent, EventKind } from "@/lib/calendarEvents";
+import { extractZoomUrl, type CalendarEvent, type EventKind } from "@/lib/calendarEvents";
 
 // Inline calendar editor: opened by clicking a day (create) or an event (edit)
 // right on the calendar grid — no separate panel. Staff-only at the call site;
@@ -66,7 +66,9 @@ export function CalendarEventEditor({ init, onClose, onSaved }: {
       kind: form.kind,
       start_utc: start.toISOString(),
       duration_min: Number(form.durationMin) || 90,
-      zoom_url: form.zoomUrl.trim() || null,
+      // Teachers paste the whole Zoom INVITATION here — store only the join
+      // link, not ~1KB of text (that corrupted "Clase Europa #4" in prod).
+      zoom_url: extractZoomUrl(form.zoomUrl) ?? null,
       zoom_id: form.zoomId.trim() || null,
       description: form.description.trim() || null,
     };

@@ -93,6 +93,37 @@ export function useRichDay(dayId: string | number): RichDay | null {
   return data;
 }
 
+/** Teacher-saved video URLs for one day, by slot — fetched through the
+ *  `getDayVideos` server fn so they apply REGARDLESS of publish status (RLS
+ *  hides draft rows from students, and days 1-10 live as drafts by design).
+ *  This is what makes "pegar un enlace y guardar" show up instantly for
+ *  students without republishing (or redesigning) the day. */
+export type DayVideos = { gym?: string; intro?: string; vocab?: string; cles?: string };
+
+export function useDayVideos(dayId: string | number): DayVideos {
+  const [videos, setVideos] = useState<DayVideos>({});
+  const n = Number(dayId);
+  useEffect(() => {
+    let alive = true;
+    if (!Number.isInteger(n) || n < 1) {
+      setVideos({});
+      return;
+    }
+    void import("@/lib/day-videos.functions")
+      .then(({ getDayVideos }) => getDayVideos({ data: { dayId: n } }))
+      .then((v) => {
+        if (alive) setVideos(v ?? {});
+      })
+      .catch(() => {
+        if (alive) setVideos({}); // fall back to the bundled videos silently
+      });
+    return () => {
+      alive = false;
+    };
+  }, [n]);
+  return videos;
+}
+
 /** All authored days (staff view), lightweight — for the content manager list. */
 export async function listRichDays(): Promise<RichDayRow[]> {
   const { data, error } = await supabase

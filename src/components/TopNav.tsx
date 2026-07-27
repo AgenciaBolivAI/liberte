@@ -6,6 +6,7 @@ import { useIsStaff } from "@/lib/use-staff";
 import { supabase } from "@/integrations/supabase/client";
 import { useStars } from "@/lib/progress";
 import { NotificationsBell, useUnreadMessages } from "@/components/NotificationsBell";
+import { useNewBuildNudge } from "@/lib/use-new-build";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -43,6 +44,9 @@ export function TopNav({ stars: starsProp }: { stars?: number } = {}) {
   const initial = (fullName || user?.email || "?").charAt(0).toUpperCase();
   // Live unread count on the Messages nav item (client #7).
   const unreadMsgs = useUnreadMessages(path);
+  // Long-lived tabs must learn a new build shipped (stale bundles kept
+  // re-reporting already-fixed bugs).
+  useNewBuildNudge();
 
   async function handleLogout() {
     try {

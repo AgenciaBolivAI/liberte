@@ -332,6 +332,10 @@ function WeekPage() {
 
   const [gateLoading, setGateLoading] = useState(true);
   const [unlocked, setUnlocked] = useState(false);
+  // Distinguish "the gate read failed" from "locked": a flaky connection must
+  // render a retry, never the lock screen, for a qualified student.
+  const [gateFailed, setGateFailed] = useState(false);
+  const [gateAttempt, setGateAttempt] = useState(0);
   const [existing, setExisting] = useState<Awaited<ReturnType<typeof getMyWeeklyEvaluation>> | null>(null);
 
   // Week 2's challenge lives on its own richer route (/defi-semaine2). There is
@@ -343,24 +347,29 @@ function WeekPage() {
 
   useEffect(() => {
     if (loading || !user) return;
+    setGateLoading(true);
+    setGateFailed(false);
     (async () => {
       try {
         const [days, prev] = await Promise.all([
           getCompletedDays(),
           getMyWeeklyEvaluation({ data: { weekNumber } }),
         ]);
-        // Unlocks once the LAST day of the week is complete (week N → day N*5).
-        // Week 2 has its own /defi-semaine2 route; this covers weeks 1, 3 and 4.
-        const ok = isAdmin || days.includes(weekNumber * 5);
+        // Unlocks once the LAST day of the week is complete — day marked done
+        // OR défi submitted (getCompletedDays unions both, same rule as the
+        // server-side evaluateWeek gate). Week 2 lives on /defi-semaine2.
+        const ok = isAdmin || Boolean(prev) || days.includes(weekNumber * 5);
         setUnlocked(ok);
         setExisting(prev);
       } catch {
+        // The read failed — we don't KNOW they're locked. Offer a retry.
         setUnlocked(isAdmin);
+        setGateFailed(!isAdmin);
       } finally {
         setGateLoading(false);
       }
     })();
-  }, [loading, user?.id, weekNumber, isAdmin]);
+  }, [loading, user?.id, weekNumber, isAdmin, gateAttempt]);
 
   if (loading || gateLoading || weekNumber === 2) {
     return (
@@ -374,6 +383,20 @@ function WeekPage() {
     return (
       <div className="p-6 text-center">
         <Link to="/liberte-log-in-983749824923465723" className="text-blue underline">Connecte-toi</Link>
+      </div>
+    );
+  }
+
+  if (!unlocked && gateFailed) {
+    return (
+      <div className="mx-auto max-w-lg p-6">
+        <div className="rounded-3xl border border-border bg-white p-8 text-center shadow-card">
+          <h1 className="font-display text-xl font-extrabold text-navy">Impossible de charger ton défi</h1>
+          <p className="mt-2 text-sm text-muted-foreground">Vérifie ta connexion et réessaie — rien n'a été perdu.</p>
+          <Button onClick={() => setGateAttempt((n) => n + 1)} className="mt-6 bg-gradient-blue text-white">
+            Réessayer
+          </Button>
+        </div>
       </div>
     );
   }

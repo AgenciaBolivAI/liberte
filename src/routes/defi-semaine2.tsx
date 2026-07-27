@@ -543,6 +543,10 @@ function DefiSemaine2Page() {
   // saved responses alone).
   const [restored, setRestored] = useState<{ writing: number; roleplay: number } | null>(null);
   const [hydrated, setHydrated] = useState(false);
+  // A FAILED gate/hydrate read must never masquerade as "locked" or spin
+  // forever (flaky mobile networks hit this): it renders a retry screen.
+  const [gateFailed, setGateFailed] = useState(false);
+  const [hydrateAttempt, setHydrateAttempt] = useState(0);
 
   const studentName =
     (profile?.full_name && profile.full_name.trim()) || fullName || user?.email || "Alumno";
@@ -555,16 +559,29 @@ function DefiSemaine2Page() {
       return;
     }
     let alive = true;
+    setGateFailed(false);
     (async () => {
       let readOk = false;
       try {
-        const [done, completedDays] = await Promise.all([
+        const [done, daysRes] = await Promise.all([
           getMyWeek2Result(),
-          getCompletedDays().catch(() => [] as number[]),
+          // Keep the failure distinguishable: "the read failed" must not be
+          // treated as "the student completed zero days" (that rendered the
+          // lock screen to fully-qualified students on flaky connections).
+          getCompletedDays()
+            .then((d) => ({ ok: true as const, days: d }))
+            .catch(() => ({ ok: false as const, days: [] as number[] })),
         ]);
         if (!alive) return;
-        // Same gate as the week-1 défi: finish the last day of the week first.
-        setUnlocked(isAdmin || Boolean(done) || completedDays.includes(10));
+        // Same gate as the week-1 défi: finish the last day of the week first
+        // (day marked complete OR défi submitted — getCompletedDays unions both,
+        // matching the server-side evaluateWeek gate and the day-page sidebar).
+        const qualifies = isAdmin || Boolean(done) || daysRes.days.includes(10);
+        setUnlocked(qualifies);
+        if (!qualifies && !daysRes.ok) {
+          setGateFailed(true); // show "réessayer", never the lock screen
+          return;
+        }
         if (done) {
           const resp = (done.responses ?? {}) as Record<string, unknown>;
           if (Array.isArray(resp.quiz)) setQuizAnswers(resp.quiz as (number | null)[]);
@@ -581,6 +598,11 @@ function DefiSemaine2Page() {
           });
           setSaved(true);
           setStage("results");
+          // This early-return skips the week_state read below, but it IS a
+          // fully successful hydration — without flipping readOk here, the
+          // finally never sets `hydrated` and every student who already
+          // finished week 2 got an infinite spinner on revisit.
+          readOk = true;
           return;
         }
         const { data, error } = await supabase
@@ -629,6 +651,9 @@ function DefiSemaine2Page() {
         }
       } catch (e) {
         console.error("[week_state] hydrate threw", e);
+        // getMyWeek2Result threw → we know nothing; offer a retry instead of
+        // an eternal spinner.
+        if (alive) setGateFailed(true);
       } finally {
         // Only a successful read unlocks the autosave.
         if (alive && readOk) setHydrated(true);
@@ -638,7 +663,7 @@ function DefiSemaine2Page() {
       alive = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authLoading, user?.id]);
+  }, [authLoading, user?.id, hydrateAttempt]);
 
   /* ------ autosave in-progress state (debounced) ------ */
   const stateRef = useRef<Record<string, unknown>>({});
@@ -862,6 +887,23 @@ function DefiSemaine2Page() {
 
   /* ------ render ------ */
   if (!hydrated) {
+    if (gateFailed) {
+      return (
+        <div style={{ backgroundColor: NAVY }} className="flex min-h-screen items-center justify-center px-4 text-white">
+          <div className="max-w-lg rounded-3xl border border-white/15 bg-white/5 p-8 text-center">
+            <h1 className="text-xl font-black">Impossible de charger ton défi</h1>
+            <p className="mt-2 text-sm text-white/75">Vérifie ta connexion et réessaie — rien n'a été perdu.</p>
+            <Button
+              onClick={() => setHydrateAttempt((n) => n + 1)}
+              className="mt-6 h-11 rounded-xl px-6 font-bold"
+              style={{ backgroundColor: BLUE }}
+            >
+              Réessayer
+            </Button>
+          </div>
+        </div>
+      );
+    }
     return (
       <div style={{ backgroundColor: NAVY }} className="flex min-h-screen items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-white" />

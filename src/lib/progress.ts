@@ -63,6 +63,7 @@ export function useDayCompletions(targetUserId?: string | null) {
   const { user } = useAuth();
   const [rows, setRows] = useState<DayCompletion[]>([]);
   const [defiDays, setDefiDays] = useState<number[]>([]);
+  const [defiDates, setDefiDates] = useState<string[]>([]);
   const [enrolledAt, setEnrolledAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const reqRef = useRef(0);
@@ -107,7 +108,7 @@ export function useDayCompletions(targetUserId?: string | null) {
         .select("day_id, week_number, completed_at")
         .eq("user_id", user.id)
         .order("completed_at", { ascending: true }),
-      supabase.from("defi_results").select("day_id").eq("user_id", user.id),
+      supabase.from("defi_results").select("day_id, created_at").eq("user_id", user.id),
     ]);
     if (!alive()) return;
     // KEEP the previous data when a fetch fails. Blanking it made the dashboard
@@ -115,8 +116,10 @@ export function useDayCompletions(targetUserId?: string | null) {
     // back to "locked" and unmounted the lesson the student was working on.
     if (!dc.error) setRows((dc.data as DayCompletion[]) ?? []);
     else console.error("[day_completions] fetch failed", dc.error.message);
-    if (!dr.error) setDefiDays(Array.from(new Set((dr.data ?? []).map((r) => Number(r.day_id)))));
-    else console.error("[defi_results] fetch failed", dr.error.message);
+    if (!dr.error) {
+      setDefiDays(Array.from(new Set((dr.data ?? []).map((r) => Number(r.day_id)))));
+      setDefiDates((dr.data ?? []).map((r) => String(r.created_at ?? "")).filter(Boolean));
+    } else console.error("[defi_results] fetch failed", dr.error.message);
     setEnrolledAt(user.created_at ?? null);
     setLoading(false);
     // Depend on the stable id/created_at, NOT the `user` object: supabase hands
@@ -142,7 +145,9 @@ export function useDayCompletions(targetUserId?: string | null) {
     ),
   ).length;
   const percent = Math.round((days.length / TOTAL_DAYS) * 100);
-  const streak = computeStreak(rows.map((r) => r.completed_at));
+  // Streak counts BOTH activity kinds — a défi-only day is real work and must
+  // not break the chain (it used to look at day_completions dates only).
+  const streak = computeStreak([...rows.map((r) => r.completed_at), ...defiDates]);
 
   return { rows, days, defiDays, enrolledAt, weeksCompleted, percent, streak, loading, refresh };
 }

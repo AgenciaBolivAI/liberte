@@ -1206,7 +1206,8 @@ g("12h. Progress persistence (REAL writes + the state machine)");
   ok("weeks counted only when ALL their days are done (not floor(n/5))",
      progSrcTxt.includes("doneSet.has(dayId)") && !/weeksCompleted = Math\.floor/.test(progSrcTxt));
   ok("a failed fetch keeps the previous data instead of blanking it",
-     progSrcTxt.includes("if (!dc.error) setRows") && progSrcTxt.includes("if (!dr.error) setDefiDays"));
+     progSrcTxt.includes("if (!dc.error) setRows") &&
+     /if \(!dr\.error\) \{\s*\n\s*setDefiDays/.test(progSrcTxt));
   ok("progress hooks depend on user?.id, not the churning user object",
      progSrcTxt.includes("[user?.id, user?.created_at, targetUserId]") && progSrcTxt.includes("[user?.id, targetUserId]"));
 
@@ -1413,7 +1414,9 @@ g("12e. Re-audit fixes: paid-AI gates, star-minting, wildcard injection, misc");
   }
   ok("types.ts tutor_consume_message can return null (daily cap)",
      /tutor_consume_message[\s\S]{0,60}Returns: number \| null/.test(readFileSync("src/integrations/supabase/types.ts", "utf8")));
-  ok("500 error page is Spanish", readFileSync("src/lib/error-page.ts", "utf8").includes('<html lang="es">'));
+  ok("500 error page is French + home goes to the student dashboard (not the marketing landing)",
+     (() => { const e = readFileSync("src/lib/error-page.ts", "utf8");
+              return e.includes('<html lang="fr">') && e.includes("/liberte-plataforma-834798234728482934254-student"); })());
   ok("admin star bar uses the true max (weekly-eval stars included)",
      readFileSync("src/routes/liberte-profesor-panel-9382745-admin.tsx", "utf8").includes("TOTAL_DAYS * 4 + TOTAL_WEEKS * 3"));
 }
@@ -1479,10 +1482,40 @@ g("12i. Teacher suite: reports, notifications, time-on-task, videos, French chro
   ok("editor accepts any YouTube URL shape and normalizes it",
      readFileSync("src/components/RichDayEditor.tsx", "utf8").includes("toYouTubeEmbed") &&
      readFileSync("src/lib/rich-content.ts", "utf8").includes("export function toYouTubeEmbed"));
-  ok("lesson wrappers render the per-section videos when set",
-     day12i.includes("data.introVideo && <VideoBlock") &&
-     day12i.includes("data.vocabVideo && <VideoBlock") &&
-     day12i.includes("data.clesVideo && <VideoBlock"));
+  ok("lesson wrappers render the per-section videos when set (ctx override first)",
+     day12i.includes("{intro && <VideoBlock src={intro}") &&
+     day12i.includes("{vocabVid && <VideoBlock src={vocabVid}") &&
+     day12i.includes("{clesVid && <VideoBlock src={clesVid}"));
+
+  // TEACHER-REPORTED BUG (2026-07-26, confirmed with screenshots): "cambié el
+  // enlace del video y se guarda en el panel, pero no cambia en la plataforma".
+  // Root cause 1: GymCerebral read the video from hardcoded constants / the
+  // code bundle and NEVER from the authored row — even for published days 11+.
+  // Root cause 2: days 1-10 rows are drafts, and RLS hides drafts from
+  // students, so no client-side read could ever see those saved links.
+  // Fix: getDayVideos server fn (service role, returns ONLY the 4 video URLs,
+  // any status) → useDayVideos → DayVideosCtx → every video slot prefers it.
+  {
+    const dvFns = readFileSync("src/lib/day-videos.functions.ts", "utf8");
+    ok("getDayVideos server fn: auth-gated, service-role read, videos only",
+       dvFns.includes("requireSupabaseAuth") &&
+       dvFns.includes('.select("rich")') &&
+       dvFns.includes("supabaseAdmin") &&
+       !dvFns.includes("vocabulary")); // it must never leak draft lesson content
+    const rcSrc = readFileSync("src/lib/rich-content.ts", "utf8");
+    ok("useDayVideos hook fetches saved links regardless of publish status",
+       rcSrc.includes("export function useDayVideos") && rcSrc.includes("getDayVideos"));
+    ok("day player provides the overrides to every lesson",
+       day12i.includes("<DayVideosProvider dayId={activeDay}>") &&
+       day12i.includes("const DayVideosCtx = createContext<DayVideos>"));
+    ok("GymCerebral prefers the teacher-saved gym link (the exact repro)",
+       /const src =\s*\n?\s*v\.gym \|\|/.test(day12i));
+    const oVideoCount = (day12i.match(/<OVideo slot=/g) ?? []).length;
+    ok(`all bespoke days-1-10 videos go through the override (${oVideoCount} slots ≥ 30)`,
+       oVideoCount >= 30);
+    ok("editor banner tells the teacher videos apply instantly (no publish needed)",
+       readFileSync("src/components/RichDayEditor.tsx", "utf8").includes("Los videos se actualizan al instante"));
+  }
   {
     const src = readFileSync("src/lib/rich-content.ts", "utf8");
     const body = src.slice(src.indexOf("export function toYouTubeEmbed"));
@@ -1503,6 +1536,66 @@ g("12i. Teacher suite: reports, notifications, time-on-task, videos, French chro
      nav.includes("Se déconnecter") &&
      readFileSync("src/components/StagedDefi.tsx", "utf8").includes("Envoyer mon défi") &&
      day12i.includes("Comment dit-on en français ?"));
+
+  // ---- 2026-07-26 night forensics fixes (student + teacher reports) ----
+
+  // Report 3: routes gated on defi_results ONLY while the sidebar/server used
+  // the union — "terminé el día 10 pero no se me abre el desafío".
+  ok("getCompletedDays unions day_completions with defi_results (matches the server gate)",
+     /getCompletedDays[\s\S]{0,900}defi_results[\s\S]{0,300}day_completions/.test(wk));
+  {
+    const d2 = readFileSync("src/routes/defi-semaine2.tsx", "utf8");
+    ok("defi-semaine2: finished-result revisit sets readOk (no more infinite spinner)",
+       /setStage\("results"\);[\s\S]{0,400}readOk = true;[\s\S]{0,50}return;/.test(d2));
+    ok("defi-semaine2: a failed gate read shows a retry, never the lock screen",
+       d2.includes("ok: false as const") && d2.includes("setGateFailed(true)") && d2.includes("Réessayer"));
+    const sem = readFileSync("src/routes/semaine.$weekId.tsx", "utf8");
+    ok("semaine gate: retry on failure + an existing evaluation always unlocks",
+       sem.includes("setGateFailed(!isAdmin)") && sem.includes("Boolean(prev)") && sem.includes("Réessayer"));
+  }
+
+  // Report 5: the error pages' "home" went to the public landing, which shows
+  // "Iniciar sesión" — students believed an error had logged them out.
+  {
+    const root = readFileSync("src/routes/__root.tsx", "utf8");
+    ok("error + 404 pages send students to the dashboard, not the marketing landing",
+       root.includes('const STUDENT_HOME = "/liberte-plataforma-834798234728482934254-student"') &&
+       root.includes("href={STUDENT_HOME}") && root.includes("to={STUDENT_HOME}") &&
+       !root.includes('href="/"'));
+  }
+
+  // Stale bundles: tabs opened before a deploy kept re-reporting fixed bugs.
+  ok("long-lived tabs detect a new deploy and offer a reload",
+     readFileSync("src/lib/use-new-build.ts", "utf8").includes("assets\\/index-") &&
+     nav.includes("useNewBuildNudge()"));
+
+  // Calendar: the whole Zoom invitation pasted as zoom_url corrupted an event.
+  {
+    const cal = readFileSync("src/lib/calendarEvents.ts", "utf8");
+    ok("zoom_url is normalized on read AND on save (join link extracted from pasted text)",
+       cal.includes("export function extractZoomUrl") &&
+       cal.includes("zoomUrl: extractZoomUrl(r.zoom_url)") &&
+       readFileSync("src/components/CalendarEventEditor.tsx", "utf8").includes("extractZoomUrl(form.zoomUrl)"));
+    const body = cal.slice(cal.indexOf("export function extractZoomUrl"));
+    const fn = new Function(
+      body.slice(0, body.indexOf("\n}") + 2)
+        .replace("export function extractZoomUrl(raw: string | null | undefined): string | undefined", "return function extractZoomUrl(raw)"),
+    )();
+    ok("extractZoomUrl pulls the /j/ join link out of a pasted invitation",
+       fn("Liberté le está invitando…\nUnirse: https://us06web.zoom.us/j/86574307208?pwd=x\nChat: https://zoom.us/launch/jc/abc") ===
+         "https://us06web.zoom.us/j/86574307208?pwd=x" &&
+       fn("https://us06web.zoom.us/j/123456") === "https://us06web.zoom.us/j/123456" &&
+       fn("") === undefined);
+  }
+
+  // Streak: défi-only days are real work and must not break the chain.
+  ok("streak counts défi days too",
+     readFileSync("src/lib/progress.ts", "utf8").includes("computeStreak([...rows.map((r) => r.completed_at), ...defiDates])"));
+
+  // The one-time repair for pre-fix students exists and is idempotent-by-design.
+  ok("day_state backfill script exists (dry-run default, only fills missing/empty rows)",
+     (() => { const b = readFileSync("scripts/backfill-day-state.mjs", "utf8");
+              return b.includes("--apply") && b.includes("never touch it") && b.includes("onConflict: \"user_id,day_id\""); })());
 }
 
 /* ---------------- build output ---------------- */

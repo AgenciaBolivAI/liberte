@@ -153,6 +153,18 @@ type CalendarEventRow = {
   reference_times: unknown;
 };
 
+/** Teachers paste the ENTIRE Zoom invitation into the URL field (live DB had
+ *  ~1KB of invitation text stored as "Clase Europa #4"'s zoom_url, so the
+ *  join button rendered a broken href). Pull the real join link out of
+ *  whatever was pasted; prefer a zoom.us/j/ URL over incidental links. */
+export function extractZoomUrl(raw: string | null | undefined): string | undefined {
+  const t = (raw ?? "").trim();
+  if (!t) return undefined;
+  if (/^https?:\/\/\S+$/.test(t)) return t;
+  const urls = t.match(/https?:\/\/[^\s<>")]+/g) ?? [];
+  return urls.find((u) => /zoom\.us\/j\//.test(u)) ?? urls[0];
+}
+
 function rowToEvent(r: CalendarEventRow): CalendarEvent {
   return {
     id: r.id,
@@ -161,7 +173,7 @@ function rowToEvent(r: CalendarEventRow): CalendarEvent {
     startUtc: r.start_utc,
     durationMin: r.duration_min,
     desc: r.description ?? undefined,
-    zoomUrl: r.zoom_url ?? undefined,
+    zoomUrl: extractZoomUrl(r.zoom_url),
     zoomId: r.zoom_id ?? undefined,
     materialTo: r.material_to ?? undefined,
     referenceTimes: Array.isArray(r.reference_times)

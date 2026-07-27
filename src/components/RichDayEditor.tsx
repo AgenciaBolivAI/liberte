@@ -281,8 +281,17 @@ export function RichDayEditor({ dayId, onBack }: { dayId: number; onBack: () => 
       </div>
 
       <p className="rounded-xl border border-blue/20 bg-blue/5 p-2.5 text-xs text-navy/80">
-        Lo que edites aquí es exactamente lo que verá el alumno, con el mismo diseño que las semanas 1-2.
-        Recuerda pulsar <b>Guardar cambios</b> al final.
+        🎬 <b>Los videos se actualizan al instante</b> para los alumnos en cuanto pulsas{" "}
+        <b>Guardar cambios</b> — sin necesidad de publicar.
+        {dayId <= 10 ? (
+          <>
+            {" "}El resto del contenido de los días 1-10 mantiene el diseño original de la plataforma;
+            solo reemplaza ese diseño por esta versión editada si pulsas <b>Publicar</b> (y vuelve con{" "}
+            <b>Pasar a borrador</b>).
+          </>
+        ) : (
+          <> El resto del contenido también se actualiza al guardar, con el mismo diseño que las semanas 1-2.</>
+        )}
       </p>
 
       {/* Sections follow the lesson order the student sees:

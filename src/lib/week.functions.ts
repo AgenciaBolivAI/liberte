@@ -4,17 +4,27 @@ import { callChat, transcribeFr } from "@/lib/ai";
 import { assertWeekNotLocked } from "@/lib/content-access.functions";
 import { requireApprovedStudent } from "@/lib/approval";
 
-/* ---------- Which days did the user complete (defi sent) ---------- */
+/* ---------- Which days did the user complete ---------- */
 
+/** A "done" day = défi submitted (defi_results) OR day marked complete
+ *  (day_completions) — the SAME union the server-side evaluateWeek gate and
+ *  every progress surface use. This used to read defi_results only, which made
+ *  the weekly-challenge routes stricter than the sidebar that says
+ *  "Disponible": a student who finished Day 10 without submitting the défi
+ *  audio was invited in and then blocked ("terminé el día 10 pero no se me
+ *  abre el desafío"). */
 export const getCompletedDays = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const { data, error } = await context.supabase
-      .from("defi_results")
-      .select("day_id")
-      .eq("user_id", context.userId);
-    if (error) throw error;
-    return Array.from(new Set((data ?? []).map((r) => Number(r.day_id)))).sort((a, b) => a - b);
+    const [defis, comps] = await Promise.all([
+      context.supabase.from("defi_results").select("day_id").eq("user_id", context.userId),
+      context.supabase.from("day_completions").select("day_id").eq("user_id", context.userId),
+    ]);
+    if (defis.error) throw defis.error;
+    if (comps.error) throw comps.error;
+    return Array.from(
+      new Set([...(defis.data ?? []), ...(comps.data ?? [])].map((r) => Number(r.day_id))),
+    ).sort((a, b) => a - b);
   });
 
 /* ---------- STT for the weekly speaking tasks (reuses gateway) ---------- */

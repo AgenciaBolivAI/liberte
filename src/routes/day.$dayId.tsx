@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   ArrowLeft,
   ArrowRight,
@@ -204,7 +204,7 @@ import { persist } from "@/lib/persist";
 import { dayStateKey, doneKeys, mergeHydrated, resolveLesson, shouldPersistDay } from "@/lib/dayProgress";
 import { WEEK34_META, type RichDay, type Week34Meta } from "@/data/week34.meta";
 import { MONTH2_META } from "@/data/month2.meta";
-import { useRichDay } from "@/lib/rich-content";
+import { useRichDay, useDayVideos, type DayVideos } from "@/lib/rich-content";
 
 const DAY_TITLES: Record<string, { title: string; desc: string }> = {
   "1": { title: "Jour 1 · Le Café — Liberté", desc: "Premier jour : commander un café à Paris avec politesse." },
@@ -1141,6 +1141,7 @@ function DayPage() {
                 onBackToIndex={() => setPlusItemId(null)}
               />
             ) : (
+            <DayVideosProvider dayId={activeDay}>
             <LessonView
               dayId={activeDay}
               lessons={lessonsList}
@@ -1164,6 +1165,7 @@ function DayPage() {
               isFirst={lesson === order[0]}
               isLast={lesson === order[order.length - 1]}
             />
+            </DayVideosProvider>
             )}
             {weekComplete && activeDay === "5" && !readOnly && (
               <div className="mt-6 rounded-3xl border-2 border-gold/50 bg-gradient-to-br from-white to-gold/10 p-6 text-center shadow-card">
@@ -1737,17 +1739,41 @@ function ResultCard({ title, score, message }: { title: string; score: string; m
   );
 }
 
+/* -------------------- Teacher-saved video overrides -------------------- */
+
+/** The teacher's saved video links for the active day (any publish status).
+ *  THE BUG THIS KILLS: the player used to read every video from the code
+ *  bundle / hardcoded constants, so "cambié el enlace y no cambia en la
+ *  plataforma" — saves landed in authored_days and were never rendered. */
+const DayVideosCtx = createContext<DayVideos>({});
+
+function DayVideosProvider({ dayId, children }: { dayId: string; children: ReactNode }) {
+  const videos = useDayVideos(dayId);
+  return <DayVideosCtx.Provider value={videos}>{children}</DayVideosCtx.Provider>;
+}
+
+/** VideoBlock that prefers the teacher-saved link for its slot; the bundled
+ *  video is only the fallback. Used by every bespoke days-1-10 video. */
+function OVideo({ slot, fallback, title }: { slot: keyof DayVideos; fallback: string; title: string }) {
+  const v = useContext(DayVideosCtx);
+  return <VideoBlock src={v[slot] || fallback} title={title} />;
+}
+
 /* -------------------- Lesson 1: Gym -------------------- */
 
 function GymCerebral({ dayId }: { dayId?: string }) {
+  const v = useContext(DayVideosCtx);
+  // Teacher-saved link first — the DB row was previously ignored here, which
+  // made the editor look broken for EVERY day's gym video.
   const src =
-    dayId === "10" ? day10Videos.gym :
+    v.gym ||
+    (dayId === "10" ? day10Videos.gym :
     dayId === "9" ? day9Videos.gym :
     dayId === "8" ? day8Videos.gym :
     dayId === "7" ? day7Videos.gym :
     dayId === "6" ? day6Videos.gym :
     (dayId && (WEEK34[dayId] ?? MONTH2[dayId])?.gym) ? (WEEK34[dayId] ?? MONTH2[dayId])!.gym :
-    videos.gymCerebral;
+    videos.gymCerebral);
   return (
     <div className="space-y-5">
       <LiberteSpeak message="Bonjour ! Aujourd'hui, on commence par un petit exercice pour reprogrammer ton cerveau. Regarde la vidéo, respire et amuse-toi." />
@@ -1761,7 +1787,7 @@ function GymCerebral({ dayId }: { dayId?: string }) {
 function CafeWelcome() {
   return (
     <div className="space-y-5">
-      <VideoBlock src={videos.bienvenue} title="☕ Bienvenue au café" />
+      <OVideo slot="intro" fallback={videos.bienvenue} title="☕ Bienvenue au café" />
       <a
         href={cuadernilloSemana1.url}
         target="_blank"
@@ -1782,7 +1808,7 @@ function VocabLesson({ onAward }: { onAward: (n?: number) => void }) {
   return (
     <div className="space-y-6">
       <LiberteSpeak message="Regarde la vidéo, puis explore les 30 phrases une par une. Ensuite, gagne une étoile par mini-jeu." />
-      <VideoBlock src={vocabVideo.url} title="📚 Vocabulaire — Jour 1" />
+      <OVideo slot="vocab" fallback={vocabVideo.url} title="📚 Vocabulaire — Jour 1" />
 
       <FlashGrid />
 
@@ -2279,7 +2305,7 @@ function SpeakingGame({ items, onAward, dayId = 0, section = "vocab" }: {
 function ClesLesson({ onAward }: { onAward: (n?: number) => void }) {
   return (
     <div className="space-y-6">
-      <VideoBlock src={videos.grammar} title="🗝️ Le conditionnel de courtoisie — Je voudrais" />
+      <OVideo slot="cles" fallback={videos.grammar} title="🗝️ Le conditionnel de courtoisie — Je voudrais" />
 
       <div className="rounded-2xl border-2 border-blue/30 bg-ice p-5">
         <p className="text-xs font-bold tracking-widest text-blue uppercase">📌 La formule</p>
@@ -2350,7 +2376,7 @@ function IntroDay2() {
   return (
     <div className="space-y-5">
       <LiberteSpeak message="Bienvenue au Jour 2 ! Aujourd'hui, tu retournes au café — mais cette fois, tu ne fais pas que commander. Tu conseilles, tu goûtes, tu payes. Respire et regarde." />
-      <VideoBlock src={day2Videos.intro} title="🎬 Intro · Jour 2 · Retour au café" />
+      <OVideo slot="intro" fallback={day2Videos.intro} title="🎬 Intro · Jour 2 · Retour au café" />
     </div>
   );
 }
@@ -2360,7 +2386,7 @@ function VocabLessonDay2({ onAward }: { onAward: (n?: number) => void }) {
     <div className="space-y-6">
       <LiberteSpeak message="30 nouveaux mots pour la cafétéria. Explore les flashcards une par une, puis les 4 mini-jeux." />
 
-      <VideoBlock src={day2Videos.vocab} title="📚 Vocabulaire — Jour 2" />
+      <OVideo slot="vocab" fallback={day2Videos.vocab} title="📚 Vocabulaire — Jour 2" />
 
       <FlashGridDay2 />
 
@@ -2487,7 +2513,7 @@ function FlashQuizGame({ onAward }: { onAward: (n?: number) => void }) {
 function ClesLessonDay2({ onAward }: { onAward: (n?: number) => void }) {
   return (
     <div className="space-y-6">
-      <VideoBlock src={day2Videos.grammar} title="🗝️ Les clés de la Liberté — Jour 2" />
+      <OVideo slot="cles" fallback={day2Videos.grammar} title="🗝️ Les clés de la Liberté — Jour 2" />
 
       <div className="rounded-2xl border-2 border-gold/40 bg-gradient-to-br from-ice to-white p-5 shadow-card">
         <div className="flex items-center gap-2">
@@ -2593,7 +2619,7 @@ function IntroDay3() {
   return (
     <div className="space-y-5">
       <LiberteSpeak message="Bienvenue au Jour 3 ! Aujourd'hui, on entre dans la boulangerie. Le pain sort du four — respire cet arôme et prépare-toi à commander comme un parisien." />
-      <VideoBlock src={day3Videos.intro} title="🎬 Intro · Jour 3 · La Boulangerie Liberté" />
+      <OVideo slot="intro" fallback={day3Videos.intro} title="🎬 Intro · Jour 3 · La Boulangerie Liberté" />
     </div>
   );
 }
@@ -2603,7 +2629,7 @@ function VocabLessonDay3({ onAward }: { onAward: (n?: number) => void }) {
     <div className="space-y-6">
       <LiberteSpeak message="30 mots nouveaux pour la boulangerie. Écoute les 7 phrases ancre, explore les cartes, puis les 4 mini-jeux." />
 
-      <VideoBlock src={day3Videos.vocab} title="📚 Vocabulaire — Jour 3" />
+      <OVideo slot="vocab" fallback={day3Videos.vocab} title="📚 Vocabulaire — Jour 3" />
 
 
       <FlashGridDay3 />
@@ -2751,7 +2777,7 @@ function FlashQuizGameDay3({ onAward }: { onAward: (n?: number) => void }) {
 function ClesLessonDay3({ onAward }: { onAward: (n?: number) => void }) {
   return (
     <div className="space-y-6">
-      <VideoBlock src={day3Videos.grammar} title="🗝️ Les clés de la Liberté — Jour 3" />
+      <OVideo slot="cles" fallback={day3Videos.grammar} title="🗝️ Les clés de la Liberté — Jour 3" />
 
       <div className="rounded-2xl border-2 border-gold/40 bg-gradient-to-br from-ice to-white p-5 shadow-card">
         <div className="flex items-center gap-2">
@@ -2818,7 +2844,7 @@ function IntroDay4() {
   return (
     <div className="space-y-5">
       <LiberteSpeak message="Bienvenue au Jour 4 ! Aujourd'hui, on entre dans la vitrine des douceurs. Choisis, goûte et offre — comme un vrai parisien." />
-      <VideoBlock src={day4Videos.intro} title="🎬 Intro · Jour 4 · La Vitrine des Douceurs" />
+      <OVideo slot="intro" fallback={day4Videos.intro} title="🎬 Intro · Jour 4 · La Vitrine des Douceurs" />
     </div>
   );
 }
@@ -2828,7 +2854,7 @@ function VocabLessonDay4({ onAward }: { onAward: (n?: number) => void }) {
     <div className="space-y-6">
       <LiberteSpeak message="30 mots nouveaux pour la pâtisserie. Explore les cartes, puis les 4 mini-jeux." />
 
-      <VideoBlock src={day4Videos.vocab} title="📚 Vocabulaire — Jour 4" />
+      <OVideo slot="vocab" fallback={day4Videos.vocab} title="📚 Vocabulaire — Jour 4" />
 
       <FlashGridDay4 />
 
@@ -2956,7 +2982,7 @@ function FlashQuizGameDay4({ onAward }: { onAward: (n?: number) => void }) {
 function ClesLessonDay4({ onAward }: { onAward: (n?: number) => void }) {
   return (
     <div className="space-y-6">
-      <VideoBlock src={day4Videos.grammar} title="🗝️ Les clés de la Liberté — Jour 4" />
+      <OVideo slot="cles" fallback={day4Videos.grammar} title="🗝️ Les clés de la Liberté — Jour 4" />
 
       <div className="rounded-2xl border-2 border-gold/40 bg-gradient-to-br from-ice to-white p-5 shadow-card">
         <div className="flex items-center gap-2">
@@ -3022,7 +3048,7 @@ function IntroDay5() {
   return (
     <div className="space-y-5">
       <LiberteSpeak message="Bienvenue au Jour 5 ! Ce soir, on entre dans un vrai bistrot parisien. Réserve, choisis et déguste — comme chez toi." />
-      <VideoBlock src={day5Videos.intro} title="🎬 Intro · Jour 5 · Le Bistrot Liberté" />
+      <OVideo slot="intro" fallback={day5Videos.intro} title="🎬 Intro · Jour 5 · Le Bistrot Liberté" />
     </div>
   );
 }
@@ -3032,7 +3058,7 @@ function VocabLessonDay5({ onAward }: { onAward: (n?: number) => void }) {
     <div className="space-y-6">
       <LiberteSpeak message="30 mots nouveaux pour ta soirée au restaurant. Explore les cartes, puis les 4 mini-jeux." />
 
-      <VideoBlock src={day5Videos.vocab} title="📚 Vocabulaire — Jour 5" />
+      <OVideo slot="vocab" fallback={day5Videos.vocab} title="📚 Vocabulaire — Jour 5" />
 
       <FlashGridDay5 />
 
@@ -3160,7 +3186,7 @@ function FlashQuizGameDay5({ onAward }: { onAward: (n?: number) => void }) {
 function ClesLessonDay5({ onAward }: { onAward: (n?: number) => void }) {
   return (
     <div className="space-y-6">
-      <VideoBlock src={day5Videos.grammar} title="🗝️ Les clés de la Liberté — Jour 5" />
+      <OVideo slot="cles" fallback={day5Videos.grammar} title="🗝️ Les clés de la Liberté — Jour 5" />
 
       <div className="rounded-2xl border-2 border-gold/40 bg-gradient-to-br from-ice to-white p-5 shadow-card">
         <div className="flex items-center gap-2">
@@ -3230,7 +3256,7 @@ function IntroDay6() {
   return (
     <div className="space-y-5">
       <LiberteSpeak message="Bienvenue au Jour 6 ! Aujourd'hui tu retournes au restaurant — mais cette fois, avec des amis, des restrictions alimentaires et une addition à vérifier. Respire, tu es prêt." />
-      <VideoBlock src={day6Videos.intro} title="🎬 Intro · Jour 6 · Retour au restaurant" />
+      <OVideo slot="intro" fallback={day6Videos.intro} title="🎬 Intro · Jour 6 · Retour au restaurant" />
     </div>
   );
 }
@@ -3240,7 +3266,7 @@ function VocabLessonDay6({ onAward }: { onAward: (n?: number) => void }) {
     <div className="space-y-6">
       <LiberteSpeak message="30 mots pour manger avec restrictions, gestionar la cuenta y felicitar al chef. Explora les cartes, puis les 4 mini-jeux." />
 
-      <VideoBlock src={day6Videos.vocab} title="📚 Vocabulaire — Jour 6" />
+      <OVideo slot="vocab" fallback={day6Videos.vocab} title="📚 Vocabulaire — Jour 6" />
 
       <FlashGridDay6 />
 
@@ -3368,7 +3394,7 @@ function FlashQuizGameDay6({ onAward }: { onAward: (n?: number) => void }) {
 function ClesLessonDay6({ onAward }: { onAward: (n?: number) => void }) {
   return (
     <div className="space-y-6">
-      <VideoBlock src={day6Videos.grammar} title="🗝️ Les clés de la Liberté — Jour 6 · Futur proche" />
+      <OVideo slot="cles" fallback={day6Videos.grammar} title="🗝️ Les clés de la Liberté — Jour 6 · Futur proche" />
 
       <div className="rounded-2xl border-2 border-gold/40 bg-gradient-to-br from-ice to-white p-5 shadow-card">
         <div className="flex items-center gap-2">
@@ -3541,20 +3567,24 @@ function FlashQuizG({ items, onAward }: { items: WeekDay["flashQuiz"]; onAward: 
 }
 
 function IntroLessonG({ data }: { data: RichDay }) {
+  const v = useContext(DayVideosCtx);
+  const intro = v.intro || data.introVideo;
   return (
     <div className="space-y-5">
       <LiberteSpeak message={data.meta?.intro ?? "Bienvenue ! On commence ensemble ?"} />
-      {data.introVideo && <VideoBlock src={data.introVideo} title="🎬 Vidéo du jour" />}
+      {intro && <VideoBlock src={intro} title="🎬 Vidéo du jour" />}
     </div>
   );
 }
 
 function VocabLessonG({ data, dayId, onAward }: { data: RichDay; dayId: string; onAward: (n?: number) => void }) {
+  const v = useContext(DayVideosCtx);
+  const vocabVid = v.vocab || data.vocabVideo;
   return (
     <div className="space-y-6">
       <LiberteSpeak message="30 mots pour la situation du jour. Explore les cartes, puis les 4 mini-jeux." />
 
-      {data.vocabVideo && <VideoBlock src={data.vocabVideo} title="📚 Vocabulaire — vidéo" />}
+      {vocabVid && <VideoBlock src={vocabVid} title="📚 Vocabulaire — vidéo" />}
 
       <FlashGridG items={data.vocabulary} />
 
@@ -3582,9 +3612,11 @@ function VocabLessonG({ data, dayId, onAward }: { data: RichDay; dayId: string; 
 }
 
 function ClesLessonG({ data, dayId, onAward }: { data: RichDay; dayId: string; onAward: (n?: number) => void }) {
+  const v = useContext(DayVideosCtx);
+  const clesVid = v.cles || data.clesVideo;
   return (
     <div className="space-y-6">
-      {data.clesVideo && <VideoBlock src={data.clesVideo} title="🗝️ Les Clés — vidéo" />}
+      {clesVid && <VideoBlock src={clesVid} title="🗝️ Les Clés — vidéo" />}
       <div className="rounded-2xl border-2 border-gold/40 bg-gradient-to-br from-ice to-white p-5 shadow-card">
         <div className="flex items-center gap-2">
           <Star className="h-5 w-5 fill-gold text-gold" />
@@ -3640,7 +3672,7 @@ function IntroDay7() {
   return (
     <div className="space-y-5">
       <LiberteSpeak message="Bienvenue au Jour 7 ! Aujourd'hui tu entres dans un supermarché francés por primera vez. Vas a saber exactamente cómo orientarte, preguntar por las secciones y encontrar lo que necesitas." />
-      <VideoBlock src={day7Videos.intro} title="🎬 Intro · Jour 7 · Au supermarché" />
+      <OVideo slot="intro" fallback={day7Videos.intro} title="🎬 Intro · Jour 7 · Au supermarché" />
     </div>
   );
 }
@@ -3650,7 +3682,7 @@ function VocabLessonDay7({ onAward }: { onAward: (n?: number) => void }) {
     <div className="space-y-6">
       <LiberteSpeak message="30 mots para moverte en un supermercado francés : rayons, promotions, produits frais et surgelés. Explora les cartes, puis les 4 mini-jeux." />
 
-      <VideoBlock src={day7Videos.vocab} title="📚 Vocabulaire — Jour 7" />
+      <OVideo slot="vocab" fallback={day7Videos.vocab} title="📚 Vocabulaire — Jour 7" />
 
       <FlashGridDay7 />
 
@@ -3778,7 +3810,7 @@ function FlashQuizGameDay7({ onAward }: { onAward: (n?: number) => void }) {
 function ClesLessonDay7({ onAward }: { onAward: (n?: number) => void }) {
   return (
     <div className="space-y-6">
-      <VideoBlock src={day7Videos.grammar} title="🗝️ Les clés de la Liberté — Jour 7 · Il y a / Il n'y a pas de" />
+      <OVideo slot="cles" fallback={day7Videos.grammar} title="🗝️ Les clés de la Liberté — Jour 7 · Il y a / Il n'y a pas de" />
 
       <div className="rounded-2xl border-2 border-gold/40 bg-gradient-to-br from-ice to-white p-5 shadow-card">
         <div className="flex items-center gap-2">
@@ -3849,7 +3881,7 @@ function IntroDay8() {
   return (
     <div className="space-y-5">
       <LiberteSpeak message="Jour 8 ! Aujourd'hui tu prépares la compra semanal completa : liste, secciones, partitivos y la estructura clave « je dois + infinitif »." />
-      <VideoBlock src={day8Videos.intro} title="🎬 Intro · Jour 8 · Faire les courses" />
+      <OVideo slot="intro" fallback={day8Videos.intro} title="🎬 Intro · Jour 8 · Faire les courses" />
     </div>
   );
 }
@@ -3859,7 +3891,7 @@ function VocabLessonDay8({ onAward }: { onAward: (n?: number) => void }) {
     <div className="space-y-6">
       <LiberteSpeak message="30 palabras para hacer la compra completa : productos frescos, higiene, bebidas y la fórmula mágica « Je dois acheter… »." />
 
-      <VideoBlock src={day8Videos.vocab} title="📚 Vocabulaire — Jour 8" />
+      <OVideo slot="vocab" fallback={day8Videos.vocab} title="📚 Vocabulaire — Jour 8" />
 
       <FlashGridDay8 />
 
@@ -3987,7 +4019,7 @@ function FlashQuizGameDay8({ onAward }: { onAward: (n?: number) => void }) {
 function ClesLessonDay8({ onAward }: { onAward: (n?: number) => void }) {
   return (
     <div className="space-y-6">
-      <VideoBlock src={day8Videos.grammar} title="🗝️ Les clés de la Liberté — Jour 8 · Devoir + infinitif" />
+      <OVideo slot="cles" fallback={day8Videos.grammar} title="🗝️ Les clés de la Liberté — Jour 8 · Devoir + infinitif" />
 
       <div className="rounded-2xl border-2 border-gold/40 bg-gradient-to-br from-ice to-white p-5 shadow-card">
         <div className="flex items-center gap-2">
@@ -4056,7 +4088,7 @@ function IntroDay9() {
   return (
     <div className="space-y-5">
       <LiberteSpeak message="Jour 9 ! El metro de París es uno de los más usados del mundo. Hoy vas a dominarlo : billete, línea, andén y las preposiciones en / à / par. Respira. Je suis avec toi." />
-      <VideoBlock src={day9Videos.intro} title="🎬 Intro · Jour 9 · Le métro de Paris" />
+      <OVideo slot="intro" fallback={day9Videos.intro} title="🎬 Intro · Jour 9 · Le métro de Paris" />
     </div>
   );
 }
@@ -4066,7 +4098,7 @@ function VocabLessonDay9({ onAward }: { onAward: (n?: number) => void }) {
     <div className="space-y-6">
       <LiberteSpeak message="30 palabras para moverte en el metro : líneas, direcciones, billetes, andenes y horarios." />
 
-      <VideoBlock src={day9Videos.vocab} title="📚 Vocabulaire — Jour 9" />
+      <OVideo slot="vocab" fallback={day9Videos.vocab} title="📚 Vocabulaire — Jour 9" />
 
       <FlashGridDay9 />
 
@@ -4194,7 +4226,7 @@ function FlashQuizGameDay9({ onAward }: { onAward: (n?: number) => void }) {
 function ClesLessonDay9({ onAward }: { onAward: (n?: number) => void }) {
   return (
     <div className="space-y-6">
-      <VideoBlock src={day9Videos.grammar} title="🗝️ Les clés de la Liberté — Jour 9 · Prépositions de transport" />
+      <OVideo slot="cles" fallback={day9Videos.grammar} title="🗝️ Les clés de la Liberté — Jour 9 · Prépositions de transport" />
 
       <div className="rounded-2xl border-2 border-gold/40 bg-gradient-to-br from-ice to-white p-5 shadow-card">
         <div className="flex items-center gap-2">
@@ -4261,7 +4293,7 @@ function IntroDay10() {
   return (
     <div className="space-y-5">
       <LiberteSpeak message="Jour 10 ! Hoy vas a tomar tu primer taxi en francés y a pedir indicaciones en la calle. Después de esto, nada te da miedo. On y va !" />
-      <VideoBlock src={day10Videos.intro} title="🎬 Intro · Jour 10 · Taxi & ville à pied" />
+      <OVideo slot="intro" fallback={day10Videos.intro} title="🎬 Intro · Jour 10 · Taxi & ville à pied" />
     </div>
   );
 }
@@ -4271,7 +4303,7 @@ function VocabLessonDay10({ onAward }: { onAward: (n?: number) => void }) {
     <div className="space-y-6">
       <LiberteSpeak message="30 palabras para moverte en taxi y a pie por la ciudad : trayecto, tarifa, indicaciones y verbos de movimiento." />
 
-      <VideoBlock src={day10Videos.vocab} title="📚 Vocabulaire — Jour 10" />
+      <OVideo slot="vocab" fallback={day10Videos.vocab} title="📚 Vocabulaire — Jour 10" />
 
       <FlashGridDay10 />
 
@@ -4399,7 +4431,7 @@ function FlashQuizGameDay10({ onAward }: { onAward: (n?: number) => void }) {
 function ClesLessonDay10({ onAward }: { onAward: (n?: number) => void }) {
   return (
     <div className="space-y-6">
-      <VideoBlock src={day10Videos.grammar} title="🗝️ Les clés de la Liberté — Jour 10 · Prendre + transport & questions" />
+      <OVideo slot="cles" fallback={day10Videos.grammar} title="🗝️ Les clés de la Liberté — Jour 10 · Prendre + transport & questions" />
 
       <div className="rounded-2xl border-2 border-gold/40 bg-gradient-to-br from-ice to-white p-5 shadow-card">
         <div className="flex items-center gap-2">
