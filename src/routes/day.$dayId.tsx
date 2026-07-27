@@ -205,6 +205,7 @@ import { dayStateKey, doneKeys, mergeHydrated, resolveLesson, shouldPersistDay }
 import { WEEK34_META, type RichDay, type Week34Meta } from "@/data/week34.meta";
 import { MONTH2_META } from "@/data/month2.meta";
 import { useRichDay, useDayVideos, type DayVideos } from "@/lib/rich-content";
+import { withTimeout } from "@/lib/with-timeout";
 
 const DAY_TITLES: Record<string, { title: string; desc: string }> = {
   "1": { title: "Jour 1 · Le Café — Liberté", desc: "Premier jour : commander un café à Paris avec politesse." },
@@ -2106,12 +2107,16 @@ function WritingGame({ items, onAward, dayId = 0, section = "vocab" }: {
     setPending(false);
     try {
       const { correctActivity } = await import("@/lib/defi.functions");
-      const c = (await correctActivity({
+      const c = (await withTimeout(
+        correctActivity({
         data: {
           dayId, section, competence: "PE", itemIndex: i,
           prompt: cur.prompt, expected: cur.answer, response: val,
         },
-      })) as Correction;
+        }),
+        30_000,
+        "La corrección",
+      )) as Correction;
       setCorrection(c);
       playTone(c.resultado === "incorrecto" ? "no" : "ok");
       if (c.resultado !== "incorrecto") setScore((s) => s + 1);
@@ -2256,12 +2261,16 @@ function SpeakingGame({ items, onAward, dayId = 0, section = "vocab" }: {
         return;
       }
       setStatus("Corrigiendo… ✨");
-      const c = (await correctActivity({
+      const c = (await withTimeout(
+        correctActivity({
         data: {
           dayId, section, competence: "PO", itemIndex: i,
           prompt: cur.situation, expected: cur.expected, response: t.text,
         },
-      })) as Correction;
+        }),
+        30_000,
+        "La corrección",
+      )) as Correction;
       setCorrection(c);
       setStatus("");
       playTone(c.resultado === "incorrecto" ? "no" : "ok");

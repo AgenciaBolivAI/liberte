@@ -34,6 +34,30 @@ export function requireOpenAIKey(): string {
   return k;
 }
 
+/**
+ * Every OpenAI call gets a hard deadline.
+ *
+ * WHY: `fetch` has NO default timeout. A stalled upstream request never
+ * settles, so the awaiting UI waits forever — that is why a student's writing
+ * exercise sat on "Corrigiendo… \u2728" indefinitely instead of failing and
+ * letting them continue. A rejected promise is always recoverable; a hung one
+ * is not.
+ */
+const TIMEOUT_MS = { chat: 60_000, tts: 30_000, stt: 45_000 } as const;
+
+function deadline(kind: keyof typeof TIMEOUT_MS): AbortSignal {
+  return AbortSignal.timeout(TIMEOUT_MS[kind]);
+}
+
+/** Turn an abort into a clear, catchable error the callers can surface. */
+function asTimeout(e: unknown, kind: string): never {
+  const name = (e as { name?: string })?.name;
+  if (name === "TimeoutError" || name === "AbortError") {
+    throw new Error(`${kind} tardó demasiado (timeout). Inténtalo de nuevo.`);
+  }
+  throw e as Error;
+}
+
 export async function callChat(
   system: string,
   userOrMessages: string | { role: "user" | "assistant"; content: string }[],
@@ -57,7 +81,8 @@ export async function callChat(
       response_format: { type: "json_object" },
       max_tokens: MAX_OUTPUT_TOKENS,
     }),
-  });
+    signal: deadline("chat"),
+  }).catch((e) => asTimeout(e, "La corrección"));
   if (!res.ok) {
     const b = await res.text().catch(() => "");
     throw new Error(`AI ${res.status}: ${b.slice(0, 200)}`);
@@ -76,6 +101,7 @@ export async function callChat(
 export async function speakFrenchBase64(text: string): Promise<string> {
   const res = await fetch(`${OPENAI_BASE}/audio/speech`, {
     method: "POST",
+    signal: deadline("tts"),
     headers: {
       Authorization: `Bearer ${requireOpenAIKey()}`,
       "Content-Type": "application/json",
@@ -135,7 +161,8 @@ export async function transcribeFr(audioBase64: string, mimeType: string): Promi
     method: "POST",
     headers: { Authorization: `Bearer ${key}` },
     body: fd,
-  });
+    signal: deadline("stt"),
+  }).catch((e) => asTimeout(e, "La transcripción"));
   if (!res.ok) {
     const b = await res.text().catch(() => "");
     throw new Error(`STT ${res.status}: ${b.slice(0, 200)}`);

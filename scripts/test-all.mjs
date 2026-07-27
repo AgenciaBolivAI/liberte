@@ -1837,6 +1837,54 @@ g("12k. Reto final: admin open/lock switch . desktop vs mobile analytics");
   }
 }
 
+
+/* ---------------- 12l. No hung AI calls + tutor stays in its own role ---------------- */
+g("12l. AI deadlines (stuck 'Corrigiendo...') . tutor role discipline");
+{
+  // STUDENT REPORT: "se queda pegado corrigiendo la escritura" — the writing
+  // exercise sat on "Corrigiendo... " forever. Root cause: fetch() has NO
+  // default timeout, so a stalled OpenAI request never settled and the button's
+  // busy flag was never cleared. Deadlines now exist on BOTH sides.
+  const aiSrc = readFileSync("src/lib/ai.ts", "utf8");
+  ok("every OpenAI call has a server-side deadline (chat + TTS + STT)",
+     aiSrc.includes("AbortSignal.timeout(TIMEOUT_MS[kind])") &&
+     aiSrc.includes('signal: deadline("chat")') &&
+     aiSrc.includes('signal: deadline("tts")') &&
+     aiSrc.includes('signal: deadline("stt")'));
+  ok("an aborted call becomes a catchable error, never a hang",
+     aiSrc.includes("function asTimeout") && aiSrc.includes('name === "TimeoutError"'));
+  {
+    const wt = readFileSync("src/lib/with-timeout.ts", "utf8");
+    const body = wt.slice(wt.indexOf("export function withTimeout"));
+    const js = body.slice(0, body.indexOf("\n}") + 2)
+      .replace("export function withTimeout<T>(p: Promise<T>, ms: number, label = \"La operación\"): Promise<T> {",
+               "return function withTimeout(p, ms, label = \"La operación\") {")
+      .replace(/new Promise<T>/g, "new Promise");
+    const withTimeout = new Function(js)();
+    const hung = new Promise(() => {}); // never settles — the exact prod shape
+    const rejected = await withTimeout(hung, 30, "La corrección").then(
+      () => "RESOLVED", (e) => String(e.message));
+    ok("withTimeout rejects a promise that never settles", /tard\u00f3 demasiado/.test(rejected), rejected);
+    const fast = await withTimeout(Promise.resolve("ok"), 1000);
+    ok("withTimeout passes a normal result straight through", fast === "ok");
+  }
+  ok("both graded-writing/speaking calls are bounded client-side",
+     (() => { const d = readFileSync("src/routes/day.$dayId.tsx", "utf8");
+              const wrapped = (d.match(/await withTimeout\(\s*correctActivity\(\{/g) ?? []).length;
+              return wrapped === 2 && d.includes('from "@/lib/with-timeout"'); })());
+
+  // STUDENT REPORT: "el Tutor IA no entiende bien los roles: responde cosas
+  // que uno deberia responder" — Lib was speaking the STUDENT's lines.
+  const tut = readFileSync("src/lib/tutor.functions.ts", "utf8");
+  ok("tutor prompt forbids speaking the student's lines, with a worked example",
+     tut.includes("LOS DOS PAPELES SON DISTINTOS") &&
+     tut.includes('NUNCA escribas en "reply_fr" una frase que le toca decir al ALUMNO') &&
+     tut.includes("MAL (le robas su turno)") &&
+     tut.includes('va SIEMPRE en "suggestion"'));
+  ok("the objectives are labelled as the STUDENT's, not the tutor's",
+     tut.includes("los cumple \u00c9L, no t\u00fa"));
+}
+
 /* ---------------- build output ---------------- */
 g("12. Build output");
 {
