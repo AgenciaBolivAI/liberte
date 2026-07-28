@@ -8,7 +8,7 @@ import { useAdminPreview } from "@/lib/admin-preview";
 import { AdminPreviewBanner } from "@/components/AdminPreviewBanner";
 import { MyAIReportCard } from "@/components/StudentReportCard";
 import { useAuth } from "@/lib/auth-context";
-import { getMyWeeklyEvaluations } from "@/lib/week.functions";
+import { getMyWeeklyEvaluations, getWeeklyEvaluationsFor } from "@/lib/week.functions";
 import { generateWeeklyPdf, type WeeklyReportData } from "@/lib/weekPdf";
 import { toast } from "sonner";
 
@@ -101,7 +101,7 @@ function ProgressPage() {
         {!viewAsUserId && <MyAIReportCard />}
 
         {/* #5 / #12: every past weekly report, always findable + downloadable */}
-        {!viewAsUserId && <MyReports />}
+        <MyReports viewAsUserId={viewAsUserId} />
 
         <div className="mt-6 rounded-3xl border border-white/15 bg-card p-5 shadow-soft sm:mt-8 sm:p-6">
           <h2 className="font-display text-lg font-extrabold text-navy sm:text-xl">Comment gagner des étoiles</h2>
@@ -139,17 +139,23 @@ function monthLabelForWeek(weekNumber: number): string {
   return `Mois ${m} : ${MONTH_THEMES[m - 1] ?? ""}`.trim();
 }
 
-function MyReports() {
+function MyReports({ viewAsUserId }: { viewAsUserId?: string | null }) {
   const { profile } = useAuth();
   const [rows, setRows] = useState<EvalRow[] | null>(null);
 
   useEffect(() => {
     let alive = true;
-    getMyWeeklyEvaluations()
+    // In the teacher's "ver como alumno" preview, read THAT student's reports
+    // (staff-gated) so the PDF download is visible there too — hiding this in
+    // preview is why the client reported "en el alumno no me sale la opción
+    // de descargar el pdf".
+    (viewAsUserId
+      ? getWeeklyEvaluationsFor({ data: { userId: viewAsUserId } })
+      : getMyWeeklyEvaluations())
       .then((data) => { if (alive) setRows((data ?? []) as EvalRow[]); })
       .catch(() => { if (alive) setRows([]); });
     return () => { alive = false; };
-  }, []);
+  }, [viewAsUserId]);
 
   function downloadPdf(row: EvalRow) {
     try {

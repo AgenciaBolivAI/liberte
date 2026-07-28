@@ -11,6 +11,7 @@ import { TopNav } from "@/components/TopNav";
 import { StudentAnalytics } from "@/components/StudentAnalytics";
 import { ActivityFeed } from "@/components/ActivityFeed";
 import { WeekChallengeControl } from "@/components/WeekChallengeControl";
+import { StudentWeeklyReports } from "@/components/StudentWeeklyReports";
 import { aiText, aiTextList, aiErrors } from "@/lib/ai-text";
 
 export const Route = createFileRoute("/coach")({
@@ -236,6 +237,10 @@ function StudentDetail({ detail, userId }: { detail: Detail; userId: string }) {
       <div className="rounded-3xl border border-border bg-white p-5 shadow-soft">
         <p className="mb-3 font-display text-lg font-extrabold text-navy">📊 Progreso por semana</p>
         <StudentAnalytics userId={userId} />
+      </div>
+
+      <div className="mt-4">
+        <StudentWeeklyReports userId={userId} />
       </div>
       <div className="rounded-3xl border border-border bg-white p-5 shadow-soft">
         <h2 className="font-display text-2xl font-extrabold text-navy">

@@ -45,12 +45,23 @@ export async function deleteStudent(admin: SupabaseClient, id: string) {
 const LOGIN_PATH = "/liberte-log-in-983749824923465723";
 
 export async function login(page: Page, student: TestStudent) {
-  await page.goto(LOGIN_PATH);
-  await page.locator('input[type="email"]').fill(student.email);
-  await page.locator('input[type="password"]').first().fill(student.password);
-  await page.getByRole("button", { name: "Se connecter" }).click();
-  // Landing anywhere authenticated is fine; the specs navigate explicitly after.
-  await page.waitForURL((u) => !u.pathname.includes("log-in"), { timeout: 30_000 });
+  // Retried once: logging in is test INFRASTRUCTURE, not the thing under test.
+  // The suite now creates many auth accounts in a short window, so a single
+  // sign-in occasionally exceeds 30s under that load and failed a spec that
+  // passes in isolation. A product failure still fails — on the second attempt.
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    await page.goto(LOGIN_PATH);
+    await page.locator('input[type="email"]').fill(student.email);
+    await page.locator('input[type="password"]').first().fill(student.password);
+    await page.getByRole("button", { name: "Se connecter" }).click();
+    try {
+      // Landing anywhere authenticated is fine; specs navigate explicitly after.
+      await page.waitForURL((u) => !u.pathname.includes("log-in"), { timeout: 30_000 });
+      return;
+    } catch (e) {
+      if (attempt === 2) throw e;
+    }
+  }
 }
 
 /**

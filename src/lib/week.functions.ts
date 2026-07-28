@@ -233,7 +233,8 @@ export async function sendWeeklyReportToTeacher(
     `Nota semanal: ${Number(weeklyScore).toFixed(1)}/10` +
     (report?.verdict_title ? ` · ${report.verdict_title}` : "") +
     (report?.coach_summary ? `\n\n${String(report.coach_summary).slice(0, 3000)}` : "") +
-    `\n\nVer el detalle completo en el panel de seguimiento.`;
+    `\n\n📄 Dónde verlo: Panel del profesor → elige a ${name} → sección «📄 Informes semanales (PDF)».` +
+    `\nAhí puedes abrir el informe completo y descargar el mismo PDF que recibe el alumno.`;
   for (const rid of recipients) {
     await supabaseAdmin.from("messages").insert({ sender_id: studentId, recipient_id: rid, body });
   }
@@ -478,6 +479,33 @@ export const getMyWeeklyEvaluation = createServerFn({ method: "POST" })
       .eq("week_number", data.weekNumber)
       .maybeSingle();
     return row;
+  });
+
+/** Staff: another student's weekly evaluations, so the teacher's "ver como
+ *  alumno" preview shows the SAME «Mes rapports» list (with PDF download) the
+ *  student sees — it used to be hidden in preview, which is why the client
+ *  reported "en el alumno no me sale la opción de descargar el pdf". */
+export const getWeeklyEvaluationsFor = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => {
+    const d = input as { userId?: string };
+    if (!d?.userId) throw new Error("userId required");
+    return { userId: String(d.userId) };
+  })
+  .handler(async ({ data, context }) => {
+    const [coach, admin] = await Promise.all([
+      context.supabase.rpc("has_role", { _user_id: context.userId, _role: "coach" }),
+      context.supabase.rpc("has_role", { _user_id: context.userId, _role: "admin" }),
+    ]);
+    if (!coach.data && !admin.data) throw new Response("Forbidden", { status: 403 });
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: rows, error } = await supabaseAdmin
+      .from("weekly_evaluations")
+      .select("week_number, weekly_score, test_score, test_scores, ai_report, created_at")
+      .eq("user_id", data.userId)
+      .order("week_number", { ascending: true });
+    if (error) throw new Error(error.message);
+    return rows ?? [];
   });
 
 /** Every weekly evaluation of the logged-in student — powers the « Mes

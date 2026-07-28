@@ -6,6 +6,7 @@ import { getStudentProgress, unlockWeek, lockWeek, setAssignedCoach } from "@/li
 import { getWeeks } from "@/data/program";
 import { StudentReportCard } from "@/components/StudentReportCard";
 import { WeekChallengeControl } from "@/components/WeekChallengeControl";
+import { StudentWeeklyReports } from "@/components/StudentWeeklyReports";
 import { MessageThread } from "@/components/MessageThread";
 import { supabase } from "@/integrations/supabase/client";
 import { aiText, aiTextList, aiErrors } from "@/lib/ai-text";
@@ -237,6 +238,8 @@ export function StudentDetailPanel({ userId }: { userId: string }) {
       <AssignedCoachCard userId={userId} />
 
       <StudentReportCard userId={userId} />
+
+      <StudentWeeklyReports userId={userId} />
 
       <div>
         <p className="mb-1 font-display text-lg font-extrabold text-navy">✉️ Mensajes</p>

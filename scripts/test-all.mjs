@@ -1885,6 +1885,41 @@ g("12l. AI deadlines (stuck 'Corrigiendo...') . tutor role discipline");
      tut.includes("los cumple \u00c9L, no t\u00fa"));
 }
 
+
+/* ---------------- 12m. Weekly reports are FINDABLE by the teacher ---------------- */
+g("12m. Where is the report? teacher view + preview + message pointer");
+{
+  // CLIENT: "me llego el mensajito de que termino el desafio, pero no se donde
+  // verlo" / "donde lo puedo ver yo o la profesora?" / "en el alumno no me sale
+  // la opcion de descargar el pdf". The staff panels listed the week + score as
+  // dead text with NO way to open or download the report.
+  const rep = readFileSync("src/components/StudentWeeklyReports.tsx", "utf8");
+  ok("teacher panel has a real reports section: open inline + download the PDF",
+     rep.includes("Informes semanales (PDF)") &&
+     rep.includes("generateWeeklyPdf(buildPdfData(w))") &&
+     rep.includes("getStudentAnalytics"));
+  ok("the teacher's PDF uses the STORED report (verdict, errors, pronunciation)",
+     rep.includes("r?.strengths ?? []") && rep.includes("r?.commonErrors ?? []") &&
+     rep.includes("r?.pronunciation ?? []") && rep.includes("r?.verdictTitle"));
+  ok("mounted in BOTH staff panels (admin + coach)",
+     readFileSync("src/components/StudentDetailPanel.tsx", "utf8").includes("<StudentWeeklyReports userId={userId} />") &&
+     readFileSync("src/routes/coach.tsx", "utf8").includes("<StudentWeeklyReports userId={userId} />"));
+
+  const wk12m = readFileSync("src/lib/week.functions.ts", "utf8");
+  ok("staff can read another student's evaluations (preview), coach OR admin only",
+     wk12m.includes("getWeeklyEvaluationsFor") &&
+     /getWeeklyEvaluationsFor[\s\S]{0,900}_role: "coach"/.test(wk12m) &&
+     /getWeeklyEvaluationsFor[\s\S]{0,1200}Forbidden/.test(wk12m));
+  ok("/progress shows the reports during 'ver como alumno' preview (was hidden)",
+     (() => { const pr = readFileSync("src/routes/progress.tsx", "utf8");
+              return pr.includes("<MyReports viewAsUserId={viewAsUserId} />") &&
+                     pr.includes("getWeeklyEvaluationsFor({ data: { userId: viewAsUserId } })") &&
+                     !pr.includes("{!viewAsUserId && <MyReports"); })());
+  ok("the automatic message tells the teacher exactly where to open it",
+     wk12m.includes("D\u00f3nde verlo: Panel del profesor") &&
+     wk12m.includes("Informes semanales (PDF)"));
+}
+
 /* ---------------- build output ---------------- */
 g("12. Build output");
 {
