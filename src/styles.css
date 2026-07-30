@@ -175,3 +175,61 @@
 @utility font-display {
   font-family: var(--font-display);
 }
+
+/* ============================================================
+   3D landing («La Ville Lumière») — additive rules only.
+   The WebGL city sets html[data-city="on"] at its first frame;
+   these cross-fade the CSS stand-ins out from under it.
+   ============================================================ */
+
+/* Hero photo doubles as LCP + fallback; the live city replaces it. */
+.lp-hero-bg {
+  transition: opacity 1.2s ease;
+}
+html[data-city="on"] .lp-hero-bg {
+  opacity: 0;
+}
+
+/* Static night sky (pre-chunk first paint + permanent fallback). */
+.lp-static {
+  transition: opacity 1.2s ease;
+}
+html[data-city="on"] .lp-static {
+  opacity: 0;
+}
+
+/* Star twinkle — only when the user has not asked for reduced motion. */
+@media (prefers-reduced-motion: no-preference) {
+  .lp-star {
+    animation: lp-twinkle 3.2s ease-in-out infinite;
+  }
+}
+@keyframes lp-twinkle {
+  0%,
+  100% {
+    opacity: 0.25;
+  }
+  50% {
+    opacity: 0.9;
+  }
+}
+
+/* Section entrances (useReveal adds .lp-in on first viewport entry). */
+[data-reveal] {
+  opacity: 0;
+  transform: translateY(26px);
+  transition:
+    opacity 0.7s ease,
+    transform 0.7s ease;
+}
+[data-reveal].lp-in {
+  opacity: 1;
+  transform: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-reveal] {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}

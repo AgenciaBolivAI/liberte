@@ -2074,6 +2074,66 @@ g("12n. Cross-device progress . mic latency . grading floor . editable Petit Plu
   }
 }
 
+/* ---- 3D landing («La Ville Lumière») 2026-07-30 ---- */
+g("12o. 3D night-flight landing: SSR safety, fallbacks, flight wiring");
+{
+  const idx12o = readFileSync("src/routes/index.tsx", "utf8");
+  ok("landing mounts the 3D city boundary", idx12o.includes("<LandingCity />"));
+  ok("all 7 flight stops are marked in the DOM",
+     [0, 1, 2, 3, 4, 5, 6].every((n) => idx12o.includes(`data-flight="${n}"`)));
+  ok("content sits above the fixed canvas (z-10 wrapper)", idx12o.includes('"relative z-10"'));
+  ok("the lead form kept its readable near-white card", idx12o.includes("bg-white/95"));
+
+  const boundary = readFileSync("src/components/landing3d/LandingCity.tsx", "utf8");
+  // The route module is evaluated in the Cloudflare Worker on EVERY request —
+  // three.js must be constant-folded out of the server graph.
+  ok("three loads behind the SSR guard (worker stays three-free)",
+     boundary.includes("!import.meta.env.SSR") && boundary.includes('import("./CityCanvas")'));
+  ok("a failed 3D chunk degrades to the static sky (no reload loop)",
+     /import\("\.\/CityCanvas"\)[\s\S]{0,200}\.catch\(/.test(boundary));
+  ok("repeated WebGL context loss lands on the static sky",
+     boundary.includes("webglcontextlost") && boundary.includes(">= 2"));
+
+  const quality = readFileSync("src/components/landing3d/quality.ts", "utf8");
+  ok("prefers-reduced-motion is a hard opt-out of the flight",
+     quality.includes("prefers-reduced-motion: reduce") &&
+     /if \(prefersReducedMotion\(\)\) return "static";/.test(quality));
+  ok("no usable WebGL means the static sky, not a crash",
+     quality.includes('return "static"') && quality.includes("webglAvailable"));
+  ok("phones get the tuned tier, not the desktop one",
+     quality.includes('if (device === "mobile") return "mobile"'));
+
+  const rigSrc = readFileSync("src/components/landing3d/CameraRig.tsx", "utf8");
+  ok("camera starts AT the current scroll position (scrollRestoration)",
+     rigSrc.includes("useRef(rig.getProgress())"));
+  ok("anchor jumps fast-forward instead of replaying the whole flight",
+     rigSrc.includes("1.6 * Math.sign"));
+
+  const canvasSrc = readFileSync("src/components/landing3d/CityCanvas.tsx", "utf8");
+  ok("frame loop stops when the tab is hidden", canvasSrc.includes("visibilitychange"));
+  ok("mobile frames are capped (fpsCap in the loop)", canvasSrc.includes("params.fpsCap"));
+
+  ok("static import graph of the landing route has NO three.js",
+     (() => {
+       // Walk the files index.tsx statically imports from landing3d and assert
+       // none of them import "three" at top level.
+       const staticFiles = [
+         "src/components/landing3d/LandingCity.tsx",
+         "src/components/landing3d/StaticCityFallback.tsx",
+         "src/components/landing3d/quality.ts",
+         "src/components/landing3d/scrollProgress.ts",
+         "src/components/landing3d/useReveal.ts",
+       ];
+       return staticFiles.every((f) => !/from "three"/.test(readFileSync(f, "utf8")));
+     })());
+
+  // Reduced-motion CSS exists (first ever in this codebase — the reveal + stars).
+  const css = readFileSync("src/styles.css", "utf8");
+  ok("reveal + twinkle animations respect prefers-reduced-motion",
+     css.includes("prefers-reduced-motion: reduce") &&
+     css.includes("prefers-reduced-motion: no-preference"));
+}
+
 /* ---------------- build output ---------------- */
 g("12. Build output");
 {
