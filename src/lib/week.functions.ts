@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { callChat, transcribeFr } from "@/lib/ai";
+import { callChat, parseScore10, transcribeFr } from "@/lib/ai";
 import { assertWeekNotLocked } from "@/lib/content-access.functions";
 import { requireApprovedStudent } from "@/lib/approval";
 import { aiStrengths, aiErrors, aiPronunciation, aiTextList } from "@/lib/ai-text";
@@ -323,7 +323,8 @@ Responde SOLO JSON con esta forma EXACTA:
 }
 
 Reglas:
-- 2-3 strengths, máximo 3 common_errors, 2 improvements, 2-3 pronunciation.
+- 2-3 strengths, máximo 3 common_errors, 2 improvements.
+- "pronunciation": SOLO sonidos que el alumno realmente falló y que la transcripción no explicaría. Si la transcripción no da evidencia clara, devuelve [] — es correcto y esperado dejarla vacía. NO inventes fallos para llenar el campo, y no bajes PO por lo que escribas aquí.
 - Usa las notas del test (CO=${coScore.toFixed(1)}, CE=${ceScore.toFixed(1)}) como CO/CE en competence_scores.
 - verdict_key: >=8.5 excellent, 7-8.4 tres_bien, 5-6.9 en_camino, <5 retomar (basado en promedio semanal aprox).
 - Tono cálido, celebratorio si va bien, amoroso si va mal, NUNCA severo.`;
@@ -359,7 +360,7 @@ Reglas:
       },
     });
 
-    const aiResult = await callChat(system, user);
+    const aiResult = await callChat(system, user, { temperature: 0.2 });
     if (Object.keys(aiResult).length === 0) {
       throw new Error("La IA devolvió una respuesta inválida.");
     }
@@ -371,8 +372,10 @@ Reglas:
     const compScores = {
       CO: clamp(coScore),
       CE: clamp(ceScore),
-      PE: clamp(Number(cs.PE ?? 0)),
-      PO: clamp(Number(cs.PO ?? 0)),
+      // parseScore10, not Number(): a grade returned as the STRING "8" (routine in
+      // json_object mode) used to become NaN→0 and halve the weekly score.
+      PE: parseScore10(cs.PE) ?? 0,
+      PO: parseScore10(cs.PO) ?? 0,
     };
     const testScore = clamp((compScores.CO + compScores.CE + compScores.PE + compScores.PO) / 4);
 

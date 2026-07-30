@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Check,
   Loader2,
@@ -63,6 +63,30 @@ export type StagedDefiProps = {
   onDone: () => void;
 };
 
+/** Did the grader pass this criterion?
+ *
+ *  The AI is asked to copy criteria verbatim into `matched_criteria`, but it
+ *  paraphrases, re-punctuates and trims quotes — so an exact `includes()` showed
+ *  criteria struck through as FAILED that the grader had actually passed. Compare
+ *  on a normalized form, and treat containment either way as a match.
+ */
+function criterionMet(matched: string[], criterion: string): boolean {
+  const norm = (s: string) =>
+    s
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9 ]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  const c = norm(criterion);
+  if (!c) return false;
+  return (matched ?? []).some((m) => {
+    const n = norm(m);
+    return n === c || (n.length > 8 && (n.includes(c) || c.includes(n)));
+  });
+}
+
 export function StagedDefi(props: StagedDefiProps) {
   const { dayId, title, subtitle, eyebrow, steps, criteria, avatar = "🎙️", onAward, onDone } = props;
   // While an admin previews "as student", never write/spend under their account.
@@ -78,6 +102,23 @@ export function StagedDefi(props: StagedDefiProps) {
   const recRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const activeIdxRef = useRef<number>(-1);
+  const streamRef = useRef<MediaStream | null>(null);
+  const startingRef = useRef(false);
+  /** Which stage is waiting on the microphone, so its button can say so at once. */
+  const [acquiringIdx, setAcquiringIdx] = useState<number | null>(null);
+
+  const liveStream = () =>
+    streamRef.current?.getAudioTracks().some((t) => t.readyState === "live")
+      ? streamRef.current
+      : null;
+
+  useEffect(() => {
+    // Release the warm mic when the défi unmounts (indicator off).
+    return () => {
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    };
+  }, []);
 
   const allSaved = useMemo(() => stages.every((s) => s.saved), [stages]);
 
@@ -86,10 +127,20 @@ export function StagedDefi(props: StagedDefiProps) {
   };
 
   const startRec = async (i: number) => {
-    if (recRef.current || stages[i].recording) return;
+    // `recRef.current` is only assigned AFTER the await below, so it could not
+    // stop a second tap during the mic cold-start: two getUserMedia calls ran and
+    // the first recorder was orphaned with its stream never stopped (mic
+    // indicator stuck on, the two acquisitions contending). This flag is set
+    // synchronously, before any await.
+    if (startingRef.current || recRef.current || stages[i].recording) return;
+    startingRef.current = true;
+    setAcquiringIdx(i);
     setErrorMsg("");
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // Reuse the warm mic: a défi is 3-4 takes back to back, and tearing the
+      // stream down after each one paid the full hardware cold-start every time.
+      const stream = liveStream() ?? (await navigator.mediaDevices.getUserMedia({ audio: true }));
+      streamRef.current = stream;
       const rec = new MediaRecorder(stream);
       chunksRef.current = [];
       activeIdxRef.current = i;
@@ -107,7 +158,7 @@ export function StagedDefi(props: StagedDefiProps) {
               : s,
           ),
         );
-        stream.getTracks().forEach((t) => t.stop());
+        // Stream deliberately kept warm for the next stage; released on unmount.
         recRef.current = null;
       };
       recRef.current = rec;
@@ -125,8 +176,10 @@ export function StagedDefi(props: StagedDefiProps) {
       } else {
         setErrorMsg("Impossible d’accéder au micro. Vérifie les autorisations du navigateur.");
       }
+    } finally {
+      startingRef.current = false;
+      setAcquiringIdx(null);
     }
-
   };
 
   const stopRec = () => {
@@ -275,14 +328,26 @@ export function StagedDefi(props: StagedDefiProps) {
               <div className="mt-4 flex flex-wrap items-center gap-3">
                 <button
                   onClick={() => (isRec ? stopRec() : startRec(idx))}
-                  disabled={uploading || readOnly || (!isRec && stages.some((s) => s.recording) && !st.recording)}
+                  disabled={uploading || readOnly || acquiringIdx !== null || (!isRec && stages.some((s) => s.recording) && !st.recording)}
                   className={`grid h-14 w-14 place-items-center rounded-full text-white shadow-card transition disabled:opacity-40 ${
-                    isRec ? "bg-red animate-pulse" : st.saved ? "bg-gold text-navy" : "bg-gradient-blue hover:scale-105"
+                    isRec ? "bg-red animate-pulse" : acquiringIdx === idx ? "bg-blue/70" : st.saved ? "bg-gold text-navy" : "bg-gradient-blue hover:scale-105"
                   }`}
                   aria-label={isRec ? "Arrêter" : "Enregistrer"}
+                  aria-busy={acquiringIdx === idx}
                 >
-                  {isRec ? <Square className="h-6 w-6" /> : st.saved ? <Check className="h-6 w-6" /> : <Mic className="h-6 w-6" />}
+                  {isRec ? (
+                    <Square className="h-6 w-6" />
+                  ) : acquiringIdx === idx ? (
+                    <Loader2 className="h-6 w-6 animate-spin" />
+                  ) : st.saved ? (
+                    <Check className="h-6 w-6" />
+                  ) : (
+                    <Mic className="h-6 w-6" />
+                  )}
                 </button>
+                {acquiringIdx === idx && (
+                  <span className="text-xs text-muted-foreground">Activation du micro…</span>
+                )}
                 {st.url && <audio src={st.url} controls className="max-w-xs flex-1" />}
                 {st.saved && !isRec && (
                   <Button variant="ghost" onClick={() => clearRec(idx)} className="text-muted-foreground" disabled={uploading}>
@@ -380,7 +445,7 @@ export function StagedDefi(props: StagedDefiProps) {
             </p>
             <ul className="mt-2 grid gap-1 text-xs text-navy/80 sm:grid-cols-2">
               {criteria.map((c, i) => {
-                const done = result.matched_criteria.includes(c);
+                const done = criterionMet(result.matched_criteria, c);
                 return (
                   <li key={i} className={`flex items-start gap-2 ${done ? "" : "text-navy/40 line-through"}`}>
                     {done ? <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-success" /> : <span className="mt-0.5 h-3.5 w-3.5 shrink-0">·</span>}

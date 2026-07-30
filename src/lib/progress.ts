@@ -56,7 +56,35 @@ export function useStars(targetUserId?: string | null) {
     void refresh();
   }, [refresh]);
 
+  useRefreshOnReturn(refresh);
+
   return { stars, loading, refresh };
+}
+
+/**
+ * Re-run a fetch when the tab comes back to the foreground.
+ *
+ * These hooks fetch once per user id, so a session left open kept showing the
+ * numbers from the moment it loaded. With the same student on a laptop and a
+ * phone that meant two different totals at the same time — the client's "abro la
+ * sesión en otra computadora y no reconoce el avance". Both surfaces now
+ * reconcile against the server whenever the student returns to them.
+ */
+function useRefreshOnReturn(refresh: () => void | Promise<void>) {
+  useEffect(() => {
+    const run = () => {
+      if (document.visibilityState !== "visible") return;
+      void refresh();
+    };
+    document.addEventListener("visibilitychange", run);
+    window.addEventListener("focus", run);
+    window.addEventListener("online", run);
+    return () => {
+      document.removeEventListener("visibilitychange", run);
+      window.removeEventListener("focus", run);
+      window.removeEventListener("online", run);
+    };
+  }, [refresh]);
 }
 
 export function useDayCompletions(targetUserId?: string | null) {
@@ -130,6 +158,8 @@ export function useDayCompletions(targetUserId?: string | null) {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  useRefreshOnReturn(refresh);
 
   // A day counts as done if the student marked it complete OR submitted its
   // défi — the same OR-rule the unlock logic uses (see src/lib/unlock.ts). The

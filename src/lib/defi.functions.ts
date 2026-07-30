@@ -1,13 +1,13 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { callChat, transcribeFr } from "@/lib/ai";
+import { callChat, parseScore10, transcribeFr } from "@/lib/ai";
 import { assertDayNotLocked } from "@/lib/content-access.functions";
 import { requireApprovedStudent } from "@/lib/approval";
 import { aiText, aiTextList } from "@/lib/ai-text";
 
 /* ---------------- Correct one open activity (PE or PO) ---------------- */
 
-const CORRECTOR_SYSTEM = `Eres el corrector de Liberté, un programa de francés para hispanohablantes de nivel A2-B1. Evalúa la respuesta del alumno contra la consigna. Reglas: (1) Prioriza la comunicación: si un francófono lo entendería, es un acierto aunque tenga errores menores. (2) MUY IMPORTANTE para respuestas ORALES (competencia PO): la respuesta llega como TRANSCRIPCIÓN AUTOMÁTICA imperfecta. El sistema de reconocimiento suele quitar acentos, unir o separar palabras, confundir homófonos (« c'est » / « ses » / « sait », « a » / « à ») y normalizar el francés del alumno. NUNCA marques como error algo que probablemente sea ruido de transcripción; ante la duda, cuenta a favor del alumno. Solo señala errores claros de vocabulario o estructura que la transcripción no explicaría. (3) Máximo 2 correcciones, las más importantes. (4) Tono cálido y celebratorio, nunca severo. (5) Responde SOLO en este formato JSON:
+const CORRECTOR_SYSTEM = `Eres el corrector de Liberté, un programa de francés para hispanohablantes de nivel A1-A2 (principiantes). Evalúa la respuesta del alumno contra la consigna. Reglas: (1) Prioriza la comunicación: si un francófono lo entendería, es un acierto aunque tenga errores menores. (2) MUY IMPORTANTE para respuestas ORALES (competencia PO): la respuesta llega como TRANSCRIPCIÓN AUTOMÁTICA imperfecta. El sistema de reconocimiento suele quitar acentos, unir o separar palabras, confundir homófonos (« c'est » / « ses » / « sait », « a » / « à ») y normalizar el francés del alumno. NUNCA marques como error algo que probablemente sea ruido de transcripción; ante la duda, cuenta a favor del alumno. Solo señala errores claros de vocabulario o estructura que la transcripción no explicaría. (3) Máximo 2 correcciones, las más importantes. (4) Tono cálido y celebratorio, nunca severo. (5) LA NOTA: "nota" es un NÚMERO (no texto) de 0 a 10 y mide COMUNICACIÓN, no perfección. Si el alumno hizo la tarea y se le entiende, la nota es 7-10 aunque tenga errores de principiante. Usa 5-6.9 solo cuando la idea se entiende a medias, y menos de 5 solo cuando la respuesta no responde a la consigna o no se entiende. La "respuesta_esperada" es UN ejemplo válido, no la única respuesta correcta: no bajes la nota por no coincidir con ella. (6) "punto_debil" y "practica_recomendada" son orientación para seguir mejorando; escribirlos NO significa que la nota deba bajar. (7) Responde SOLO en este formato JSON:
 
 { "resultado": "correcto | parcial | incorrecto",
   "nota": 0-10,
@@ -68,7 +68,7 @@ export const correctActivity = createServerFn({ method: "POST" })
       respuesta_alumno: data.response,
     });
 
-    const aiRaw = await callChat(CORRECTOR_SYSTEM, user);
+    const aiRaw = await callChat(CORRECTOR_SYSTEM, user, { temperature: 0.2 });
     if (Object.keys(aiRaw).length === 0) {
       throw new Error("La IA devolvió una respuesta inválida.");
     }
@@ -78,7 +78,13 @@ export const correctActivity = createServerFn({ method: "POST" })
       parsed.resultado === "correcto" || parsed.resultado === "incorrecto" || parsed.resultado === "parcial"
         ? parsed.resultado
         : "parcial";
-    const nota = Math.max(0, Math.min(10, Number(parsed.nota ?? 0)));
+    // `Number(parsed.nota ?? 0)` scored a perfectly good answer 0 whenever the
+    // model emitted "8" as a string or omitted the key — and this number is half
+    // of the weekly history score. Read the grade tolerantly, and when there is
+    // genuinely no number, take it from the verdict the model DID commit to
+    // instead of assuming the worst.
+    const notaFromVerdict = resultado === "correcto" ? 9 : resultado === "parcial" ? 6.5 : 3;
+    const nota = parseScore10(parsed.nota) ?? notaFromVerdict;
     const aciertos = Array.isArray(parsed.aciertos) ? parsed.aciertos.map(String) : [];
     const errores = Array.isArray(parsed.errores)
       ? parsed.errores.map((e) => ({
@@ -216,7 +222,7 @@ Tono cálido, profesional, en español.`;
       })),
     });
 
-    const aiResult = await callChat(system, user);
+    const aiResult = await callChat(system, user, { temperature: 0.2 });
 
     type Eval = {
       stages: { passed: boolean; note: string; error: null | { said: string; corrected: string } }[];
@@ -236,10 +242,23 @@ Tono cálido, profesional, en español.`;
     const matched = Array.isArray(parsed.matched_criteria) ? parsed.matched_criteria : [];
     const hits = matched.length;
     const misses = Math.max(0, data.criteria.length - hits);
+    // The prompt asks for a GLOBAL communication mark, but this only accepted a
+    // real JSON number — and `json_object` mode returns "8" as a string often
+    // enough that scores kept collapsing back to the mechanical criteria
+    // fraction the rubric had deliberately abandoned. Parse tolerantly first.
+    const stagesPassed = (parsed.stages ?? []).filter((s) => s?.passed).length;
+    const stageCount = Math.max(1, (parsed.stages ?? []).length);
     const score =
-      typeof parsed.score_10 === "number"
-        ? Math.max(0, Math.min(10, Number(parsed.score_10.toFixed(1))))
-        : Number(((hits / Math.max(1, data.criteria.length)) * 10).toFixed(1));
+      parseScore10(parsed.score_10) ??
+      // No readable number at all: fall back to how much the student actually
+      // completed, taking the kinder of criteria-met vs stages-passed rather
+      // than punishing them for compound criteria they mostly satisfied.
+      Number(
+        Math.max(
+          (hits / Math.max(1, data.criteria.length)) * 10,
+          (stagesPassed / stageCount) * 10,
+        ).toFixed(1),
+      );
 
     const errors: { stage: number; said: string; corrected: string }[] = [];
     (parsed.stages ?? []).forEach((s, i) => {

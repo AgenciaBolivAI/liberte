@@ -1,6 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { ArrowLeft, ArrowRight, Sparkles } from "lucide-react";
 import { TopNav } from "@/components/TopNav";
+import { usePlusResources } from "@/lib/plus-resources";
 
 export type PlusResource = {
   id: string;
@@ -85,9 +86,18 @@ export const Route = createFileRoute("/plus/$weekId/$itemId")({
 function PlusItemPage() {
   const { weekId, itemId } = Route.useParams();
   const navigate = useNavigate();
-  const resources = PLUS_RESOURCES_BY_WEEK[weekId] ?? [];
+  // Teacher-editable: saved rows win, the code map is the fallback.
+  const { items: resources, loading } = usePlusResources(Number(weekId));
   const idx = resources.findIndex((r) => r.id === itemId);
   const resource = resources[idx];
+
+  if (!resource && loading) {
+    return (
+      <div className="mx-auto max-w-lg p-8 text-center">
+        <p className="text-sm text-muted-foreground">Chargement…</p>
+      </div>
+    );
+  }
 
   if (!resource) {
     return (

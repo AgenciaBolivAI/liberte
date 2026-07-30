@@ -6,6 +6,7 @@ import {
   BookOpen,
   Check,
   Download,
+  Loader2,
   Lock,
   Mic,
   MicOff,
@@ -44,7 +45,8 @@ import { getStudentSnapshot, type StudentSnapshot } from "@/lib/admin.functions"
 import { useAuth } from "@/lib/auth-context";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { PLUS_RESOURCES_BY_WEEK, type PlusResource } from "@/routes/plus.$weekId.$itemId";
+import { type PlusResource } from "@/routes/plus.$weekId.$itemId";
+import { usePlusResources } from "@/lib/plus-resources";
 import logo from "@/assets/liberte-logo.png.asset.json";
 import {
   vocabulary,
@@ -201,7 +203,7 @@ import { speakFr, stopFr } from "@/lib/speak";
 import { WEEK34, type WeekDay } from "@/data/week34";
 import { MONTH2 } from "@/data/month2";
 import { persist } from "@/lib/persist";
-import { dayStateKey, doneKeys, mergeHydrated, resolveLesson, shouldPersistDay } from "@/lib/dayProgress";
+import { dayStateKey, doneKeys, isHydratedFor, mergeHydrated, resolveLesson, shouldPersistDay } from "@/lib/dayProgress";
 import { WEEK34_META, type RichDay, type Week34Meta } from "@/data/week34.meta";
 import { MONTH2_META } from "@/data/month2.meta";
 import { useRichDay, useDayVideos, type DayVideos } from "@/lib/rich-content";
@@ -288,6 +290,9 @@ function DynamicDayGate({ dayId }: { dayId: string }) {
 
 /* -------------------- helpers -------------------- */
 
+/** Reused across every correction tone — see the note in playTone. */
+let toneCtx: AudioContext | null = null;
+
 function playTone(kind: "ok" | "no") {
   if (typeof window === "undefined") return;
   try {
@@ -295,7 +300,14 @@ function playTone(kind: "ok" | "no") {
       (window.AudioContext as typeof AudioContext) ||
       ((window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext);
     if (!Ctx) return;
-    const ctx = new Ctx();
+    // ONE shared context. A fresh `new Ctx()` per answer was never closed, so
+    // they piled up for the life of the page — browsers cap concurrent contexts
+    // (Safari ~4, Chrome ~6), after which construction throws and, because each
+    // one holds the audio hardware, microphone acquisition slows to a crawl.
+    // That is part of the client's "tarda mucho en empezar a grabar".
+    toneCtx = toneCtx && toneCtx.state !== "closed" ? toneCtx : new Ctx();
+    const ctx = toneCtx;
+    if (ctx.state === "suspended") void ctx.resume();
     const o = ctx.createOscillator();
     const g = ctx.createGain();
     o.connect(g);
@@ -496,7 +508,11 @@ function DayPage() {
   const [plusOpen, setPlusOpen] = useState(false);
   const [plusItemId, setPlusItemId] = useState<string | null>(null);
   const activeWeekForPlus = WEEK_OF_DAY[activeDay] ?? 1;
-  const PLUS_ITEMS = PLUS_RESOURCES_BY_WEEK[String(activeWeekForPlus)] ?? PLUS_RESOURCES_BY_WEEK["1"] ?? [];
+  // Teacher-editable bonus videos (plus_resources), with the code map as the
+  // fallback for weeks nobody has edited yet. The old `?? BY_WEEK["1"]` tail
+  // silently served WEEK 1's bonus on every week from 3 on, so students kept
+  // seeing the same three videos.
+  const { items: PLUS_ITEMS } = usePlusResources(activeWeekForPlus);
   const plusItemIdx = plusItemId ? PLUS_ITEMS.findIndex((i) => i.id === plusItemId) : -1;
   const plusItem = plusItemIdx >= 0 ? PLUS_ITEMS[plusItemIdx] : null;
   const [done, setDone] = useState<Record<string, boolean>>({});
@@ -772,6 +788,47 @@ function DayPage() {
     };
   }, [hydrateFailed]);
 
+  // Re-read the saved row whenever this tab comes back to the foreground, so work
+  // done meanwhile on another device shows up here. Hydration runs ONCE per
+  // user+day, so without this a session kept open (the phone in your pocket, the
+  // laptop tab from yesterday) displayed its own frozen snapshot forever — the
+  // client's "no reconoce el avance que ya tenía en el otro dispositivo".
+  //
+  // Deliberately merge-only: done lessons and stars move FORWARD, and the lesson
+  // the student is currently reading is never moved. Restoring the saved position
+  // here would yank them to wherever the other device left off mid-session.
+  useEffect(() => {
+    if (!user || viewAsUserId || readOnly) return;
+    const dayNum = Number(activeDay);
+    const revalidate = async () => {
+      if (document.visibilityState !== "visible") return;
+      // Only for a day we already read successfully; otherwise the hydration
+      // effect above owns this and its retry path must not be short-circuited.
+      if (!isHydratedFor(hydratedKeyRef.current, user.id, activeDay)) return;
+      const { data, error } = await supabase
+        .from("day_state")
+        .select("done_lessons, current_lesson, stars")
+        .eq("user_id", user.id)
+        .eq("day_id", dayNum)
+        .maybeSingle();
+      if (error || ownerDayRef.current !== `${user.id}:${activeDay}`) return;
+      const remoteDone = Array.isArray(data?.done_lessons) ? (data.done_lessons as string[]) : [];
+      setDone((local) => mergeHydrated(local, data ? { done_lessons: remoteDone, current_lesson: null, stars: Number(data.stars ?? 0) } : null));
+      if (data) setStars((s) => Math.max(s, Number(data.stars ?? 0)));
+      // Keep the no-downgrade rule's picture of the row accurate.
+      remoteDoneCountRef.current = data ? remoteDone.length : 0;
+    };
+    const onVisible = () => { void revalidate(); };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onVisible);
+    window.addEventListener("online", onVisible);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onVisible);
+      window.removeEventListener("online", onVisible);
+    };
+  }, [user?.id, activeDay, viewAsUserId, readOnly]);
+
   // Autosave: whenever done/stars/lesson changes after hydration, upsert.
   // A pending (debounced) save is flushed on unmount so leaving the page
   // right after clicking "Suivant" can't lose progress.
@@ -799,17 +856,19 @@ function DayPage() {
       pendingSaveRef.current = null;
       // MUST be awaited: a supabase builder that is never awaited never sends
       // its request (this silently lost all progress in production).
+      // MERGE, never replace. A plain upsert wrote this tab's array over the row,
+      // so a second session of the same student (phone + laptop, or a tab open
+      // since yesterday) shrank the saved set — forensics found 8 completed days
+      // reduced to 1-4 lessons in production ("aparece 80% en la compu y 20% en
+      // el celu"). merge_day_state UNIONs done_lessons and keeps MAX(stars), so
+      // the autosave is commutative and arrival order stops mattering.
       void persist("day_state", () =>
-        supabase.from("day_state").upsert(
-          {
-            user_id: userId!,
-            day_id: Number(activeDay),
-            done_lessons: doneArr,
-            current_lesson: lesson,
-            stars,
-          },
-          { onConflict: "user_id,day_id" },
-        ),
+        supabase.rpc("merge_day_state", {
+          _day_id: Number(activeDay),
+          _done_lessons: doneArr,
+          _current_lesson: lesson,
+          _stars: stars,
+        }),
       ).then((ok) => {
         // Remember what the row now holds so the no-downgrade rule stays accurate.
         // Guarded: if the student already moved on, this stale ack must not
@@ -2167,19 +2226,59 @@ function WritingGame({ items, onAward, dayId = 0, section = "vocab" }: {
 
 /* -------------------- Speaking (mic recording) -------------------- */
 
+/**
+ * Mic recorder for the speaking exercises.
+ *
+ * Two fixes for the client's "tarda mucho en abrir y empezar a grabar":
+ *
+ *  1. `acquiring` — getUserMedia takes noticeable time (the OS has to hand over
+ *     the mic, and after a TTS playback it must switch the audio session from
+ *     playback to record). Everything used to happen behind an `await` with the
+ *     recording flag set only afterwards, so the button looked completely dead
+ *     for the whole cold-start and students tapped it again. The UI now flips the
+ *     instant the tap lands.
+ *  2. The MediaStream is kept warm between takes instead of `track.stop()` after
+ *     every recording. Re-acquiring per take paid the full hardware cold-start
+ *     each time (and on WebKit can re-prompt for permission). It is released on
+ *     unmount, so the browser's recording indicator still goes off when the
+ *     student leaves the exercise.
+ */
 function useRecorder() {
   const [recording, setRecording] = useState(false);
+  const [acquiring, setAcquiring] = useState(false);
   const [blob, setBlob] = useState<Blob | null>(null);
   const [url, setUrl] = useState<string | null>(null);
   const [mimeType, setMimeType] = useState<string>("audio/webm");
   const recRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  const streamRef = useRef<MediaStream | null>(null);
+  const startingRef = useRef(false);
+
+  const liveStream = () =>
+    streamRef.current?.getAudioTracks().some((t) => t.readyState === "live")
+      ? streamRef.current
+      : null;
+
+  useEffect(() => {
+    // Turn the mic (and its browser indicator) off when the exercise unmounts.
+    return () => {
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    };
+  }, []);
 
   const start = async () => {
+    // Guard BEFORE the await: the old code checked nothing, so a double tap
+    // during the cold-start fired two getUserMedia calls and orphaned the first
+    // recorder — the mic indicator stayed on and the two contended.
+    if (startingRef.current || recording) return;
+    startingRef.current = true;
+    setAcquiring(true);
     setBlob(null);
     if (url) { URL.revokeObjectURL(url); setUrl(null); }
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = liveStream() ?? (await navigator.mediaDevices.getUserMedia({ audio: true }));
+      streamRef.current = stream;
       const rec = new MediaRecorder(stream);
       chunksRef.current = [];
       rec.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
@@ -2189,13 +2288,16 @@ function useRecorder() {
         setBlob(b);
         setMimeType(type);
         setUrl(URL.createObjectURL(b));
-        stream.getTracks().forEach((t) => t.stop());
+        // Stream deliberately left open — see the note above.
       };
       recRef.current = rec;
       rec.start();
       setRecording(true);
     } catch {
       alert("Impossible d’accéder au micro. Vérifie les autorisations du navigateur.");
+    } finally {
+      startingRef.current = false;
+      setAcquiring(false);
     }
   };
   const stop = () => {
@@ -2207,7 +2309,7 @@ function useRecorder() {
     if (url) URL.revokeObjectURL(url);
     setUrl(null);
   };
-  return { recording, blob, url, mimeType, start, stop, reset };
+  return { recording, acquiring, blob, url, mimeType, start, stop, reset };
 }
 
 async function blobToBase64(b: Blob): Promise<string> {
@@ -2309,14 +2411,21 @@ function SpeakingGame({ items, onAward, dayId = 0, section = "vocab" }: {
       <div className="flex flex-col items-center gap-3">
         <button
           onClick={rec.recording ? rec.stop : rec.start}
-          disabled={busy || !!correction}
-          className={`grid h-20 w-20 place-items-center rounded-full text-white shadow-card transition ${rec.recording ? "bg-red animate-pulse" : "bg-gradient-blue hover:scale-105 disabled:opacity-60"}`}
+          disabled={busy || !!correction || rec.acquiring}
+          className={`grid h-20 w-20 place-items-center rounded-full text-white shadow-card transition ${rec.recording ? "bg-red animate-pulse" : rec.acquiring ? "bg-blue/70" : "bg-gradient-blue hover:scale-105 disabled:opacity-60"}`}
           aria-label={rec.recording ? "Detener" : "Grabar"}
+          aria-busy={rec.acquiring}
         >
-          {rec.recording ? <Square className="h-8 w-8" /> : <Mic className="h-8 w-8" />}
+          {rec.recording ? <Square className="h-8 w-8" /> : rec.acquiring ? <Loader2 className="h-8 w-8 animate-spin" /> : <Mic className="h-8 w-8" />}
         </button>
         <p className="text-xs text-muted-foreground">
-          {rec.recording ? "Enregistrement… touche pour arrêter." : rec.url ? "Écoute ton enregistrement :" : "Touche pour enregistrer ta réponse."}
+          {rec.acquiring
+            ? "Activation du micro…"
+            : rec.recording
+              ? "Enregistrement… touche pour arrêter."
+              : rec.url
+                ? "Écoute ton enregistrement :"
+                : "Touche pour enregistrer ta réponse."}
         </p>
         {rec.url && <audio src={rec.url} controls className="w-full max-w-md" />}
       </div>

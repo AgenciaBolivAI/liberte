@@ -632,6 +632,48 @@ export type Database = {
         }
         Relationships: []
       }
+      plus_resources: {
+        Row: {
+          created_at: string
+          emoji: string
+          eyebrow: string
+          id: string
+          note: string | null
+          sort: number
+          subtitle: string
+          title: string
+          updated_at: string
+          week: number
+          youtube_id: string
+        }
+        Insert: {
+          created_at?: string
+          emoji?: string
+          eyebrow?: string
+          id?: string
+          note?: string | null
+          sort?: number
+          subtitle?: string
+          title: string
+          updated_at?: string
+          week: number
+          youtube_id: string
+        }
+        Update: {
+          created_at?: string
+          emoji?: string
+          eyebrow?: string
+          id?: string
+          note?: string | null
+          sort?: number
+          subtitle?: string
+          title?: string
+          updated_at?: string
+          week?: number
+          youtube_id?: string
+        }
+        Relationships: []
+      }
       recorded_classes: {
         Row: {
           created_at: string
@@ -919,6 +961,15 @@ export type Database = {
       }
       add_day_seconds: {
         Args: { _day_id: number; _seconds: number }
+        Returns: undefined
+      }
+      merge_day_state: {
+        Args: {
+          _day_id: number
+          _done_lessons: string[]
+          _current_lesson: string | null
+          _stars: number
+        }
         Returns: undefined
       }
       delete_email: {

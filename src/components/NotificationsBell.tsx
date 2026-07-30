@@ -174,7 +174,7 @@ export function NotificationsBell() {
                 key={n.id}
                 type="button"
                 onClick={() =>
-                  navigate({ to: isAdmin ? "/liberte-profesor-panel-9382745-admin" : "/coach" })
+                  navigate({ to: isAdmin ? "/liberte-profesor-panel-9382745-admin/alumnos" : "/coach" })
                 }
                 className="block w-full px-3 py-2 text-left text-sm transition hover:bg-accent"
               >

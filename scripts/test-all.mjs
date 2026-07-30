@@ -649,7 +649,10 @@ g("12. Regressions (bugs found in audit — must stay fixed)");
        readFileSync("src/routes/coach.tsx", "utf8").includes("<CalendarBoard"));
     ok("no old calendar-manager panel in the Calendar tab", !calTab.includes("<CalendarManager"));
     ok("calendar editor no longer in the admin panel (single home)",
-       !readFileSync("src/routes/liberte-profesor-panel-9382745-admin.tsx", "utf8").includes("CalendarManager"));
+       ["liberte-profesor-panel-9382745-admin.tsx", "liberte-profesor-panel-9382745-admin.index.tsx",
+        "liberte-profesor-panel-9382745-admin.alumnos.tsx", "liberte-profesor-panel-9382745-admin.contenido.tsx",
+        "liberte-profesor-panel-9382745-admin.accesos.tsx", "liberte-profesor-panel-9382745-admin.equipo.tsx"]
+         .every((f) => !readFileSync(`src/routes/${f}`, "utf8").includes("CalendarManager")));
     const cee = readFileSync("src/components/CalendarEventEditor.tsx", "utf8");
     ok("inline editor does insert/update/delete on calendar_events",
        cee.includes('.from("calendar_events").update') && cee.includes('.from("calendar_events").insert') && cee.includes('.from("calendar_events").delete'));
@@ -789,9 +792,9 @@ g("12. Regressions (bugs found in audit — must stay fixed)");
   ok("recorded classes manager wired", readFileSync("src/components/RecordedClassesManager.tsx", "utf8").includes('from("recorded_classes")'));
   const cev = readFileSync("src/routes/clasesenvivo.index.tsx", "utf8");
   ok("replays read from DB with hardcoded fallback", cev.includes('from("recorded_classes")') && cev.includes("dbClasses ?? RECORDED_CLASSES"));
-  const adminPanelSrc = readFileSync("src/routes/liberte-profesor-panel-9382745-admin.tsx", "utf8");
-  // Day authoring (ContentManager) stays in the admin panel; the recorded-class
-  // editor moved into the Live tab so staff add/edit tiles where they live.
+  const adminPanelSrc = readFileSync("src/routes/liberte-profesor-panel-9382745-admin.contenido.tsx", "utf8");
+  // Day authoring (ContentManager) lives in the admin Contenido tab; the
+  // recorded-class editor moved into the Live tab so staff add/edit tiles where they live.
   ok("admin panel still mounts the content manager", adminPanelSrc.includes("<ContentManager />"));
   {
     const liveTab = readFileSync("src/routes/clasesenvivo.index.tsx", "utf8");
@@ -1422,7 +1425,7 @@ g("12e. Re-audit fixes: paid-AI gates, star-minting, wildcard injection, misc");
      (() => { const e = readFileSync("src/lib/error-page.ts", "utf8");
               return e.includes('<html lang="fr">') && e.includes("/liberte-plataforma-834798234728482934254-student"); })());
   ok("admin star bar uses the true max (weekly-eval stars included)",
-     readFileSync("src/routes/liberte-profesor-panel-9382745-admin.tsx", "utf8").includes("TOTAL_DAYS * 4 + TOTAL_WEEKS * 3"));
+     readFileSync("src/routes/liberte-profesor-panel-9382745-admin.alumnos.tsx", "utf8").includes("TOTAL_DAYS * 4 + TOTAL_WEEKS * 3"));
 }
 
 /* ---------------- teacher suite + client-list features ---------------- */
@@ -1918,6 +1921,157 @@ g("12m. Where is the report? teacher view + preview + message pointer");
   ok("the automatic message tells the teacher exactly where to open it",
      wk12m.includes("D\u00f3nde verlo: Panel del profesor") &&
      wk12m.includes("Informes semanales (PDF)"));
+}
+
+/* ---- client list 2026-07-29: cross-device progress, mic latency, grading, bonus videos ---- */
+g("12n. Cross-device progress . mic latency . grading floor . editable Petit Plus");
+{
+  /* A) CROSS-DEVICE PROGRESS ("aparece 80% en la compu y 20% en el celu").
+     The autosave used to upsert done_lessons, REPLACING the row, so a second
+     session of the same student overwrote the first with its own smaller array.
+     Now it merges server-side and both surfaces revalidate on return. */
+  const dayPage = readFileSync("src/routes/day.$dayId.tsx", "utf8");
+  ok("day autosave MERGES via RPC instead of replacing the row",
+     dayPage.includes('supabase.rpc("merge_day_state"') &&
+     !/from\("day_state"\)\s*\.upsert/.test(dayPage));
+  ok("day page re-reads saved progress when the tab comes back",
+     dayPage.includes('document.addEventListener("visibilitychange", onVisible)') &&
+     dayPage.includes("isHydratedFor(hydratedKeyRef.current"));
+  ok("revalidation never drags the student to the other device's lesson",
+     (() => { const i = dayPage.indexOf("const revalidate = async ()");
+              const j = dayPage.indexOf("document.addEventListener(\"visibilitychange\"", i);
+              const body = dayPage.slice(i, j);
+              return i > 0 && body.includes("setDone((local) => mergeHydrated") && !body.includes("setLesson("); })());
+  const progressLib = readFileSync("src/lib/progress.ts", "utf8");
+  ok("dashboard star + day counters revalidate on return too",
+     progressLib.includes("useRefreshOnReturn(refresh)") &&
+     (progressLib.match(/useRefreshOnReturn\(refresh\)/g) ?? []).length >= 2);
+  ok("merge_day_state migration is in the repo",
+     readFileSync("supabase/migrations/20260729000000_merge_day_state.sql", "utf8")
+       .includes("CREATE OR REPLACE FUNCTION public.merge_day_state"));
+
+  /* Behavioural: the RPC must not let a stale device shrink real progress. */
+  if (studentClient && uid) {
+    await admin.from("day_state").upsert(
+      { user_id: uid, day_id: 118, done_lessons: ["gym", "intro", "vocab", "cles"], current_lesson: "cles", stars: 6 },
+      { onConflict: "user_id,day_id" },
+    );
+    const { error: mErr } = await studentClient.rpc("merge_day_state", {
+      _day_id: 118, _done_lessons: ["gym"], _current_lesson: "gym", _stars: 0,
+    });
+    ok("student may call merge_day_state on their own row", !mErr, mErr?.message);
+    const { data: merged } = await admin
+      .from("day_state").select("done_lessons, current_lesson, stars")
+      .eq("user_id", uid).eq("day_id", 118).maybeSingle();
+    const kept = Array.isArray(merged?.done_lessons) ? merged.done_lessons.length : 0;
+    ok("a stale device CANNOT shrink saved lessons (4 kept, not 1)", kept === 4, `kept ${kept}`);
+    ok("stars never go backwards on merge", Number(merged?.stars) === 6, `stars=${merged?.stars}`);
+    ok("current lesson still follows the most recent device", merged?.current_lesson === "gym", String(merged?.current_lesson));
+    const { data: grew } = await studentClient.rpc("merge_day_state", {
+      _day_id: 118, _done_lessons: ["gym", "intro", "vocab", "cles", "defi"], _current_lesson: "defi", _stars: 9,
+    }).then(async () => await admin.from("day_state").select("done_lessons, stars").eq("user_id", uid).eq("day_id", 118).maybeSingle());
+    ok("real new progress still lands (5 lessons, 9 stars)",
+       (Array.isArray(grew?.done_lessons) ? grew.done_lessons.length : 0) === 5 && Number(grew?.stars) === 9);
+    await admin.from("day_state").delete().eq("user_id", uid).eq("day_id", 118);
+  } else {
+    skipped("merge_day_state behaviour", "no student client");
+  }
+
+  /* B) MIC LATENCY ("tarda mucho en abrir y empezar a grabar"). */
+  ok("mic button reacts on the tap, not after getUserMedia resolves",
+     dayPage.includes("const [acquiring, setAcquiring] = useState(false)") &&
+     dayPage.includes('"Activation du micro…"') &&
+     dayPage.includes("aria-busy={rec.acquiring}"));
+  ok("the mic stream stays warm between takes",
+     (() => { const i = dayPage.indexOf("function useRecorder()");
+              const body = dayPage.slice(i, i + 3000);
+              return i > 0 && body.includes("liveStream() ?? (await navigator.mediaDevices.getUserMedia") &&
+                     !/rec\.onstop[\s\S]{0,400}stream\.getTracks\(\)\.forEach/.test(body); })());
+  ok("double-tapping during mic acquisition can't start two recorders",
+     (() => { const i = dayPage.indexOf("function useRecorder()");
+              const body = dayPage.slice(i, i + 3000);
+              return body.indexOf("startingRef.current = true") < body.indexOf("await navigator.mediaDevices.getUserMedia"); })());
+  const staged = readFileSync("src/components/StagedDefi.tsx", "utf8");
+  ok("defi recorder also warms the mic + guards before the await",
+     staged.includes("startingRef.current = true") &&
+     staged.indexOf("startingRef.current = true") < staged.indexOf("await navigator.mediaDevices.getUserMedia") &&
+     staged.includes("liveStream() ?? (await navigator.mediaDevices.getUserMedia"));
+  ok("defi recorder shows the mic warming up", staged.includes("acquiringIdx === idx"));
+  ok("both recorders release the mic on unmount",
+     (dayPage.match(/streamRef\.current\?\.getTracks\(\)\.forEach\(\(t\) => t\.stop\(\)\)/g) ?? []).length >= 1 &&
+     (staged.match(/streamRef\.current\?\.getTracks\(\)\.forEach\(\(t\) => t\.stop\(\)\)/g) ?? []).length >= 1);
+  ok("correction tones reuse ONE AudioContext (they leaked, starving the mic)",
+     dayPage.includes("let toneCtx: AudioContext | null = null") &&
+     !/const ctx = new Ctx\(\);/.test(dayPage));
+  ok("routes preload on intent so the day chunk isn't fetched on click",
+     readFileSync("src/router.tsx", "utf8").includes('defaultPreload: "intent"'));
+
+  /* C) GRADING ("la calificacion en general es muy baja"). */
+  const aiLib = readFileSync("src/lib/ai.ts", "utf8");
+  ok("callChat can pin a temperature (grading was at the 1.0 default)",
+     aiLib.includes("temperature?: number") && aiLib.includes('typeof opts?.temperature === "number"'));
+  ok("parseScore10 exists to read grades the model returned as text",
+     aiLib.includes("export function parseScore10"));
+  const defiLib = readFileSync("src/lib/defi.functions.ts", "utf8");
+  ok("per-activity grade no longer collapses to 0 when the model sends a string",
+     defiLib.includes("const nota = parseScore10(parsed.nota) ?? notaFromVerdict;") &&
+     !/const nota = Math\.max\(0, Math\.min\(10, Number\(parsed\.nota/.test(defiLib));
+  ok("defi grade no longer falls back to the mechanical criteria fraction first",
+     defiLib.includes("parseScore10(parsed.score_10) ??") &&
+     !defiLib.includes('typeof parsed.score_10 === "number"'));
+  ok("both graders run at a low temperature for repeatable marks",
+     (defiLib.match(/temperature: 0\.2/g) ?? []).length >= 2);
+  ok("the per-activity corrector targets A1-A2, not A2-B1",
+     defiLib.includes("nivel A1-A2 (principiantes)") && !defiLib.includes("nivel A2-B1"));
+  ok("the corrector states the communication floor (7-10 when understood)",
+     defiLib.includes("la nota es 7-10"));
+  const weekLib = readFileSync("src/lib/week.functions.ts", "utf8");
+  ok("weekly PE/PO scores also parse tolerantly",
+     weekLib.includes("parseScore10(cs.PE) ?? 0") && weekLib.includes("parseScore10(cs.PO) ?? 0") &&
+     !weekLib.includes("clamp(Number(cs.PO ?? 0))"));
+  ok("weekly report may return NO pronunciation faults (it had to invent 2-3)",
+     weekLib.includes("devuelve [] — es correcto y esperado") &&
+     !weekLib.includes("2 improvements, 2-3 pronunciation."));
+  ok("passed criteria are matched loosely, so paraphrases aren't shown as failed",
+     staged.includes("function criterionMet") && staged.includes("criterionMet(result.matched_criteria, c)") &&
+     !staged.includes("result.matched_criteria.includes(c)"));
+
+  /* D) "LE PETIT PLUS LIBERTE" is editable ("no hay donde cambiar ahí los videitos"). */
+  ok("plus_resources migration is in the repo",
+     readFileSync("supabase/migrations/20260729000001_plus_resources.sql", "utf8")
+       .includes("CREATE TABLE IF NOT EXISTS public.plus_resources"));
+  const plusLib = readFileSync("src/lib/plus-resources.ts", "utf8");
+  ok("bonus videos read from the DB with the code list as fallback",
+     plusLib.includes('from("plus_resources")') && plusLib.includes("PLUS_RESOURCES_BY_WEEK[String(week)]"));
+  ok("teacher can paste any YouTube link (id is extracted)",
+     plusLib.includes("export function extractYouTubeId"));
+  ok("the day sidebar uses the editable list",
+     dayPage.includes("usePlusResources(activeWeekForPlus)"));
+  ok("weeks 3+ no longer silently replay WEEK 1's bonus videos",
+     !dayPage.includes('PLUS_RESOURCES_BY_WEEK["1"]'));
+  ok("the standalone bonus page uses it too",
+     readFileSync("src/routes/plus.$weekId.$itemId.tsx", "utf8").includes("usePlusResources(Number(weekId))"));
+  ok("the teacher editor is mounted in the admin Contenido tab",
+     readFileSync("src/routes/liberte-profesor-panel-9382745-admin.contenido.tsx", "utf8")
+       .includes("<PlusResourcesManager />"));
+  const mgr = readFileSync("src/components/PlusResourcesManager.tsx", "utf8");
+  ok("editor can add, save and delete bonus videos through persist()",
+     mgr.includes('persist("plus_resources"') && mgr.includes(".insert(") &&
+     mgr.includes(".update(") && mgr.includes(".delete()"));
+  ok("editor can copy the built-in defaults into the table to edit them",
+     mgr.includes("seedFromDefaults"));
+
+  /* plus_resources RLS: everyone reads, only staff writes. */
+  if (studentClient) {
+    const { error: rErr } = await studentClient.from("plus_resources").select("id").limit(1);
+    ok("students CAN read bonus videos", !rErr, rErr?.message);
+    const { error: wErr } = await studentClient
+      .from("plus_resources")
+      .insert({ week: 99, title: "hack", youtube_id: "x" });
+    ok("students CANNOT write bonus videos", Boolean(wErr));
+  } else {
+    skipped("plus_resources RLS", "no student client");
+  }
 }
 
 /* ---------------- build output ---------------- */

@@ -35,6 +35,11 @@ import { Route as ClasesenvivoM1c7RouteImport } from './routes/clasesenvivo.m1c7
 import { Route as ClasesenvivoM1c8RouteImport } from './routes/clasesenvivo.m1c8'
 import { Route as ClasesenvivoTaller1RouteImport } from './routes/clasesenvivo.taller1'
 import { Route as DayDayIdRouteImport } from './routes/day.$dayId'
+import { Route as LiberteProfesorPanel9382745AdminIndexRouteImport } from './routes/liberte-profesor-panel-9382745-admin.index'
+import { Route as LiberteProfesorPanel9382745AdminAccesosRouteImport } from './routes/liberte-profesor-panel-9382745-admin.accesos'
+import { Route as LiberteProfesorPanel9382745AdminAlumnosRouteImport } from './routes/liberte-profesor-panel-9382745-admin.alumnos'
+import { Route as LiberteProfesorPanel9382745AdminContenidoRouteImport } from './routes/liberte-profesor-panel-9382745-admin.contenido'
+import { Route as LiberteProfesorPanel9382745AdminEquipoRouteImport } from './routes/liberte-profesor-panel-9382745-admin.equipo'
 import { Route as SemaineWeekIdRouteImport } from './routes/semaine.$weekId'
 import { Route as ApiPublicLiberteFrancesSignupRouteImport } from './routes/api/public/liberte-frances-signup'
 import { Route as ApiTelegramRemindersRouteImport } from './routes/api/telegram/reminders'
@@ -176,6 +181,36 @@ const DayDayIdRoute = DayDayIdRouteImport.update({
   path: '/day/$dayId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const LiberteProfesorPanel9382745AdminIndexRoute =
+  LiberteProfesorPanel9382745AdminIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => LiberteProfesorPanel9382745AdminRoute,
+  } as any)
+const LiberteProfesorPanel9382745AdminAccesosRoute =
+  LiberteProfesorPanel9382745AdminAccesosRouteImport.update({
+    id: '/accesos',
+    path: '/accesos',
+    getParentRoute: () => LiberteProfesorPanel9382745AdminRoute,
+  } as any)
+const LiberteProfesorPanel9382745AdminAlumnosRoute =
+  LiberteProfesorPanel9382745AdminAlumnosRouteImport.update({
+    id: '/alumnos',
+    path: '/alumnos',
+    getParentRoute: () => LiberteProfesorPanel9382745AdminRoute,
+  } as any)
+const LiberteProfesorPanel9382745AdminContenidoRoute =
+  LiberteProfesorPanel9382745AdminContenidoRouteImport.update({
+    id: '/contenido',
+    path: '/contenido',
+    getParentRoute: () => LiberteProfesorPanel9382745AdminRoute,
+  } as any)
+const LiberteProfesorPanel9382745AdminEquipoRoute =
+  LiberteProfesorPanel9382745AdminEquipoRouteImport.update({
+    id: '/equipo',
+    path: '/equipo',
+    getParentRoute: () => LiberteProfesorPanel9382745AdminRoute,
+  } as any)
 const SemaineWeekIdRoute = SemaineWeekIdRouteImport.update({
   id: '/semaine/$weekId',
   path: '/semaine/$weekId',
@@ -220,7 +255,7 @@ export interface FileRoutesByFullPath {
   '/liberte-frances-98273425-plataforma-834823': typeof LiberteFrances98273425Plataforma834823Route
   '/liberte-log-in-983749824923465723': typeof LiberteLogIn983749824923465723Route
   '/liberte-plataforma-834798234728482934254-student': typeof LibertePlataforma834798234728482934254StudentRoute
-  '/liberte-profesor-panel-9382745-admin': typeof LiberteProfesorPanel9382745AdminRoute
+  '/liberte-profesor-panel-9382745-admin': typeof LiberteProfesorPanel9382745AdminRouteWithChildren
   '/mensajes': typeof MensajesRoute
   '/profile': typeof ProfileRoute
   '/progress': typeof ProgressRoute
@@ -235,8 +270,13 @@ export interface FileRoutesByFullPath {
   '/clasesenvivo/m1c8': typeof ClasesenvivoM1c8Route
   '/clasesenvivo/taller1': typeof ClasesenvivoTaller1Route
   '/day/$dayId': typeof DayDayIdRoute
+  '/liberte-profesor-panel-9382745-admin/accesos': typeof LiberteProfesorPanel9382745AdminAccesosRoute
+  '/liberte-profesor-panel-9382745-admin/alumnos': typeof LiberteProfesorPanel9382745AdminAlumnosRoute
+  '/liberte-profesor-panel-9382745-admin/contenido': typeof LiberteProfesorPanel9382745AdminContenidoRoute
+  '/liberte-profesor-panel-9382745-admin/equipo': typeof LiberteProfesorPanel9382745AdminEquipoRoute
   '/semaine/$weekId': typeof SemaineWeekIdRoute
   '/clasesenvivo/': typeof ClasesenvivoIndexRoute
+  '/liberte-profesor-panel-9382745-admin/': typeof LiberteProfesorPanel9382745AdminIndexRoute
   '/api/public/liberte-frances-signup': typeof ApiPublicLiberteFrancesSignupRoute
   '/api/telegram/reminders': typeof ApiTelegramRemindersRoute
   '/api/telegram/webhook': typeof ApiTelegramWebhookRoute
@@ -254,7 +294,6 @@ export interface FileRoutesByTo {
   '/liberte-frances-98273425-plataforma-834823': typeof LiberteFrances98273425Plataforma834823Route
   '/liberte-log-in-983749824923465723': typeof LiberteLogIn983749824923465723Route
   '/liberte-plataforma-834798234728482934254-student': typeof LibertePlataforma834798234728482934254StudentRoute
-  '/liberte-profesor-panel-9382745-admin': typeof LiberteProfesorPanel9382745AdminRoute
   '/mensajes': typeof MensajesRoute
   '/profile': typeof ProfileRoute
   '/progress': typeof ProgressRoute
@@ -269,8 +308,13 @@ export interface FileRoutesByTo {
   '/clasesenvivo/m1c8': typeof ClasesenvivoM1c8Route
   '/clasesenvivo/taller1': typeof ClasesenvivoTaller1Route
   '/day/$dayId': typeof DayDayIdRoute
+  '/liberte-profesor-panel-9382745-admin/accesos': typeof LiberteProfesorPanel9382745AdminAccesosRoute
+  '/liberte-profesor-panel-9382745-admin/alumnos': typeof LiberteProfesorPanel9382745AdminAlumnosRoute
+  '/liberte-profesor-panel-9382745-admin/contenido': typeof LiberteProfesorPanel9382745AdminContenidoRoute
+  '/liberte-profesor-panel-9382745-admin/equipo': typeof LiberteProfesorPanel9382745AdminEquipoRoute
   '/semaine/$weekId': typeof SemaineWeekIdRoute
   '/clasesenvivo': typeof ClasesenvivoIndexRoute
+  '/liberte-profesor-panel-9382745-admin': typeof LiberteProfesorPanel9382745AdminIndexRoute
   '/api/public/liberte-frances-signup': typeof ApiPublicLiberteFrancesSignupRoute
   '/api/telegram/reminders': typeof ApiTelegramRemindersRoute
   '/api/telegram/webhook': typeof ApiTelegramWebhookRoute
@@ -289,7 +333,7 @@ export interface FileRoutesById {
   '/liberte-frances-98273425-plataforma-834823': typeof LiberteFrances98273425Plataforma834823Route
   '/liberte-log-in-983749824923465723': typeof LiberteLogIn983749824923465723Route
   '/liberte-plataforma-834798234728482934254-student': typeof LibertePlataforma834798234728482934254StudentRoute
-  '/liberte-profesor-panel-9382745-admin': typeof LiberteProfesorPanel9382745AdminRoute
+  '/liberte-profesor-panel-9382745-admin': typeof LiberteProfesorPanel9382745AdminRouteWithChildren
   '/mensajes': typeof MensajesRoute
   '/profile': typeof ProfileRoute
   '/progress': typeof ProgressRoute
@@ -304,8 +348,13 @@ export interface FileRoutesById {
   '/clasesenvivo/m1c8': typeof ClasesenvivoM1c8Route
   '/clasesenvivo/taller1': typeof ClasesenvivoTaller1Route
   '/day/$dayId': typeof DayDayIdRoute
+  '/liberte-profesor-panel-9382745-admin/accesos': typeof LiberteProfesorPanel9382745AdminAccesosRoute
+  '/liberte-profesor-panel-9382745-admin/alumnos': typeof LiberteProfesorPanel9382745AdminAlumnosRoute
+  '/liberte-profesor-panel-9382745-admin/contenido': typeof LiberteProfesorPanel9382745AdminContenidoRoute
+  '/liberte-profesor-panel-9382745-admin/equipo': typeof LiberteProfesorPanel9382745AdminEquipoRoute
   '/semaine/$weekId': typeof SemaineWeekIdRoute
   '/clasesenvivo/': typeof ClasesenvivoIndexRoute
+  '/liberte-profesor-panel-9382745-admin/': typeof LiberteProfesorPanel9382745AdminIndexRoute
   '/api/public/liberte-frances-signup': typeof ApiPublicLiberteFrancesSignupRoute
   '/api/telegram/reminders': typeof ApiTelegramRemindersRoute
   '/api/telegram/webhook': typeof ApiTelegramWebhookRoute
@@ -340,8 +389,13 @@ export interface FileRouteTypes {
     | '/clasesenvivo/m1c8'
     | '/clasesenvivo/taller1'
     | '/day/$dayId'
+    | '/liberte-profesor-panel-9382745-admin/accesos'
+    | '/liberte-profesor-panel-9382745-admin/alumnos'
+    | '/liberte-profesor-panel-9382745-admin/contenido'
+    | '/liberte-profesor-panel-9382745-admin/equipo'
     | '/semaine/$weekId'
     | '/clasesenvivo/'
+    | '/liberte-profesor-panel-9382745-admin/'
     | '/api/public/liberte-frances-signup'
     | '/api/telegram/reminders'
     | '/api/telegram/webhook'
@@ -359,7 +413,6 @@ export interface FileRouteTypes {
     | '/liberte-frances-98273425-plataforma-834823'
     | '/liberte-log-in-983749824923465723'
     | '/liberte-plataforma-834798234728482934254-student'
-    | '/liberte-profesor-panel-9382745-admin'
     | '/mensajes'
     | '/profile'
     | '/progress'
@@ -374,8 +427,13 @@ export interface FileRouteTypes {
     | '/clasesenvivo/m1c8'
     | '/clasesenvivo/taller1'
     | '/day/$dayId'
+    | '/liberte-profesor-panel-9382745-admin/accesos'
+    | '/liberte-profesor-panel-9382745-admin/alumnos'
+    | '/liberte-profesor-panel-9382745-admin/contenido'
+    | '/liberte-profesor-panel-9382745-admin/equipo'
     | '/semaine/$weekId'
     | '/clasesenvivo'
+    | '/liberte-profesor-panel-9382745-admin'
     | '/api/public/liberte-frances-signup'
     | '/api/telegram/reminders'
     | '/api/telegram/webhook'
@@ -408,8 +466,13 @@ export interface FileRouteTypes {
     | '/clasesenvivo/m1c8'
     | '/clasesenvivo/taller1'
     | '/day/$dayId'
+    | '/liberte-profesor-panel-9382745-admin/accesos'
+    | '/liberte-profesor-panel-9382745-admin/alumnos'
+    | '/liberte-profesor-panel-9382745-admin/contenido'
+    | '/liberte-profesor-panel-9382745-admin/equipo'
     | '/semaine/$weekId'
     | '/clasesenvivo/'
+    | '/liberte-profesor-panel-9382745-admin/'
     | '/api/public/liberte-frances-signup'
     | '/api/telegram/reminders'
     | '/api/telegram/webhook'
@@ -428,7 +491,7 @@ export interface RootRouteChildren {
   LiberteFrances98273425Plataforma834823Route: typeof LiberteFrances98273425Plataforma834823Route
   LiberteLogIn983749824923465723Route: typeof LiberteLogIn983749824923465723Route
   LibertePlataforma834798234728482934254StudentRoute: typeof LibertePlataforma834798234728482934254StudentRoute
-  LiberteProfesorPanel9382745AdminRoute: typeof LiberteProfesorPanel9382745AdminRoute
+  LiberteProfesorPanel9382745AdminRoute: typeof LiberteProfesorPanel9382745AdminRouteWithChildren
   MensajesRoute: typeof MensajesRoute
   ProfileRoute: typeof ProfileRoute
   ProgressRoute: typeof ProgressRoute
@@ -636,6 +699,41 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DayDayIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/liberte-profesor-panel-9382745-admin/': {
+      id: '/liberte-profesor-panel-9382745-admin/'
+      path: '/'
+      fullPath: '/liberte-profesor-panel-9382745-admin/'
+      preLoaderRoute: typeof LiberteProfesorPanel9382745AdminIndexRouteImport
+      parentRoute: typeof LiberteProfesorPanel9382745AdminRoute
+    }
+    '/liberte-profesor-panel-9382745-admin/accesos': {
+      id: '/liberte-profesor-panel-9382745-admin/accesos'
+      path: '/accesos'
+      fullPath: '/liberte-profesor-panel-9382745-admin/accesos'
+      preLoaderRoute: typeof LiberteProfesorPanel9382745AdminAccesosRouteImport
+      parentRoute: typeof LiberteProfesorPanel9382745AdminRoute
+    }
+    '/liberte-profesor-panel-9382745-admin/alumnos': {
+      id: '/liberte-profesor-panel-9382745-admin/alumnos'
+      path: '/alumnos'
+      fullPath: '/liberte-profesor-panel-9382745-admin/alumnos'
+      preLoaderRoute: typeof LiberteProfesorPanel9382745AdminAlumnosRouteImport
+      parentRoute: typeof LiberteProfesorPanel9382745AdminRoute
+    }
+    '/liberte-profesor-panel-9382745-admin/contenido': {
+      id: '/liberte-profesor-panel-9382745-admin/contenido'
+      path: '/contenido'
+      fullPath: '/liberte-profesor-panel-9382745-admin/contenido'
+      preLoaderRoute: typeof LiberteProfesorPanel9382745AdminContenidoRouteImport
+      parentRoute: typeof LiberteProfesorPanel9382745AdminRoute
+    }
+    '/liberte-profesor-panel-9382745-admin/equipo': {
+      id: '/liberte-profesor-panel-9382745-admin/equipo'
+      path: '/equipo'
+      fullPath: '/liberte-profesor-panel-9382745-admin/equipo'
+      preLoaderRoute: typeof LiberteProfesorPanel9382745AdminEquipoRouteImport
+      parentRoute: typeof LiberteProfesorPanel9382745AdminRoute
+    }
     '/semaine/$weekId': {
       id: '/semaine/$weekId'
       path: '/semaine/$weekId'
@@ -681,6 +779,33 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface LiberteProfesorPanel9382745AdminRouteChildren {
+  LiberteProfesorPanel9382745AdminAccesosRoute: typeof LiberteProfesorPanel9382745AdminAccesosRoute
+  LiberteProfesorPanel9382745AdminAlumnosRoute: typeof LiberteProfesorPanel9382745AdminAlumnosRoute
+  LiberteProfesorPanel9382745AdminContenidoRoute: typeof LiberteProfesorPanel9382745AdminContenidoRoute
+  LiberteProfesorPanel9382745AdminEquipoRoute: typeof LiberteProfesorPanel9382745AdminEquipoRoute
+  LiberteProfesorPanel9382745AdminIndexRoute: typeof LiberteProfesorPanel9382745AdminIndexRoute
+}
+
+const LiberteProfesorPanel9382745AdminRouteChildren: LiberteProfesorPanel9382745AdminRouteChildren =
+  {
+    LiberteProfesorPanel9382745AdminAccesosRoute:
+      LiberteProfesorPanel9382745AdminAccesosRoute,
+    LiberteProfesorPanel9382745AdminAlumnosRoute:
+      LiberteProfesorPanel9382745AdminAlumnosRoute,
+    LiberteProfesorPanel9382745AdminContenidoRoute:
+      LiberteProfesorPanel9382745AdminContenidoRoute,
+    LiberteProfesorPanel9382745AdminEquipoRoute:
+      LiberteProfesorPanel9382745AdminEquipoRoute,
+    LiberteProfesorPanel9382745AdminIndexRoute:
+      LiberteProfesorPanel9382745AdminIndexRoute,
+  }
+
+const LiberteProfesorPanel9382745AdminRouteWithChildren =
+  LiberteProfesorPanel9382745AdminRoute._addFileChildren(
+    LiberteProfesorPanel9382745AdminRouteChildren,
+  )
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   Clase1Route: Clase1Route,
@@ -694,7 +819,8 @@ const rootRouteChildren: RootRouteChildren = {
   LiberteLogIn983749824923465723Route: LiberteLogIn983749824923465723Route,
   LibertePlataforma834798234728482934254StudentRoute:
     LibertePlataforma834798234728482934254StudentRoute,
-  LiberteProfesorPanel9382745AdminRoute: LiberteProfesorPanel9382745AdminRoute,
+  LiberteProfesorPanel9382745AdminRoute:
+    LiberteProfesorPanel9382745AdminRouteWithChildren,
   MensajesRoute: MensajesRoute,
   ProfileRoute: ProfileRoute,
   ProgressRoute: ProgressRoute,

@@ -338,6 +338,9 @@ function LandingPage() {
             <a href="mailto:hola@libertefrances.com" className="text-sky hover:text-white">hola@libertefrances.com</a>
           </div>
           <p className="text-xs text-white/50">© {new Date().getFullYear()} Liberté · Instituto de Francés</p>
+          <p className="text-xs text-white/50">
+            Made by <a href="https://bolivai.com" target="_blank" rel="noreferrer" className="text-sky hover:text-white">BolivAI</a>
+          </p>
         </div>
       </footer>
     </div>

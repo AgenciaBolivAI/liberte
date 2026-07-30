@@ -58,10 +58,39 @@ function asTimeout(e: unknown, kind: string): never {
   throw e as Error;
 }
 
+/**
+ * Read a 0-10 grade out of whatever the model actually emitted.
+ *
+ * WHY: `json_object` mode is not a strict schema, so a grade comes back as a
+ * number *most* of the time and as `"8"`, `"8/10"` or `"8,5"` the rest of the
+ * time. Both graders used to accept only a real number and silently fell back to
+ * a harsh default — `Number(parsed.nota ?? 0)` scored a good answer **0**, and
+ * the défi dropped to a mechanical criteria fraction. That is the single biggest
+ * reason for the client's "la calificación en general es muy baja".
+ *
+ * Returns null only when there is genuinely no number to read.
+ */
+export function parseScore10(raw: unknown): number | null {
+  if (typeof raw === "number" && Number.isFinite(raw)) return clamp10(raw);
+  if (typeof raw === "string") {
+    // "8", "8.5", "8,5", "8/10", "nota: 8" → 8. Take the first number present.
+    const m = raw.replace(",", ".").match(/-?\d+(\.\d+)?/);
+    if (m) {
+      const n = Number(m[0]);
+      if (Number.isFinite(n)) return clamp10(n > 10 && n <= 100 ? n / 10 : n);
+    }
+  }
+  return null;
+}
+
+function clamp10(n: number): number {
+  return Math.max(0, Math.min(10, Number(n.toFixed(1))));
+}
+
 export async function callChat(
   system: string,
   userOrMessages: string | { role: "user" | "assistant"; content: string }[],
-  opts?: { model?: string },
+  opts?: { model?: string; temperature?: number },
 ): Promise<Record<string, unknown>> {
   const messages: ChatMessage[] = [
     { role: "system", content: system },
@@ -80,6 +109,11 @@ export async function callChat(
       messages,
       response_format: { type: "json_object" },
       max_tokens: MAX_OUTPUT_TOKENS,
+      // Grading was left at the API default (1.0), so the SAME recording scored
+      // 5 on one attempt and 8 on the next; students only ever report the low
+      // tail. Graders pass a low temperature for repeatable marks; the
+      // conversational tutor keeps its default by not passing one.
+      ...(typeof opts?.temperature === "number" ? { temperature: opts.temperature } : {}),
     }),
     signal: deadline("chat"),
   }).catch((e) => asTimeout(e, "La corrección"));
