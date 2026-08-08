@@ -44,7 +44,7 @@ export function CityCanvas({
   );
 }
 
-function FrameDriver({
+export function FrameDriver({
   tier,
   onFirstFrame,
 }: {

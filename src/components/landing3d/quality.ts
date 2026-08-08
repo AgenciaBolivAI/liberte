@@ -73,6 +73,17 @@ export const TIER_PARAMS: Record<Exclude<Tier, "static">, TierParams> = {
   },
 };
 
+/**
+ * Google Photorealistic 3D Tiles key (VITE_GOOGLE_3D_TILES_KEY). When present
+ * on a non-mobile tier, the landing streams the REAL Paris; absent/empty means
+ * the procedural night city (current behavior) everywhere. Phones always stay
+ * procedural: the tiles stream tens of MB per visit.
+ */
+export function realTilesKey(): string | null {
+  const key = import.meta.env.VITE_GOOGLE_3D_TILES_KEY as string | undefined;
+  return key && key.trim().length > 10 ? key.trim() : null;
+}
+
 export function prefersReducedMotion(): boolean {
   if (typeof window === "undefined" || !window.matchMedia) return false;
   try {

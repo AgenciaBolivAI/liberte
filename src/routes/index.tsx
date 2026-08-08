@@ -47,6 +47,13 @@ export const Route = createFileRoute("/")({
           "Lecciones diarias, clases en vivo y una tutora IA que conversa contigo en francés. Reserva tu lugar.",
       },
     ],
+    // The 3D landing streams Google's Paris tiles the moment it mounts; warming
+    // DNS + TLS here removes a full handshake from the critical path. Harmless
+    // when the flight falls back to the built-in city (an unused socket).
+    links: [
+      { rel: "preconnect", href: "https://tile.googleapis.com", crossOrigin: "anonymous" },
+      { rel: "dns-prefetch", href: "https://tile.googleapis.com" },
+    ],
   }),
   component: LandingPage,
 });

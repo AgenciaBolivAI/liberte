@@ -6117,515 +6117,421 @@ export const WEEK34: Record<string, WeekDay> = {
       {
         "fr": "se tonifier",
         "es": "tonificarse",
-        "example": "Je fais du yoga pour me tonifier.",
+        "example": "Je veux me tonifier — pas prendre de masse, juste me définir.",
         "emoji": "💪"
       },
       {
         "fr": "perdre du poids",
         "es": "perder peso",
-        "example": "Je voudrais perdre du poids avant l'été.",
+        "example": "Je ne cherche pas à perdre du poids — je veux juste être en forme.",
         "emoji": "⚖️"
-      },
-      {
-        "fr": "prendre du muscle",
-        "es": "ganar músculo",
-        "example": "Il s'entraîne pour prendre du muscle.",
-        "emoji": "🏋️"
-      },
-      {
-        "fr": "transpirer",
-        "es": "sudar",
-        "example": "On transpire beaucoup pendant le cours.",
-        "emoji": "💦"
-      },
-      {
-        "fr": "se reposer",
-        "es": "descansar",
-        "example": "Après le sport, je me repose un peu.",
-        "emoji": "😴"
-      },
-      {
-        "fr": "récupérer",
-        "es": "recuperarse",
-        "example": "Mon corps a besoin de récupérer.",
-        "emoji": "🔋"
       },
       {
         "fr": "progresser",
         "es": "progresar",
-        "example": "Je progresse chaque semaine.",
+        "example": "Je progresse chaque semaine — c'est la preuve que ça marche.",
         "emoji": "📈"
-      },
-      {
-        "fr": "s'améliorer",
-        "es": "mejorar",
-        "example": "Je veux m'améliorer en course.",
-        "emoji": "⬆️"
-      },
-      {
-        "fr": "se blesser",
-        "es": "lesionarse",
-        "example": "Attention, tu peux te blesser au dos.",
-        "emoji": "🤕"
       },
       {
         "fr": "se dépasser",
         "es": "superarse",
-        "example": "Au gym, j'aime me dépasser.",
+        "example": "Aujourd'hui, je me suis dépassée — une séance plus longue que d'habitude.",
         "emoji": "🔥"
       },
       {
         "fr": "être en forme",
         "es": "estar en forma",
-        "example": "Aujourd'hui, je suis en forme !",
-        "emoji": "😄"
-      },
-      {
-        "fr": "tenir la forme",
-        "es": "mantenerse en forma",
-        "example": "Je marche tous les jours pour tenir la forme.",
-        "emoji": "🚶"
-      },
-      {
-        "fr": "se sentir bien",
-        "es": "sentirse bien",
-        "example": "Après le sport, je me sens bien.",
-        "emoji": "🙂"
-      },
-      {
-        "fr": "être fatigué(e)",
-        "es": "estar cansado/a",
-        "example": "Ce soir, je suis très fatigué.",
-        "emoji": "🥱"
+        "example": "Mon objectif : être en forme et me sentir bien dans mon corps.",
+        "emoji": "✨"
       },
       {
         "fr": "avoir des courbatures",
         "es": "tener agujetas",
-        "example": "J'ai des courbatures aux jambes.",
-        "emoji": "🦵"
+        "example": "J'ai des courbatures partout — mais ça veut dire que j'ai bien travaillé !",
+        "emoji": "😣"
       },
       {
-        "fr": "un objectif",
-        "es": "un objetivo",
-        "example": "Mon objectif, c'est de courir 5 km.",
-        "emoji": "🎯"
+        "fr": "récupérer",
+        "es": "recuperarse",
+        "example": "Il faut laisser le corps récupérer — le repos est aussi un entraînement.",
+        "emoji": "😴"
       },
       {
-        "fr": "un résultat",
-        "es": "un resultado",
-        "example": "Je vois déjà un résultat.",
-        "emoji": "✅"
+        "fr": "se blesser",
+        "es": "lesionarse",
+        "example": "Je m'étire toujours après le sport pour ne pas me blesser.",
+        "emoji": "🤕"
       },
       {
         "fr": "la motivation",
         "es": "la motivación",
-        "example": "J'ai beaucoup de motivation ce mois-ci.",
-        "emoji": "🚀"
+        "example": "Quand je perds la motivation, je pense à pourquoi j'ai commencé.",
+        "emoji": "🎯"
       },
       {
-        "fr": "un suivi",
-        "es": "un seguimiento",
-        "example": "Le coach propose un suivi personnalisé.",
-        "emoji": "📋"
+        "fr": "un objectif",
+        "es": "un objetivo",
+        "example": "Mon objectif pour ce mois : m'entraîner trois fois par semaine sans exception.",
+        "emoji": "🏁"
       },
       {
-        "fr": "un programme personnalisé",
-        "es": "un programa personalizado",
-        "example": "Je voudrais un programme personnalisé.",
-        "emoji": "📝"
+        "fr": "Quelle heure est-il ?",
+        "es": "¿Qué hora es? (formal)",
+        "example": "Excusez-moi, quelle heure est-il ?",
+        "emoji": "🕐"
       },
       {
-        "fr": "peser",
-        "es": "pesar",
-        "example": "On va vous peser au premier cours.",
-        "emoji": "⚖️"
+        "fr": "Il est quelle heure ?",
+        "es": "¿Qué hora es? (informal)",
+        "example": "Il est quelle heure maintenant ?",
+        "emoji": "🕑"
       },
       {
-        "fr": "souffler",
-        "es": "tomar aliento",
-        "example": "Attends, je dois souffler une minute.",
-        "emoji": "😮‍💨"
+        "fr": "il est… heure(s)",
+        "es": "son las… / es la…",
+        "example": "Il est six heures. Il est une heure.",
+        "emoji": "🕕"
       },
       {
-        "fr": "Je m'entraîne trois fois par semaine.",
-        "es": "Me entreno tres veces a la semana.",
-        "example": "Je m'entraîne trois fois par semaine.",
+        "fr": "il est midi",
+        "es": "es el mediodía",
+        "example": "Il est midi — on va déjeuner ?",
+        "emoji": "🍽️"
+      },
+      {
+        "fr": "il est minuit",
+        "es": "es la medianoche",
+        "example": "Il est minuit — il faut dormir !",
+        "emoji": "🌙"
+      },
+      {
+        "fr": "et quart",
+        "es": "y cuarto (+ 15 min)",
+        "example": "Il est sept heures et quart. → 7h15",
+        "emoji": "🕜"
+      },
+      {
+        "fr": "et demie",
+        "es": "y media (+ 30 min)",
+        "example": "Il est sept heures et demie. → 7h30",
+        "emoji": "🕢"
+      },
+      {
+        "fr": "moins le quart",
+        "es": "menos cuarto (− 15 min)",
+        "example": "Il est huit heures moins le quart. → 7h45",
+        "emoji": "🕥"
+      },
+      {
+        "fr": "…pile",
+        "es": "en punto",
+        "example": "Il est six heures pile. → exactamente las 6h",
+        "emoji": "⏱️"
+      },
+      {
+        "fr": "du matin",
+        "es": "de la mañana",
+        "example": "Je me lève à sept heures du matin.",
+        "emoji": "🌅"
+      },
+      {
+        "fr": "de l'après-midi",
+        "es": "de la tarde",
+        "example": "Il est trois heures de l'après-midi.",
+        "emoji": "☀️"
+      },
+      {
+        "fr": "du soir",
+        "es": "de la noche",
+        "example": "Je me couche à dix heures du soir.",
+        "emoji": "🌆"
+      },
+      {
+        "fr": "vers",
+        "es": "hacia / alrededor de",
+        "example": "Je me couche vers 22h30.",
+        "emoji": "🔀"
+      },
+      {
+        "fr": "tôt",
+        "es": "temprano",
+        "example": "Je me lève très tôt le matin.",
+        "emoji": "🐓"
+      },
+      {
+        "fr": "tard",
+        "es": "tarde",
+        "example": "Je ne me couche jamais trop tard en semaine.",
+        "emoji": "🦉"
+      },
+      {
+        "fr": "à [heure]",
+        "es": "a las [hora]",
+        "example": "Je m'entraîne à 18h.",
+        "emoji": "📍"
+      },
+      {
+        "fr": "de [heure] à [heure]",
+        "es": "de X a X",
+        "example": "Je travaille de 9h à 17h.",
+        "emoji": "➡️"
+      },
+      {
+        "fr": "environ / à peu près",
+        "es": "aproximadamente",
+        "example": "Il est environ 20h.",
+        "emoji": "⏳"
+      },
+      {
+        "fr": "il est [heure] environ",
+        "es": "son aproximadamente las X",
+        "example": "Il est 7h environ — pas encore sûre.",
+        "emoji": "🌫️"
+      },
+      {
+        "fr": "ma journée en français",
+        "es": "mi día en francés",
+        "example": "Je me lève à 6h30, je m'entraîne à 18h, je me couche vers 22h.",
         "emoji": "📅"
-      },
-      {
-        "fr": "Je voudrais m'inscrire.",
-        "es": "Quisiera inscribirme.",
-        "example": "Bonjour, je voudrais m'inscrire.",
-        "emoji": "🖊️"
-      },
-      {
-        "fr": "C'est inclus dans l'abonnement ?",
-        "es": "¿Está incluido en el abono?",
-        "example": "Le sauna, c'est inclus dans l'abonnement ?",
-        "emoji": "🎟️"
-      },
-      {
-        "fr": "Je veux me remettre en forme.",
-        "es": "Quiero ponerme en forma.",
-        "example": "Je veux me remettre en forme.",
-        "emoji": "🏃"
-      },
-      {
-        "fr": "Quel est votre objectif ?",
-        "es": "¿Cuál es su objetivo?",
-        "example": "Quel est votre objectif ?",
-        "emoji": "❓"
-      },
-      {
-        "fr": "avoir la patate",
-        "es": "tener energía (informal)",
-        "example": "Ce matin, j'ai la patate !",
-        "emoji": "🥔"
-      },
-      {
-        "fr": "un bilan",
-        "es": "una evaluación",
-        "example": "Le coach fait un bilan de départ.",
-        "emoji": "📊"
-      },
-      {
-        "fr": "Je fais du sport pour me sentir bien.",
-        "es": "Hago deporte para sentirme bien.",
-        "example": "Je fais du sport pour me sentir bien.",
-        "emoji": "❤️"
       }
     ],
     "flashQuiz": [
       {
-        "emoji": "💪",
-        "concept": "tonificarse",
+        "emoji": "🕖",
+        "concept": "«Son las siete y cuarto»",
         "options": [
-          "se tonifier",
-          "se reposer",
-          "peser"
+          "Il est sept heures et quart.",
+          "Il est sept heures quart.",
+          "Il est sept et quart heures."
         ],
         "answer": 0
       },
       {
-        "emoji": "⚖️",
-        "concept": "perder peso",
+        "emoji": "🍽️",
+        "concept": "¿Cuándo se dice MIDI en lugar del número?",
         "options": [
-          "prendre du muscle",
-          "perdre du poids",
-          "progresser"
+          "Cuando son las 12h del día.",
+          "Cuando son las 12h de la noche.",
+          "Nunca — siempre «douze heures»."
         ],
-        "answer": 1
+        "answer": 0
+      },
+      {
+        "emoji": "🕐",
+        "concept": "«Es la una»",
+        "options": [
+          "Il est une heure.",
+          "Il est un heure.",
+          "Il est une heures."
+        ],
+        "answer": 0
+      },
+      {
+        "emoji": "🕗",
+        "concept": "«Il est huit heures moins le quart» =",
+        "options": [
+          "Son las ocho menos cuarto (7h45).",
+          "Son las ocho y cuarto (8h15).",
+          "Son las ocho y media (8h30)."
+        ],
+        "answer": 0
       },
       {
         "emoji": "🏋️",
-        "concept": "ganar músculo",
+        "concept": "«Me entreno alrededor de las 18h»",
         "options": [
-          "prendre du muscle",
-          "se blesser",
-          "souffler"
+          "Je m'entraîne vers 18h.",
+          "Je m'entraîne à environ 18h.",
+          "Je m'entraîne dans 18h."
         ],
         "answer": 0
       },
       {
-        "emoji": "💦",
-        "concept": "sudar",
+        "emoji": "🕘",
+        "concept": "«De las 9h a las 17h»",
         "options": [
-          "transpirer",
-          "récupérer",
-          "peser"
-        ],
-        "answer": 0
-      },
-      {
-        "emoji": "😴",
-        "concept": "descansar",
-        "options": [
-          "se dépasser",
-          "se reposer",
-          "s'améliorer"
-        ],
-        "answer": 1
-      },
-      {
-        "emoji": "🔥",
-        "concept": "superarse",
-        "options": [
-          "se reposer",
-          "se dépasser",
-          "se blesser"
-        ],
-        "answer": 1
-      },
-      {
-        "emoji": "🤕",
-        "concept": "lesionarse",
-        "options": [
-          "se blesser",
-          "transpirer",
-          "progresser"
-        ],
-        "answer": 0
-      },
-      {
-        "emoji": "🦵",
-        "concept": "tener agujetas",
-        "options": [
-          "être fatigué",
-          "avoir des courbatures",
-          "être en forme"
-        ],
-        "answer": 1
-      },
-      {
-        "emoji": "🎯",
-        "concept": "un objetivo",
-        "options": [
-          "un résultat",
-          "un objectif",
-          "un bilan"
-        ],
-        "answer": 1
-      },
-      {
-        "emoji": "🚀",
-        "concept": "la motivación",
-        "options": [
-          "la motivation",
-          "le suivi",
-          "le résultat"
-        ],
-        "answer": 0
-      },
-      {
-        "emoji": "⬆️",
-        "concept": "mejorar",
-        "options": [
-          "s'améliorer",
-          "se peser",
-          "se reposer"
-        ],
-        "answer": 0
-      },
-      {
-        "emoji": "🏃",
-        "concept": "ponerse en forma",
-        "options": [
-          "me remettre en forme",
-          "me reposer",
-          "me blesser"
-        ],
-        "answer": 0
-      },
-      {
-        "emoji": "📊",
-        "concept": "una evaluación",
-        "options": [
-          "un bilan",
-          "un objectif",
-          "un suivi"
-        ],
-        "answer": 0
-      },
-      {
-        "emoji": "🥔",
-        "concept": "tener energía (informal)",
-        "options": [
-          "avoir la patate",
-          "avoir des courbatures",
-          "être fatigué"
-        ],
-        "answer": 0
-      },
-      {
-        "emoji": "🙂",
-        "concept": "sentirse bien",
-        "options": [
-          "se sentir bien",
-          "se blesser",
-          "transpirer"
+          "De 9h à 17h.",
+          "Entre 9h et 17h.",
+          "Depuis 9h jusqu'à 17h."
         ],
         "answer": 0
       }
     ],
     "grammar": [
       {
-        "formula": "JE ME + verbe pronominal (je m'entraîne, je me repose, je me sens bien)",
-        "use": "Verbos pronominales: la acción recae sobre uno mismo. El pronombre concuerda con el sujeto (je me, tu te, il/elle se)."
+        "formula": "Quelle heure est-il ? · Il est quelle heure ?",
+        "use": "Las dos formas de preguntar la hora: la primera es formal, la segunda es la que se oye a diario."
       },
       {
-        "formula": "JE VOUDRAIS + infinitif / nom (je voudrais m'inscrire)",
-        "use": "Cortesía para pedir o expresar un deseo, más suave que « je veux »."
+        "formula": "IL EST + [número] + HEURE(S)",
+        "use": "Il est une heure. · Il est deux heures. ⚠️ UNE heure — «heure» es femenino, es el único número que cambia."
       },
       {
-        "formula": "POUR + infinitif (je fais du sport pour me sentir bien)",
-        "use": "Expresar la finalidad o el objetivo de una acción: '¿para qué?'."
+        "formula": "IL EST MIDI · IL EST MINUIT",
+        "use": "12h00 y 00h00 tienen nombre propio: nunca «douze heures» ni «zéro heure», y no llevan «heures»."
       },
       {
-        "formula": "PLUS / MOINS / AUSSI + adjectif + QUE + partitifs (du/de la/des)",
-        "use": "Repaso integrado: comparar (más/menos/tan… que) y hablar de cantidades no contables (du sport, de la motivation)."
+        "formula": "+ ET QUART · + ET DEMIE · + MOINS LE QUART",
+        "use": "7h15 → sept heures et quart · 7h30 → sept heures et demie · 7h45 → huit heures moins le quart. El ET y el LE son obligatorios."
+      },
+      {
+        "formula": "DU MATIN · DE L'APRÈS-MIDI · DU SOIR",
+        "use": "En francés no existe AM ni PM: se precisa el momento del día solo cuando el contexto no es obvio."
+      },
+      {
+        "formula": "VERS · TÔT · TARD · DE [heure] À [heure]",
+        "use": "Je me couche vers 22h30 (hora aproximada). · Je me lève tôt. · Je travaille de 9h à 17h (rango)."
       }
     ],
     "vocabGames": {
       "reading": [
         {
-          "title": "Texte · Un nouvel abonnement au gym",
-          "text": "Camille arrive à la salle de sport. Elle dit à la coach : « Bonjour, je voudrais m'inscrire. » La coach demande : « Quel est votre objectif ? » Camille répond : « Je veux me remettre en forme et perdre du poids. Je fais du sport pour me sentir bien. » La coach propose un programme personnalisé avec un suivi. « On va faire un bilan aujourd'hui, et on va vous peser. » Camille demande : « Le sauna, c'est inclus dans l'abonnement ? » — « Oui, c'est inclus. » Camille commence son cours. Elle transpire beaucoup et, à la fin, elle a des courbatures. Mais elle se sent bien : « J'ai la patate ! Je vais m'entraîner trois fois par semaine. »",
+          "title": "Les erreurs classiques de l'heure",
+          "text": "Quatre phrases, quatre pièges. « Il est un heure » — non : heure est féminin, donc UNE heure. « Il est douze heures » — non : à midi on dit MIDI. « Il est sept et quart » — non : le mot HEURES ne disparaît jamais (sauf midi et minuit). « Il est huit heures moins quart » — non : l'article LE est obligatoire, moins LE quart.",
           "questions": [
             {
-              "q": "¿Cuál es el objetivo de Camille?",
+              "q": "¿Por qué «Il est un heure» es incorrecto?",
               "options": [
-                "Ganar músculo y competir",
-                "Ponerse en forma y perder peso",
-                "Descansar y recuperarse"
-              ],
-              "answer": 1
-            },
-            {
-              "q": "¿Qué le ofrece la coach?",
-              "options": [
-                "Un programa personalizado con seguimiento",
-                "Solo una clase gratis",
-                "Un descuento en el abono"
+                "Porque «heure» es femenino → une heure",
+                "Porque falta «et»",
+                "Porque se dice «midi»"
               ],
               "answer": 0
             },
             {
-              "q": "¿Cómo se siente Camille al final?",
+              "q": "¿Qué palabra falta en «Il est sept et quart» ?",
               "options": [
-                "Lesionada y cansada, quiere parar",
-                "Con agujetas pero bien, con energía",
-                "Aburrida y sin motivación"
+                "heures",
+                "le",
+                "du matin"
               ],
-              "answer": 1
+              "answer": 0
+            },
+            {
+              "q": "La forma correcta de 7h45 es:",
+              "options": [
+                "Il est huit heures moins le quart.",
+                "Il est huit heures moins quart.",
+                "Il est sept heures quarante-cinq quart."
+              ],
+              "answer": 0
             }
           ]
         }
       ],
       "listening": [
         {
-          "audio": "Bonjour, je voudrais m'inscrire à la salle de sport.",
-          "question": "¿Qué quiere hacer la persona?",
+          "audio": "Il est six heures et demie du matin.",
+          "question": "¿Qué hora se dice?",
           "options": [
-            "Cancelar su abono",
-            "Inscribirse en el gimnasio",
-            "Pedir un reembolso"
-          ],
-          "answer": 1
-        },
-        {
-          "audio": "Mon objectif, c'est de perdre du poids et de me tonifier.",
-          "question": "¿Cuál es su objetivo?",
-          "options": [
-            "Ganar músculo",
-            "Perder peso y tonificarse",
-            "Descansar más"
-          ],
-          "answer": 1
-        },
-        {
-          "audio": "Après le cours, j'ai des courbatures aux jambes.",
-          "question": "¿Qué siente después de la clase?",
-          "options": [
-            "Tiene agujetas en las piernas",
-            "Está lesionado",
-            "Tiene mucha energía"
+            "6h30",
+            "6h15",
+            "7h30"
           ],
           "answer": 0
         },
         {
-          "audio": "Je m'entraîne trois fois par semaine pour me sentir bien.",
-          "question": "¿Con qué frecuencia se entrena?",
+          "audio": "Il est huit heures moins le quart.",
+          "question": "¿Qué hora se dice?",
           "options": [
-            "Todos los días",
-            "Tres veces por semana",
-            "Una vez al mes"
+            "7h45",
+            "8h15",
+            "8h45"
           ],
-          "answer": 1
+          "answer": 0
         },
         {
-          "audio": "Le suivi personnalisé, c'est inclus dans l'abonnement ?",
-          "question": "¿Qué pregunta el cliente?",
+          "audio": "Je m'entraîne de dix-huit heures à dix-neuf heures et demie.",
+          "question": "¿Cuánto dura el entrenamiento?",
           "options": [
-            "Si el seguimiento está incluido en el abono",
-            "Cuánto cuesta el sauna",
-            "A qué hora abre el gimnasio"
+            "1h30",
+            "1h",
+            "2h"
           ],
           "answer": 0
         }
       ],
       "speaking": [
         {
-          "situation": "Entras al gimnasio y dices que quieres inscribirte.",
-          "expected": "Bonjour, je voudrais m'inscrire, s'il vous plaît."
+          "situation": "Son las 8h00 en punto. Dilo en francés.",
+          "expected": "Il est huit heures."
         },
         {
-          "situation": "La coach te pregunta tu objetivo. Di que quieres ponerte en forma y perder peso.",
-          "expected": "Je veux me remettre en forme et perdre du poids."
+          "situation": "Son las 10h15. Usa «et quart».",
+          "expected": "Il est dix heures et quart."
         },
         {
-          "situation": "Explica por qué haces deporte (para sentirte bien).",
-          "expected": "Je fais du sport pour me sentir bien."
+          "situation": "Son las 6h30. Usa «et demie».",
+          "expected": "Il est six heures et demie."
         },
         {
-          "situation": "Di con qué frecuencia te entrenas a la semana.",
-          "expected": "Je m'entraîne trois fois par semaine."
+          "situation": "Son las 3h45. Usa «moins le quart».",
+          "expected": "Il est quatre heures moins le quart."
         },
         {
-          "situation": "Pregunta si el seguimiento personalizado está incluido en el abono.",
-          "expected": "Le suivi personnalisé, c'est inclus dans l'abonnement ?"
+          "situation": "Son las 12h00 del día.",
+          "expected": "Il est midi."
+        },
+        {
+          "situation": "Es la 1h00.",
+          "expected": "Il est une heure."
         }
       ],
       "writing": [
         {
-          "prompt": "Traduce: 'Quisiera inscribirme.'",
-          "answer": "Je voudrais m'inscrire."
+          "prompt": "«Son las nueve de la mañana.»",
+          "answer": "Il est neuf heures du matin."
         },
         {
-          "prompt": "Traduce: 'Hago deporte para sentirme bien.'",
-          "answer": "Je fais du sport pour me sentir bien."
+          "prompt": "«Son las tres y cuarto de la tarde.»",
+          "answer": "Il est trois heures et quart de l'après-midi."
         },
         {
-          "prompt": "Completa: « Je m'______ trois fois par semaine. » (entrenarse)",
-          "answer": "entraîne"
+          "prompt": "«Son las siete y media.»",
+          "answer": "Il est sept heures et demie."
         },
         {
-          "prompt": "Traduce: 'Quiero ponerme en forma.'",
-          "answer": "Je veux me remettre en forme."
+          "prompt": "«Son las once menos cuarto de la noche.»",
+          "answer": "Il est onze heures moins le quart du soir."
         },
         {
-          "prompt": "Ordena: [ objectif / est / votre / quel / ? ]",
-          "answer": "Quel est votre objectif ?"
+          "prompt": "«Me levanto alrededor de las seis y media.»",
+          "answer": "Je me lève vers six heures et demie."
+        },
+        {
+          "prompt": "«Me acuesto muy tarde los viernes.»",
+          "answer": "Je me couche très tard le vendredi."
         }
       ]
     },
     "clesReading": {
-      "title": "Lecture · Révision intégrée du mois J'OSE",
-      "text": "Aujourd'hui, Léo révise tout le mois. Le matin, au café : « Je voudrais un café, s'il vous plaît. » Puis, au marché, il achète du fromage et des fruits — il utilise les partitifs : « du fromage, de la confiture, des pommes. » Dans la rue, il demande son chemin : « Pour aller à la pharmacie, s'il vous plaît ? » À la pharmacie, il explique : « J'ai mal à la tête depuis hier. » Il compare deux boîtes : « Celle-ci est moins chère que celle-là. » Enfin, au gym, il parle de lui avec les verbes pronominaux : « Je m'entraîne trois fois par semaine et je fais du sport pour me sentir bien. » Léo mélange toutes les structures du mois avec confiance.",
+      "title": "Une journée en français — avec des heures !",
+      "text": "— Tu te lèves à quelle heure le matin ?\n— Je me lève à six heures et demie. Il est environ sept heures moins le quart quand je quitte la maison.\n\n— Et tu t'entraînes quand ?\n— Je m'entraîne de dix-huit heures à dix-neuf heures et demie. Après la séance, j'ai des courbatures — mais je me sens bien !\n\n— Tu as un objectif sportif cette année ?\n— Oui ! Mon objectif, c'est de progresser chaque semaine et d'être en forme. Je veux me dépasser — sans me blesser, bien sûr !\n\n— Et tu te couches tôt ?\n— Je me couche vers vingt-deux heures trente. Jamais trop tard — le corps a besoin de récupérer.",
       "questions": [
         {
-          "q": "¿Qué estructura usa Léo para pedir con cortesía en el café?",
+          "q": "¿A qué hora sale de casa?",
           "options": [
-            "Je veux + nom",
-            "Je voudrais + nom",
-            "Il y a + nom"
+            "Hacia las 6h45",
+            "A las 6h30",
+            "A las 7h30"
           ],
-          "answer": 1
+          "answer": 0
         },
         {
-          "q": "En el mercado, « du fromage, de la confiture, des pommes » son ejemplos de:",
+          "q": "¿Cuál es su objetivo deportivo?",
           "options": [
-            "Comparativos",
-            "Partitivos (cantidades no contables)",
-            "Verbos pronominales"
+            "Progresar cada semana y estar en forma",
+            "Perder peso rápido",
+            "Competir este año"
           ],
-          "answer": 1
+          "answer": 0
         },
         {
-          "q": "¿Cómo expresa Léo la finalidad de hacer deporte?",
+          "q": "¿Por qué no se acuesta tarde?",
           "options": [
-            "pour + infinitif (pour me sentir bien)",
-            "avoir mal à + partie du corps",
-            "plus… que"
+            "Porque el cuerpo necesita recuperarse",
+            "Porque trabaja de noche",
+            "Porque se levanta a mediodía"
           ],
           "answer": 0
         }
@@ -6634,146 +6540,95 @@ export const WEEK34: Record<string, WeekDay> = {
     "clesGames": {
       "listening": [
         {
-          "audio": "Je voudrais un café et une eau, s'il vous plaît.",
-          "question": "¿Qué estructura de cortesía reconoces?",
+          "audio": "Je me couche vers vingt-deux heures trente. Jamais trop tard.",
+          "question": "¿A qué hora se acuesta?",
           "options": [
-            "Il y a + nom",
-            "Je voudrais + nom",
-            "Avoir mal à"
-          ],
-          "answer": 1
-        },
-        {
-          "audio": "Pour aller à la gare, s'il vous plaît ?",
-          "question": "¿Qué expresa « pour + infinitif » aquí?",
-          "options": [
-            "Una comparación",
-            "La finalidad / el destino",
-            "Una cantidad"
-          ],
-          "answer": 1
-        },
-        {
-          "audio": "Je prends du fromage, de la confiture et des fruits.",
-          "question": "¿Qué tipo de artículos se usan?",
-          "options": [
-            "Partitivos (du/de la/des)",
-            "Demostrativos (ce/cette)",
-            "Comparativos"
+            "Hacia las 22h30",
+            "A las 23h30",
+            "A las 20h30"
           ],
           "answer": 0
         },
         {
-          "audio": "Ce sac est plus grand que l'autre.",
-          "question": "¿Qué estructura gramatical es?",
+          "audio": "Il est environ sept heures moins le quart quand je quitte la maison.",
+          "question": "¿Qué expresión de aproximación usa?",
           "options": [
-            "Un partitivo",
-            "Un comparativo (plus… que)",
-            "Un verbo pronominal"
-          ],
-          "answer": 1
-        },
-        {
-          "audio": "Je m'entraîne et je me repose bien.",
-          "question": "¿Qué tipo de verbos son « je m'entraîne / je me repose »?",
-          "options": [
-            "Verbos pronominales",
-            "Futur proche",
-            "Partitivos"
+            "environ",
+            "pile",
+            "vers midi"
           ],
           "answer": 0
         }
       ],
       "speaking": [
         {
-          "situation": "Pide un café con cortesía usando « je voudrais ».",
-          "expected": "Je voudrais un café, s'il vous plaît."
+          "situation": "Cuenta a qué hora te levantas y a qué hora sales de casa.",
+          "expected": "Je me lève à six heures et demie et je quitte la maison vers sept heures moins le quart."
         },
         {
-          "situation": "Pregunta cómo llegar a la farmacia usando « pour + infinitif ».",
-          "expected": "Pour aller à la pharmacie, s'il vous plaît ?"
+          "situation": "Di a qué hora te entrenas, usando «de… à…».",
+          "expected": "Je m'entraîne de dix-huit heures à dix-neuf heures et demie."
         },
         {
-          "situation": "Di que te duele la cabeza usando « avoir mal à ».",
-          "expected": "J'ai mal à la tête."
-        },
-        {
-          "situation": "Compara dos objetos: di que este es más barato que aquel.",
-          "expected": "Celui-ci est moins cher que celui-là."
-        },
-        {
-          "situation": "Habla de ti con un verbo pronominal: di que te entrenas tres veces por semana.",
-          "expected": "Je m'entraîne trois fois par semaine."
+          "situation": "Explica tu objetivo deportivo de este mes.",
+          "expected": "Mon objectif, c'est de progresser chaque semaine et d'être en forme sans me blesser."
         }
       ],
       "writing": [
         {
-          "prompt": "Traduce con cortesía: 'Quisiera un té, por favor.'",
-          "answer": "Je voudrais un thé, s'il vous plaît."
+          "prompt": "Escribe tu mañana con horas (levantarte + salir de casa).",
+          "answer": "Je me lève à six heures et demie du matin. Il est sept heures moins le quart quand je quitte la maison."
         },
         {
-          "prompt": "Completa con partitivo: « Je prends ___ pain et ___ eau. »",
-          "answer": "du pain et de l'eau"
-        },
-        {
-          "prompt": "Traduce: 'Me duele la garganta.' (avoir mal à)",
-          "answer": "J'ai mal à la gorge."
-        },
-        {
-          "prompt": "Completa el comparativo: « Ce café est ___ cher ___ l'autre. » (menos… que)",
-          "answer": "moins cher que"
-        },
-        {
-          "prompt": "Traduce con « pour + infinitif »: 'Hago deporte para sentirme bien.'",
-          "answer": "Je fais du sport pour me sentir bien."
+          "prompt": "Escribe tu tarde/noche con horas (entrenar + acostarte).",
+          "answer": "Je m'entraîne de dix-huit heures à dix-neuf heures et demie et je me couche vers vingt-deux heures trente."
         }
       ]
     },
     "defiSteps": [
       {
-        "serveur": "Bonjour et bienvenue à la salle de sport ! Je peux vous aider ?",
-        "hint": "Saluda y di con cortesía que quieres inscribirte.",
-        "example": "Bonjour ! Oui, je voudrais m'inscrire, s'il vous plaît."
+        "serveur": "Tu te lèves à quelle heure le matin ?",
+        "hint": "Di la hora a la que te levantas y a la que sales de casa (usa et demie / moins le quart).",
+        "example": "Je me lève à six heures et demie. Il est sept heures moins le quart quand je quitte la maison."
       },
       {
-        "serveur": "Très bien ! Quel est votre objectif ?",
-        "hint": "Di tu objetivo usando verbos pronominales o expresiones del día (ponerte en forma, perder peso, tonificarte).",
-        "example": "Je veux me remettre en forme, perdre du poids et me tonifier."
+        "serveur": "Et ta matinée, elle se passe comment ?",
+        "hint": "Di de qué hora a qué hora trabajas o estudias (de… à…).",
+        "example": "Je travaille de neuf heures à midi, puis je déjeune."
       },
       {
-        "serveur": "Parfait. On propose un programme personnalisé avec un suivi. Vous vous entraînez souvent ?",
-        "hint": "Di con qué frecuencia te entrenas y por qué haces deporte (pour + infinitif).",
-        "example": "Je m'entraîne trois fois par semaine, et je fais du sport pour me sentir bien."
+        "serveur": "Et tu t'entraînes quand ?",
+        "hint": "Di a qué hora entrenas y cómo te sientes después (courbatures, en forme…).",
+        "example": "Je m'entraîne de dix-huit heures à dix-neuf heures et demie. Après, j'ai des courbatures mais je me sens bien !"
       },
       {
-        "serveur": "Excellent ! On va faire un bilan et vous peser aujourd'hui.",
-        "hint": "Pregunta si algo (el sauna, el seguimiento) está incluido en el abono.",
-        "example": "D'accord. Le suivi personnalisé, c'est inclus dans l'abonnement ?"
+        "serveur": "Tu as un objectif ce mois-ci ?",
+        "hint": "Habla de tu objetivo deportivo: progresser, se dépasser, être en forme.",
+        "example": "Mon objectif, c'est de progresser chaque semaine et d'être en forme — sans me blesser."
       },
       {
-        "serveur": "Oui, c'est inclus. Bon premier cours ! Comment vous sentez-vous ?",
-        "hint": "Di cómo te sientes usando el vocabulario (energía, agujetas, sentirse bien) y despídete con motivación.",
-        "example": "J'ai des courbatures, mais je me sens bien et j'ai la patate ! Merci, à bientôt !"
+        "serveur": "Et tu te couches à quelle heure ?",
+        "hint": "Termina tu día con una hora aproximada (vers) y tôt/tard.",
+        "example": "Je me couche vers vingt-deux heures trente. Jamais trop tard — le corps a besoin de récupérer."
       }
     ],
     "defiCriteria": [
-      "Usa « je voudrais » para inscribirse con cortesía.",
-      "Emplea al menos dos verbos pronominales (je m'entraîne, je me sens, je me remets en forme).",
-      "Expresa un objetivo y una finalidad con « pour + infinitif ».",
-      "Pregunta si algo está incluido en el abono (C'est inclus dans l'abonnement ?).",
-      "Integra vocabulario del gimnasio (objectif, courbatures, en forme, la patate).",
-      "Mantiene un intercambio natural y se despide con energía."
+      "Usa al menos 5 verbos (pronominales del Día 19 + vocabulario del Día 20)",
+      "Expresa correctamente al menos 3 horas",
+      "Usa et quart, et demie o moins le quart en al menos una frase",
+      "Usa vers, tôt o tard en al menos una frase",
+      "Menciona tu objetivo o cómo se siente el cuerpo (courbatures, en forme, récupérer)"
     ],
     "tutor": {
-      "role": "un examinateur / une examinatrice del reto final que integra las 10 situaciones del mes; escena de evaluación oral en un gimnasio",
-      "opener_fr": "Bonjour et bienvenue au défi final J'OSE ! Aujourd'hui, on mélange tout : le café, le marché, la pharmacie… et le gym. Alors, quel est votre objectif ?",
-      "opener_es": "¡Hola y bienvenido/a al reto final J'OSE! Hoy mezclamos todo: el café, el mercado, la farmacia… y el gimnasio. Entonces, ¿cuál es tu objetivo?",
+      "role": "Eres la IA Coach de Liberté en el Día 20 («Quelle heure est-il ?»). El alumno cuenta su rutina diaria CON HORAS reales, combinando los verbos pronominales del Día 19 con las expresiones de hora del Día 20. Corrige con cariño la construcción IL EST + heure(s), el uso de UNE heure, midi/minuit, et quart / et demie / moins le quart, y vers/tôt/tard. Celebra cada hora bien dicha.",
+      "opener_fr": "Bonjour ! On est au Jour 20 — le dernier jour de vocabulaire du mois. Dis-moi : ta journée, elle commence à quelle heure ?",
+      "opener_es": "¡Buenos días! Estamos en el Día 20 — el último día de vocabulario del mes. Cuéntame: ¿a qué hora empieza tu día?",
       "objectives": [
-        "Hablar de tus objetivos deportivos usando verbos pronominales (je m'entraîne, je me sens bien).",
-        "Inscribirte y preguntar por el abono con cortesía (je voudrais, c'est inclus ?).",
-        "Integrar las estructuras del mes (je voudrais, il y a, pour + infinitif, avoir mal à, comparatifs, partitifs) en situaciones reales."
+        "Preguntar y decir la hora: Quelle heure est-il ? / Il est… (midi, minuit, une heure)",
+        "Usar et quart, et demie, moins le quart y situar la rutina con à, de… à…, vers, tôt, tard",
+        "Hablar de objetivos y sensaciones deportivas: progresser, se dépasser, être en forme, courbatures"
       ],
-      "topic": "Gimnasio y reto final del mes - describir objetivos e integrar las 10 situaciones"
+      "topic": "Cuéntame tu día con horas"
     }
   }
 };

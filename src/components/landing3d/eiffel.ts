@@ -121,6 +121,97 @@ function buildStruts(): Strut[] {
   return struts;
 }
 
+/**
+ * Just the champagne sparkles + amber aura + red beacon, no geometry — layered
+ * over the REAL Eiffel Tower in Google-tiles mode (same origin, same 90u
+ * height). The photogrammetry tower is frozen daylight; this brings it to life.
+ */
+export function buildTowerGlow(sparkleCount: number): {
+  group: THREE.Group;
+  materials: THREE.ShaderMaterial[];
+  tick: (t: number) => void;
+} {
+  const group = new THREE.Group();
+  const rnd = mulberry32(1889);
+
+  // Sparkles distributed inside the tower's tapering silhouette.
+  const spPos = new Float32Array(sparkleCount * 3);
+  const spPhase = new Float32Array(sparkleCount);
+  for (let i = 0; i < sparkleCount; i++) {
+    const y = rnd() * H;
+    const w = halfWidth(y) * 1.05;
+    spPos[i * 3] = (rnd() * 2 - 1) * w;
+    spPos[i * 3 + 1] = y;
+    spPos[i * 3 + 2] = (rnd() * 2 - 1) * w;
+    spPhase[i] = rnd() * Math.PI * 2;
+  }
+  const spGeo = new THREE.BufferGeometry();
+  spGeo.setAttribute("position", new THREE.BufferAttribute(spPos, 3));
+  spGeo.setAttribute("aPhase", new THREE.BufferAttribute(spPhase, 1));
+  const sparkleMat = new THREE.ShaderMaterial({
+    uniforms: { uTime: { value: 0 }, uMap: { value: glowTexture(64) } },
+    vertexShader: SPARKLE_VERT,
+    fragmentShader: SPARKLE_FRAG,
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+  });
+  const sparkles = new THREE.Points(spGeo, sparkleMat);
+  sparkles.frustumCulled = false;
+  group.add(sparkles);
+
+  const aura = new THREE.Sprite(
+    new THREE.SpriteMaterial({
+      map: auraTexture(256, "255,190,100"),
+      transparent: true,
+      opacity: 0.38,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    }),
+  );
+  aura.position.set(0, H * 0.45, 0);
+  aura.scale.set(70, 95, 1);
+  group.add(aura);
+
+  const beaconMat = new THREE.SpriteMaterial({
+    map: glowTexture(64, "#ff5544"),
+    color: new THREE.Color("#ff4433"),
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+  });
+  const beacon = new THREE.Sprite(beaconMat);
+  beacon.position.set(0, H + 7, 0);
+  beacon.scale.setScalar(4);
+  group.add(beacon);
+
+  const tick = (t: number) => {
+    beaconMat.opacity = 0.25 + 0.75 * Math.max(0, Math.sin(t * 1.1));
+  };
+  return { group, materials: [sparkleMat], tick };
+}
+
+const SPARKLE_VERT = /* glsl */ `
+  attribute float aPhase;
+  uniform float uTime;
+  varying float vFlash;
+  void main() {
+    vFlash = pow(max(0.0, sin(uTime * 2.1 + aPhase)), 24.0);
+    vec4 mv = modelViewMatrix * vec4(position, 1.0);
+    gl_PointSize = (3.0 + vFlash * 5.0) * (120.0 / max(1.0, -mv.z));
+    gl_Position = projectionMatrix * mv;
+  }
+`;
+
+const SPARKLE_FRAG = /* glsl */ `
+  uniform sampler2D uMap;
+  varying float vFlash;
+  void main() {
+    vec4 tex = texture2D(uMap, gl_PointCoord);
+    gl_FragColor = vec4(vec3(1.0), tex.a * vFlash);
+  }
+`;
+
 export function buildEiffel(
   towerLightCount: number,
   sparkleCount: number,

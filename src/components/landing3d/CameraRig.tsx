@@ -2,7 +2,7 @@ import { useMemo, useRef, useEffect } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { createScrollRig } from "./scrollProgress";
-import { samplePose, sampleHeading } from "./cameraPath";
+import { proceduralFlight, type Flight } from "./cameraPath";
 
 /**
  * Drives the camera from native page scroll.
@@ -17,8 +17,19 @@ import { samplePose, sampleHeading } from "./cameraPath";
  * - Initializes AT the current scroll position: scrollRestoration means the
  *   page can mount mid-flight, and it must not replay from the top.
  */
-export function CameraRig() {
+export function CameraRig({
+  flight = proceduralFlight,
+  idleDrift = true,
+}: {
+  flight?: Flight;
+  /** Streaming photogrammetry re-evaluates its level of detail every time
+   *  the camera moves, so a camera that never fully stops keeps the tiles
+   *  refining forever ("it gets sharp, then starts over"). Real-Paris mode
+   *  turns the ambient drift off so each stop settles and STAYS sharp. */
+  idleDrift?: boolean;
+}) {
   const camera = useThree((s) => s.camera) as THREE.PerspectiveCamera;
+  const { samplePose, sampleHeading } = flight;
   const rig = useMemo(() => createScrollRig(), []);
   useEffect(() => () => rig.dispose(), [rig]);
 
@@ -42,7 +53,7 @@ export function CameraRig() {
     const { fov } = samplePose(s.current, pos.current, target.current);
 
     // Idle drift at the hero stop so the opening frame breathes.
-    if (s.current < 0.05) {
+    if (idleDrift && s.current < 0.05) {
       const t = performance.now() / 1000;
       pos.current.x += Math.sin(t * 0.6) * 1.5;
       pos.current.y += Math.sin(t * 0.42 + 1.7) * 0.8;

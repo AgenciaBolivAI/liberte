@@ -2127,6 +2127,59 @@ g("12o. 3D night-flight landing: SSR safety, fallbacks, flight wiring");
        return staticFiles.every((f) => !/from "three"/.test(readFileSync(f, "utf8")));
      })());
 
+  /* --- REAL Paris (Google Photorealistic 3D Tiles) 2026-07-30 --- */
+  ok("real-Paris mode needs a key AND a non-phone device",
+     boundary.includes("Boolean(key) && t !== \"mobile\"") &&
+     boundary.includes("realTilesKey"));
+  ok("real-Paris failure hands the flight to the procedural night city",
+     /onFail=\{\(\) => \{[\s\S]{0,300}setMode\("procedural"\)/.test(boundary));
+  ok("BOTH heavy renderers sit behind the SSR guard",
+     boundary.includes('import("./RealCityCanvas")') &&
+     boundary.includes('import("./CityCanvas")') &&
+     boundary.indexOf("!import.meta.env.SSR") < boundary.indexOf('import("./RealCityCanvas")'));
+  const realSrc = readFileSync("src/components/landing3d/RealParis.tsx", "utf8");
+  // Built with createElement, not JSX — the dev devtools plugin injects
+  // data-tsd-source into JSX tags and this library reads dashes as prop paths.
+  ok("Google attribution overlay is rendered (ToS requirement)",
+     realSrc.includes("createElement(TilesAttributionOverlay"));
+  ok("tiles elements bypass JSX so the dev source-tagger can't crash them",
+     /createElement\(\s*TilesRenderer,/.test(realSrc) &&
+     realSrc.includes("createElement(TilesPlugin, {") &&
+     !/<TilesRenderer/.test(realSrc));
+  ok("tiles authenticate through GoogleCloudAuthPlugin",
+     realSrc.includes("GoogleCloudAuthPlugin") && realSrc.includes("apiToken"));
+  ok("daylight tiles get the twilight grade on load",
+     realSrc.includes("DUSK_TINT") && realSrc.includes("duskGraded"));
+  ok("slow/bad tiles time out into the fallback (no infinite skeleton)",
+     realSrc.includes("18000") && realSrc.includes("onFail"));
+  ok("the real tower gets the champagne sparkles overlay",
+     realSrc.includes("buildTowerGlow"));
+  /* Load speed: Google forbids caching/bundling their tiles, so the only lever
+     is getting the first real frame up sooner. */
+  ok("first wave streams coarse, then sharpens (progressive detail)",
+     realSrc.includes("COARSE") && realSrc.includes("FINE") &&
+     realSrc.includes('setDetail("fine")'));
+  ok("the painted sky holds until real geometry is on screen",
+     realSrc.includes("models.current >= 8") && realSrc.includes("const reveal ="));
+  ok("a sparse view still reveals (backstop timer, never a wedged skeleton)",
+     realSrc.includes("revealTimer") && realSrc.includes("6000"));
+  ok("tiles already paid for are cached for the scroll back up",
+     realSrc.includes('"lruCache-maxSize"') && realSrc.includes('"downloadQueue-maxJobs"'));
+  ok("the renderer chunk warms during hydration, not after the auth gate",
+     boundary.includes('void import("./RealCityCanvas").catch') &&
+     boundary.indexOf("typeof window !== \"undefined\" && !import.meta.env.SSR") <
+       boundary.indexOf("export function LandingCity"));
+  ok("landing preconnects to the tile host (saves a TLS handshake)",
+     idx12o.includes('rel: "preconnect"') && idx12o.includes("tile.googleapis.com"));
+
+  ok("tiles key comes from the env, never hardcoded",
+     readFileSync("src/components/landing3d/quality.ts", "utf8").includes(
+       "import.meta.env.VITE_GOOGLE_3D_TILES_KEY",
+     ) && !/AIza[0-9A-Za-z_-]{20}/.test(realSrc));
+  ok("draco decoders are self-hosted for Google tile meshes",
+     existsSync("public/draco/draco_decoder.wasm") &&
+     realSrc.includes('setDecoderPath("/draco/")'));
+
   // Reduced-motion CSS exists (first ever in this codebase — the reveal + stars).
   const css = readFileSync("src/styles.css", "utf8");
   ok("reveal + twinkle animations respect prefers-reduced-motion",
