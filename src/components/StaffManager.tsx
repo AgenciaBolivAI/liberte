@@ -4,11 +4,15 @@ import { getStaffList, setCoachRole, type StaffMember } from "@/lib/admin.functi
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 
-/** Admin: grant/revoke the coach (teacher) role by email. The admin role
- *  itself is managed via migrations/console, not here. */
+const ROLE_LABEL = { coach: "profesor/a", admin: "administrador/a" } as const;
+type StaffRole = keyof typeof ROLE_LABEL;
+
+/** Admin: grant/revoke a staff role (coach or admin) by email. The server
+ *  refuses to demote the last admin, so this panel can't lock everyone out. */
 export function StaffManager() {
   const [staff, setStaff] = useState<StaffMember[] | null>(null);
   const [email, setEmail] = useState("");
+  const [role, setRole] = useState<StaffRole>("coach");
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(() => {
@@ -25,8 +29,8 @@ export function StaffManager() {
     if (!value || busy) return;
     setBusy(true);
     try {
-      const r = await setCoachRole({ data: { email: value, assign: true } });
-      toast.success(`${r.name} ahora es profesor/a`);
+      const r = await setCoachRole({ data: { email: value, assign: true, role } });
+      toast.success(`${r.name} ahora es ${ROLE_LABEL[role]}`);
       setEmail("");
       load();
     } catch (e2) {
@@ -36,11 +40,11 @@ export function StaffManager() {
     }
   }
 
-  async function revoke(member: StaffMember) {
-    if (!window.confirm(`¿Quitar el rol de profesor/a a ${member.full_name}?`)) return;
+  async function revoke(member: StaffMember, which: StaffRole) {
+    if (!window.confirm(`¿Quitar el rol de ${ROLE_LABEL[which]} a ${member.full_name}?`)) return;
     try {
-      await setCoachRole({ data: { userId: member.id, assign: false } });
-      toast.success(`Rol de profesor/a retirado a ${member.full_name}`);
+      await setCoachRole({ data: { userId: member.id, assign: false, role: which } });
+      toast.success(`Rol de ${ROLE_LABEL[which]} retirado a ${member.full_name}`);
       load();
     } catch (e2) {
       toast.error(e2 instanceof Error ? e2.message : "No se pudo retirar el rol");
@@ -49,10 +53,11 @@ export function StaffManager() {
 
   return (
     <div className="mb-6 rounded-3xl border border-border bg-white p-5 shadow-soft">
-      <p className="font-display text-lg font-extrabold text-navy">👩‍🏫 Equipo (roles de profesor)</p>
+      <p className="font-display text-lg font-extrabold text-navy">👩‍🏫 Equipo y roles</p>
       <p className="mt-1 text-xs text-muted-foreground">
-        Un profesor (coach) ve el panel de coach, puede desbloquear semanas y aparece como contacto
-        en Mensajes. Escribe el email de una cuenta ya registrada.
+        Un <strong>profesor</strong> ve el panel de coach, desbloquea semanas y aparece en Mensajes.
+        Un <strong>administrador</strong> ve todo este panel y puede asignar roles. Escribe el email
+        de una cuenta ya registrada.
       </p>
       <form onSubmit={assign} className="mt-3 flex flex-wrap gap-2">
         <input
@@ -62,9 +67,22 @@ export function StaffManager() {
           placeholder="email@delprofesor.com"
           className="min-w-[220px] flex-1 rounded-full border border-border bg-ice px-4 py-2 text-sm text-navy placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-blue"
         />
-        <Button type="submit" disabled={busy || !email.trim()} className="gap-2 bg-gradient-blue text-white">
+        <select
+          value={role}
+          onChange={(e) => setRole(e.target.value as StaffRole)}
+          aria-label="Rol a asignar"
+          className="rounded-full border border-border bg-ice px-4 py-2 text-sm font-semibold text-navy focus:outline-none focus:ring-2 focus:ring-blue"
+        >
+          <option value="coach">Profesor/a</option>
+          <option value="admin">Administrador/a</option>
+        </select>
+        <Button
+          type="submit"
+          disabled={busy || !email.trim()}
+          className="gap-2 bg-gradient-blue text-white"
+        >
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
-          Hacer profesor/a
+          Asignar rol
         </Button>
       </form>
       {staff === null ? (
@@ -91,15 +109,19 @@ export function StaffManager() {
                     {r === "admin" ? "Admin" : "Profesor"}
                   </span>
                 ))}
-                {m.roles.includes("coach") && (
-                  <button
-                    onClick={() => void revoke(m)}
-                    aria-label={`Quitar rol de profesor a ${m.full_name}`}
-                    className="grid h-7 w-7 place-items-center rounded-full text-navy/50 transition hover:bg-red/10 hover:text-red"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                )}
+                {(["coach", "admin"] as const)
+                  .filter((r) => m.roles.includes(r))
+                  .map((r) => (
+                    <button
+                      key={r}
+                      onClick={() => void revoke(m, r)}
+                      aria-label={`Quitar rol de ${ROLE_LABEL[r]} a ${m.full_name}`}
+                      title={`Quitar ${ROLE_LABEL[r]}`}
+                      className="grid h-7 w-7 place-items-center rounded-full text-navy/50 transition hover:bg-red/10 hover:text-red"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  ))}
               </div>
             </li>
           ))}

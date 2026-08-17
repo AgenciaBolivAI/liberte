@@ -85,7 +85,12 @@ export const approveStudent = createServerFn({ method: "POST" })
 
 export type StudentSnapshot = {
   profile: { id: string; full_name: string; email: string | null } | null;
-  dayStates: { day_id: number; done_lessons: string[]; current_lesson: string | null; stars: number }[];
+  dayStates: {
+    day_id: number;
+    done_lessons: string[];
+    current_lesson: string | null;
+    stars: number;
+  }[];
   completedDays: number[];
   completions: { day_id: number; completed_at: string }[];
   defiDays: number[];
@@ -119,20 +124,38 @@ export const getStudentSnapshot = createServerFn({ method: "POST" })
     await requireAdmin(context as Ctx);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const [profile, dayStates, completions, defis, stars] = await Promise.all([
-      supabaseAdmin.from("profiles").select("id, full_name, email, created_at").eq("id", data.userId).maybeSingle(),
-      supabaseAdmin.from("day_state").select("day_id, done_lessons, current_lesson, stars").eq("user_id", data.userId),
-      supabaseAdmin.from("day_completions").select("day_id, completed_at").eq("user_id", data.userId).order("completed_at", { ascending: true }),
+      supabaseAdmin
+        .from("profiles")
+        .select("id, full_name, email, created_at")
+        .eq("id", data.userId)
+        .maybeSingle(),
+      supabaseAdmin
+        .from("day_state")
+        .select("day_id, done_lessons, current_lesson, stars")
+        .eq("user_id", data.userId),
+      supabaseAdmin
+        .from("day_completions")
+        .select("day_id, completed_at")
+        .eq("user_id", data.userId)
+        .order("completed_at", { ascending: true }),
       supabaseAdmin.from("defi_results").select("day_id").eq("user_id", data.userId),
       supabaseAdmin.from("star_awards").select("amount").eq("user_id", data.userId),
     ]);
-    const completionRows = ((completions.data ?? []) as { day_id: number; completed_at: string }[]).map((r) => ({
+    const completionRows = (
+      (completions.data ?? []) as { day_id: number; completed_at: string }[]
+    ).map((r) => ({
       day_id: Number(r.day_id),
       completed_at: String(r.completed_at ?? ""),
     }));
     return {
       profile: (profile.data ?? null) as StudentSnapshot["profile"],
       dayStates: ((dayStates.data ?? []) as unknown[]).map((r) => {
-        const row = r as { day_id: number; done_lessons: unknown; current_lesson: string | null; stars: number };
+        const row = r as {
+          day_id: number;
+          done_lessons: unknown;
+          current_lesson: string | null;
+          stars: number;
+        };
         return {
           day_id: Number(row.day_id),
           done_lessons: Array.isArray(row.done_lessons) ? (row.done_lessons as string[]) : [],
@@ -194,21 +217,34 @@ export const getStaffList = createServerFn({ method: "GET" })
     })) as StaffMember[];
   });
 
-/** Grant or revoke the coach (teacher) role for an account, looked up by
- *  email. Writes go through the service role; the caller must be an admin.
- *  The admin role itself is intentionally NOT manageable here — it stays a
- *  migration/console operation. */
+/** Grant or revoke a staff role (coach or admin) for an account, looked up by
+ *  email or id. Writes go through the service role; the caller must already be
+ *  an admin.
+ *
+ *  Admin used to be console-only. It is assignable here now, with two rails a
+ *  console operation never needed:
+ *    - the role is whitelisted, so no caller can invent one;
+ *    - the LAST admin cannot be demoted (nor can you demote yourself), because
+ *      that locks every human out of this panel and is recoverable only with
+ *      direct SQL access. Granting is unrestricted; only the exit is guarded. */
 export const setCoachRole = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) => {
-    const d = input as { email?: string; userId?: string; assign?: boolean };
+    const d = input as { email?: string; userId?: string; assign?: boolean; role?: string };
+    // Whitelist: a role string off the wire must never reach an insert. The
+    // narrowed type is what stops a widened `string` flowing into the column.
+    const raw = d?.role ?? "coach";
+    if (raw !== "admin" && raw !== "coach") throw new Error("Rol inválido");
+    const role: "admin" | "coach" = raw;
     // Prefer a stable user id (used by "revoke", where the account's email may be
     // null). Fall back to an email for the "grant by typing an address" flow.
     const userId = d?.userId ? String(d.userId) : "";
     if (userId && !UUID_RE.test(userId)) throw new Error("userId inválido");
-    const email = String(d?.email ?? "").trim().toLowerCase();
+    const email = String(d?.email ?? "")
+      .trim()
+      .toLowerCase();
     if (!userId && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("Email inválido");
-    return { userId, email, assign: d?.assign !== false };
+    return { userId, email, assign: d?.assign !== false, role };
   })
   .handler(async ({ data, context }) => {
     await requireAdmin(context as Ctx);
@@ -216,9 +252,8 @@ export const setCoachRole = createServerFn({ method: "POST" })
     // Look up by id when provided (exact), else by email matched LITERALLY
     // (escaped) so a wildcard pattern can't resolve to the wrong account.
     const q = supabaseAdmin.from("profiles").select("id, full_name, email");
-    const { data: profile, error: lookupError } = await (data.userId
-      ? q.eq("id", data.userId)
-      : q.ilike("email", escapeLike(data.email))
+    const { data: profile, error: lookupError } = await (
+      data.userId ? q.eq("id", data.userId) : q.ilike("email", escapeLike(data.email))
     ).maybeSingle();
     if (lookupError) throw new Error(lookupError.message);
     if (!profile) throw new Error("No hay ninguna cuenta registrada con esos datos");
@@ -226,17 +261,34 @@ export const setCoachRole = createServerFn({ method: "POST" })
     if (data.assign) {
       const { error } = await supabaseAdmin
         .from("user_roles")
-        .upsert({ user_id: userId, role: "coach" }, { onConflict: "user_id,role" });
+        .upsert({ user_id: userId, role: data.role }, { onConflict: "user_id,role" });
       if (error) throw new Error(error.message);
     } else {
+      // Refuse BEFORE deleting, so a refusal never needs a rollback.
+      if (data.role === "admin") {
+        if (userId === context.userId) {
+          throw new Error("No puedes quitarte a ti mismo el rol de administrador.");
+        }
+        const { data: admins, error: countErr } = await supabaseAdmin
+          .from("user_roles")
+          .select("user_id")
+          .eq("role", "admin");
+        if (countErr) throw new Error(countErr.message);
+        const ids = (admins ?? []).map((r) => r.user_id as string);
+        if (ids.includes(userId) && ids.length <= 1) {
+          throw new Error(
+            "No puedes quitar el último administrador: nadie podría volver a entrar al panel.",
+          );
+        }
+      }
       const { error } = await supabaseAdmin
         .from("user_roles")
         .delete()
         .eq("user_id", userId)
-        .eq("role", "coach");
+        .eq("role", data.role);
       if (error) throw new Error(error.message);
     }
-    return { ok: true, name: (profile.full_name || profile.email) as string };
+    return { ok: true, name: (profile.full_name || profile.email) as string, role: data.role };
   });
 
 /* ---------------- Live analytics ---------------- */
@@ -414,9 +466,7 @@ export const getAdminAnalytics = createServerFn({ method: "POST" })
 
     const avgOf = (rows: { score_10: number | null }[]) =>
       rows.length
-        ? Number(
-            (rows.reduce((s, r) => s + Number(r.score_10 ?? 0), 0) / rows.length).toFixed(1),
-          )
+        ? Number((rows.reduce((s, r) => s + Number(r.score_10 ?? 0), 0) / rows.length).toFixed(1))
         : 0;
     const avgDefiScore: Delta = {
       value: avgOf(defiRows.filter((r) => inWindow(r.created_at))),
@@ -427,8 +477,12 @@ export const getAdminAnalytics = createServerFn({ method: "POST" })
     const dateInWindow = (d0: string) => inWindow(`${d0}T12:00:00Z`);
     const dateInPrev = (d0: string) => inPrev(`${d0}T12:00:00Z`);
     const tutorMessages: Delta = {
-      value: tutorRows.filter((r) => dateInWindow(r.usage_date)).reduce((s, r) => s + r.message_count, 0),
-      prev: tutorRows.filter((r) => dateInPrev(r.usage_date)).reduce((s, r) => s + r.message_count, 0),
+      value: tutorRows
+        .filter((r) => dateInWindow(r.usage_date))
+        .reduce((s, r) => s + r.message_count, 0),
+      prev: tutorRows
+        .filter((r) => dateInPrev(r.usage_date))
+        .reduce((s, r) => s + r.message_count, 0),
     };
 
     const pendingApprovals = profileRows.filter(
@@ -446,7 +500,8 @@ export const getAdminAnalytics = createServerFn({ method: "POST" })
       : 0;
 
     // Series -----------------------------------------------------------
-    const seriesDays = data.range === "today" ? 2 : data.range === "7d" ? 7 : data.range === "30d" ? 30 : 90;
+    const seriesDays =
+      data.range === "today" ? 2 : data.range === "7d" ? 7 : data.range === "30d" ? 30 : 90;
     const dayKey = (ts: string) => new Date(ts).toISOString().slice(0, 10);
     const buckets: string[] = Array.from({ length: seriesDays }, (_, i) =>
       new Date(now - (seriesDays - 1 - i) * DAY_MS).toISOString().slice(0, 10),
@@ -556,9 +611,15 @@ export const getAdminAnalytics = createServerFn({ method: "POST" })
     // Desktop vs mobile: DISTINCT users per device, counted inside the selected
     // range by last_seen ("all" = ever). A user who uses both is counted in
     // each bucket AND once in `both`, so the buckets never hide dual use.
-    const deviceRows = (devices.data ?? []) as { user_id: string; device: string; last_seen: string }[];
+    const deviceRows = (devices.data ?? []) as {
+      user_id: string;
+      device: string;
+      last_seen: string;
+    }[];
     const byDevice: Record<"desktop" | "mobile" | "tablet", Set<string>> = {
-      desktop: new Set(), mobile: new Set(), tablet: new Set(),
+      desktop: new Set(),
+      mobile: new Set(),
+      tablet: new Set(),
     };
     const seenAny = new Set<string>();
     for (const r of deviceRows) {
@@ -568,7 +629,8 @@ export const getAdminAnalytics = createServerFn({ method: "POST" })
       seenAny.add(r.user_id);
     }
     const inTwo = [...seenAny].filter(
-      (u) => [byDevice.desktop, byDevice.mobile, byDevice.tablet].filter((s) => s.has(u)).length > 1,
+      (u) =>
+        [byDevice.desktop, byDevice.mobile, byDevice.tablet].filter((s) => s.has(u)).length > 1,
     ).length;
 
     return {

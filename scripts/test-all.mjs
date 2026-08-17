@@ -2180,6 +2180,90 @@ g("12o. 3D night-flight landing: SSR safety, fallbacks, flight wiring");
      existsSync("public/draco/draco_decoder.wasm") &&
      realSrc.includes('setDecoderPath("/draco/")'));
 
+  /* Role assignment from the panel (admin included) — the rails matter more
+     than the feature: a mistake here is a permanent lockout or a privilege
+     escalation. */
+  {
+    const adm = readFileSync("src/lib/admin.functions.ts", "utf8");
+    ok("only an admin may assign any role",
+       /setCoachRole[\s\S]{0,1200}?requireAdmin/.test(adm));
+    ok("the role is whitelisted, never taken raw from the request",
+       adm.includes('raw !== "admin" && raw !== "coach"') &&
+       adm.includes('const role: "admin" | "coach" = raw'));
+    ok("you cannot demote yourself out of the panel",
+       adm.includes("userId === context.userId") &&
+       adm.includes("No puedes quitarte a ti mismo"));
+    ok("the last admin cannot be demoted (permanent lockout)",
+       adm.includes("ids.includes(userId) && ids.length <= 1") &&
+       adm.includes("No puedes quitar el último administrador"));
+    ok("the lockout check runs BEFORE the delete (no rollback needed)",
+       adm.indexOf("No puedes quitar el último administrador") <
+         adm.indexOf('.eq("role", data.role)'));
+    const ui = readFileSync("src/components/StaffManager.tsx", "utf8");
+    ok("the panel offers both roles and can revoke either",
+       ui.includes('<option value="admin">') && ui.includes("revoke(m, r)"));
+  }
+
+  /* Survey Aug-2026 fixes: speech grading + the student's own error panel. */
+  {
+    const aiSrc = readFileSync("src/lib/ai.ts", "utf8");
+    ok("graded speech no longer uses the weak mini transcriber",
+       !/STT_MODEL = "gpt-4o-mini-transcribe"/.test(aiSrc) &&
+       aiSrc.includes("gpt-4o-transcribe"));
+    ok("the STT model can be changed from the environment (no deploy)",
+       aiSrc.includes("process.env.OPENAI_STT_MODEL"));
+
+    const ins = readFileSync("src/lib/insights.functions.ts", "utf8");
+    ok("the insights panel reads through RLS, never the admin client",
+       ins.includes("context.supabase") && !ins.includes("supabaseAdmin"));
+    ok("it never accepts a user id (a student cannot ask for someone else)",
+       !/inputValidator/.test(ins) && !/\.eq\(\s*["']user_id/.test(ins));
+    ok("\"recurring\" means it actually happened more than once",
+       ins.includes("w.times >= 2"));
+    const panel = readFileSync("src/components/MyWeakPoints.tsx", "utf8");
+    ok("the panel can never break the progress page",
+       panel.includes("setFailed(true)") && panel.includes("if (failed) return null"));
+    ok("the panel is hidden when a coach inspects another student",
+       readFileSync("src/routes/progress.tsx", "utf8").includes("{!viewAsUserId && <MyWeakPoints />}"));
+  }
+
+  /* BONUS MES 2 — «JE COMPRENDS» (client Mapa + Diccionario Mes 2). */
+  {
+    const bonus = readFileSync("src/data/bonusMonth2.ts", "utf8");
+    const ui = readFileSync("src/components/BonusMonth2.tsx", "utf8");
+    const plus = readFileSync("src/routes/plus.$weekId.$itemId.tsx", "utf8");
+    const ids = [...bonus.matchAll(/id: (6[0-2][0-9]|630),/g)].map((m) => Number(m[1]));
+    eq("bonus 1 carries all 30 expressions (dictionary 601-630)", ids.length, 30);
+    eq("expression ids run 601..630 with no gap", `${Math.min(...ids)}-${Math.max(...ids)}`, "601-630");
+    ok("every expression has a real exchange in both languages",
+       !/example: ""/.test(bonus) && !/exampleEs: ""/.test(bonus));
+    ok("gender bonus has the reliable endings + the 10-word quiz",
+       /GENDER_RULES/.test(bonus) &&
+       (bonus.match(/word: "/g) ?? []).length === 10 &&
+       bonus.includes("le musée"));
+    ok("expressions are listenable (same TTS as the rest of the app)",
+       ui.includes("speakFr(e.example)"));
+    ok("both bonuses are offered on every month-2 week (5-8)",
+       ["5", "6", "7", "8"].every((w) => plus.includes(`"${w}": BONUS_MONTH2`)) &&
+       plus.includes('lesson: "month2-expressions"') &&
+       plus.includes('lesson: "month2-gender"'));
+    ok("an unrecorded bonus shows a placeholder, never a broken player",
+       /resource\.youtubeId \? \(/.test(plus) && plus.includes("El video llega pronto"));
+  }
+
+  /* Read-aloud on the reading exercises (client request 2026-08-16). */
+  {
+    const dayPage = readFileSync("src/routes/day.$dayId.tsx", "utf8");
+    ok("reading passages can be listened to (title + body, one phrase)",
+       /const passage = `\$\{t\.title\}\. \$\{t\.text\}`/.test(dayPage) &&
+       dayPage.includes("speakFr(passage)"));
+    ok("the listen button toggles to Pause while it reads",
+       dayPage.includes('aria-label={playing ? "Pause" : "Écouter le texte"}') &&
+       dayPage.includes("onSpeakChange(() => setPlaying(isSpeaking(passage)))"));
+    ok("audio stops when the reading exercise unmounts (no talking over the quiz)",
+       /useEffect\(\(\) => \(\) => stopFr\(\), \[\]\)/.test(dayPage));
+  }
+
   // Reduced-motion CSS exists (first ever in this codebase — the reveal + stars).
   const css = readFileSync("src/styles.css", "utf8");
   ok("reveal + twinkle animations respect prefers-reduced-motion",

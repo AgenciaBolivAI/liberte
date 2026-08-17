@@ -7,6 +7,7 @@ import { useStars, useDayCompletions, TOTAL_DAYS, TOTAL_WEEKS } from "@/lib/prog
 import { useAdminPreview } from "@/lib/admin-preview";
 import { AdminPreviewBanner } from "@/components/AdminPreviewBanner";
 import { MyAIReportCard } from "@/components/StudentReportCard";
+import { MyWeakPoints } from "@/components/MyWeakPoints";
 import { useAuth } from "@/lib/auth-context";
 import { getMyWeeklyEvaluations, getWeeklyEvaluationsFor } from "@/lib/week.functions";
 import { generateWeeklyPdf, type WeeklyReportData } from "@/lib/weekPdf";
@@ -68,7 +69,9 @@ function ProgressPage() {
       <TopNav />
       <main className="mx-auto max-w-5xl px-4 py-8 sm:px-6 sm:py-10">
         <AdminPreviewBanner />
-        <h1 className="font-display text-3xl font-extrabold text-white sm:text-4xl">⭐ Mon progrès</h1>
+        <h1 className="font-display text-3xl font-extrabold text-white sm:text-4xl">
+          ⭐ Mon progrès
+        </h1>
         <p className="mt-1 text-sm text-white/80 sm:text-base">Regarde tout le chemin parcouru.</p>
 
         {/* Real progress bar */}
@@ -78,7 +81,10 @@ function ProgressPage() {
             <p className="font-display text-lg font-extrabold">{percent}%</p>
           </div>
           <div className="mt-3 h-3 overflow-hidden rounded-full bg-white/15">
-            <div className="h-full rounded-full bg-gradient-to-r from-sky to-blue transition-all" style={{ width: `${Math.max(percent, 2)}%` }} />
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-sky to-blue transition-all"
+              style={{ width: `${Math.max(percent, 2)}%` }}
+            />
           </div>
           <p className="mt-2 text-[11px] text-white/70">
             {days.length} sur {TOTAL_DAYS} jours complétés dans ton voyage de 6 mois
@@ -87,10 +93,17 @@ function ProgressPage() {
 
         <div className="mt-6 grid grid-cols-2 gap-3 sm:mt-8 sm:gap-4 lg:grid-cols-4">
           {stats.map((s) => (
-            <div key={s.label} className="rounded-3xl border border-white/15 bg-card p-4 shadow-soft sm:p-5">
+            <div
+              key={s.label}
+              className="rounded-3xl border border-white/15 bg-card p-4 shadow-soft sm:p-5"
+            >
               <s.icon className="h-6 w-6 text-blue" />
-              <p className="mt-3 text-[10px] font-semibold tracking-widest text-muted-foreground uppercase sm:text-xs">{s.label}</p>
-              <p className="font-display text-2xl font-extrabold text-navy sm:text-3xl">{s.value}</p>
+              <p className="mt-3 text-[10px] font-semibold tracking-widest text-muted-foreground uppercase sm:text-xs">
+                {s.label}
+              </p>
+              <p className="font-display text-2xl font-extrabold text-navy sm:text-3xl">
+                {s.value}
+              </p>
               <p className="text-[11px] text-muted-foreground sm:text-xs">{s.sub}</p>
             </div>
           ))}
@@ -103,12 +116,24 @@ function ProgressPage() {
         {/* #5 / #12: every past weekly report, always findable + downloadable */}
         <MyReports viewAsUserId={viewAsUserId} />
 
+        {/* Survey Aug-2026: "no sé qué puedo mejorar… o si tengo el mismo error
+            todo el tiempo". Only shown for one's own progress — the coach has
+            a richer view for students they're inspecting. */}
+        {!viewAsUserId && <MyWeakPoints />}
+
         <div className="mt-6 rounded-3xl border border-white/15 bg-card p-5 shadow-soft sm:mt-8 sm:p-6">
-          <h2 className="font-display text-lg font-extrabold text-navy sm:text-xl">Comment gagner des étoiles</h2>
-          <p className="mt-1 text-xs text-muted-foreground">Elles sont attribuées automatiquement au fil de ta progression.</p>
+          <h2 className="font-display text-lg font-extrabold text-navy sm:text-xl">
+            Comment gagner des étoiles
+          </h2>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Elles sont attribuées automatiquement au fil de ta progression.
+          </p>
           <div className="mt-4 grid gap-2">
             {rewards.map(([k, v]) => (
-              <div key={k} className="flex items-start justify-between gap-3 rounded-xl bg-ice px-3 py-2.5 sm:px-4">
+              <div
+                key={k}
+                className="flex items-start justify-between gap-3 rounded-xl bg-ice px-3 py-2.5 sm:px-4"
+              >
                 <span className="text-sm text-navy">{k}</span>
                 <span className="shrink-0 font-display font-bold text-blue">{v}</span>
               </div>
@@ -133,7 +158,14 @@ type EvalRow = {
   created_at: string | null;
 };
 
-const MONTH_THEMES = ["J'OSE 🗼", "JE COMPRENDS 📞", "JE CRÉE ✍️", "JE PARLE 🗣️", "JE VOYAGE ✈️", "JE SUIS LIBRE 🕊️"];
+const MONTH_THEMES = [
+  "J'OSE 🗼",
+  "JE COMPRENDS 📞",
+  "JE CRÉE ✍️",
+  "JE PARLE 🗣️",
+  "JE VOYAGE ✈️",
+  "JE SUIS LIBRE 🕊️",
+];
 function monthLabelForWeek(weekNumber: number): string {
   const m = Math.max(1, Math.ceil(weekNumber / 4));
   return `Mois ${m} : ${MONTH_THEMES[m - 1] ?? ""}`.trim();
@@ -151,16 +183,24 @@ function MyReports({ viewAsUserId }: { viewAsUserId?: string | null }) {
     // de descargar el pdf".
     (viewAsUserId
       ? getWeeklyEvaluationsFor({ data: { userId: viewAsUserId } })
-      : getMyWeeklyEvaluations())
-      .then((data) => { if (alive) setRows((data ?? []) as EvalRow[]); })
-      .catch(() => { if (alive) setRows([]); });
-    return () => { alive = false; };
+      : getMyWeeklyEvaluations()
+    )
+      .then((data) => {
+        if (alive) setRows((data ?? []) as EvalRow[]);
+      })
+      .catch(() => {
+        if (alive) setRows([]);
+      });
+    return () => {
+      alive = false;
+    };
   }, [viewAsUserId]);
 
   function downloadPdf(row: EvalRow) {
     try {
       const r = (row.ai_report ?? {}) as {
-        verdict_title?: string; verdict_message?: string;
+        verdict_title?: string;
+        verdict_message?: string;
         strengths?: { title: string; example: string }[];
         common_errors?: { said: string; corrected: string; rule: string }[];
         improvements?: string[];
@@ -198,7 +238,8 @@ function MyReports({ viewAsUserId }: { viewAsUserId?: string | null }) {
         pronunciation: Array.isArray(r.pronunciation) ? r.pronunciation : [],
         coachSummary: String(r.coach_summary ?? ""),
         verdict: {
-          title: r.verdict_title || (score >= 8.5 ? "EXCELLENCE" : score >= 6 ? "TRÈS BIEN" : "COURAGE"),
+          title:
+            r.verdict_title || (score >= 8.5 ? "EXCELLENCE" : score >= 6 ? "TRÈS BIEN" : "COURAGE"),
           message: String(r.verdict_message ?? ""),
         },
       };
@@ -214,29 +255,42 @@ function MyReports({ viewAsUserId }: { viewAsUserId?: string | null }) {
         <FileText className="h-5 w-5 text-blue" /> 📄 Mes rapports hebdomadaires
       </h2>
       <p className="mt-1 text-xs text-muted-foreground">
-        Chaque semaine évaluée génère un rapport avec ta note — consulte-le ou télécharge le PDF ici.
+        Chaque semaine évaluée génère un rapport avec ta note — consulte-le ou télécharge le PDF
+        ici.
       </p>
       {rows === null ? (
         <p className="mt-4 text-sm text-muted-foreground">Chargement…</p>
       ) : rows.length === 0 ? (
         <p className="mt-4 rounded-xl bg-ice px-4 py-3 text-sm text-navy">
-          Aucun rapport pour l'instant. Termine le défi d'une semaine pour recevoir ton premier rapport. 💪
+          Aucun rapport pour l'instant. Termine le défi d'une semaine pour recevoir ton premier
+          rapport. 💪
         </p>
       ) : (
         <div className="mt-4 grid gap-2">
           {rows.map((row) => {
             const score = Number(row.weekly_score ?? 0);
             const date = row.created_at
-              ? new Date(row.created_at).toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" })
+              ? new Date(row.created_at).toLocaleDateString("fr-FR", {
+                  day: "numeric",
+                  month: "short",
+                  year: "numeric",
+                })
               : "";
             return (
-              <div key={row.week_number} className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-ice px-3 py-2.5 sm:px-4">
+              <div
+                key={row.week_number}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-ice px-3 py-2.5 sm:px-4"
+              >
                 <div className="min-w-0">
-                  <p className="font-display text-sm font-bold text-navy">Semaine {row.week_number} · {monthLabelForWeek(row.week_number)}</p>
+                  <p className="font-display text-sm font-bold text-navy">
+                    Semaine {row.week_number} · {monthLabelForWeek(row.week_number)}
+                  </p>
                   <p className="text-[11px] text-muted-foreground">{date}</p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className={`rounded-full px-2.5 py-0.5 font-display text-sm font-extrabold ${score >= 6 ? "bg-blue/10 text-blue" : "bg-gold/15 text-navy"}`}>
+                  <span
+                    className={`rounded-full px-2.5 py-0.5 font-display text-sm font-extrabold ${score >= 6 ? "bg-blue/10 text-blue" : "bg-gold/15 text-navy"}`}
+                  >
                     {score.toFixed(1)}/10
                   </span>
                   {row.week_number === 2 ? (

@@ -8,7 +8,21 @@ export const OPENAI_BASE = "https://api.openai.com/v1";
 // params. If upgrading to the gpt-5 family, note those models require
 // max_completion_tokens (not max_tokens) and lock temperature.
 export const CHAT_MODEL = "gpt-4o-mini";
-export const STT_MODEL = "gpt-4o-mini-transcribe";
+/**
+ * Speech-to-text for GRADED oral answers — deliberately not the mini tier.
+ *
+ * Three students in the August 2026 survey independently reported the same
+ * failure: "pone que dije algo que no se parece nada a lo que dije". The mini
+ * transcriber is cheap but weak on beginner Hispanophone French, and because
+ * the corrector grades the TRANSCRIPT, a mis-hearing becomes a bad mark for an
+ * answer the student actually got right — which is also the real cause behind
+ * "la calificación de producción oral es muy baja". Accuracy here is worth
+ * more than the token saving.
+ *
+ * Overridable without a deploy (OPENAI_STT_MODEL) so the model can be changed
+ * or rolled back from the environment if a better one ships.
+ */
+export const STT_MODEL = process.env.OPENAI_STT_MODEL || "gpt-4o-transcribe";
 // Natural French speech for the conversation tutor. The browser's built-in
 // speechSynthesis is robotic, which is actively harmful when students are
 // modelling their pronunciation on it.

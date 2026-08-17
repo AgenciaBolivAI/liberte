@@ -11,6 +11,7 @@ import {
   Mic,
   MicOff,
   PartyPopper,
+  Pause,
   Pencil,
   PlayCircle,
   Square,
@@ -199,7 +200,7 @@ import {
 } from "@/data/day10Lessons";
 import vocabVideo from "@/assets/vocabulario-dia1.mp4.asset.json";
 import cuadernilloSemana1 from "@/assets/cuadernillo-semana1.pdf.asset.json";
-import { speakFr, stopFr } from "@/lib/speak";
+import { speakFr, stopFr, isSpeaking, onSpeakChange } from "@/lib/speak";
 import { WEEK34, type WeekDay } from "@/data/week34";
 import { MONTH2 } from "@/data/month2";
 import { persist } from "@/lib/persist";
@@ -2065,13 +2066,34 @@ function ReadingComprehension({
   const t = texts[textIdx];
   const totalQ = texts.reduce((n, tt) => n + tt.questions.length, 0);
 
+  // Read-aloud for the passage (client request: "agregarle la voz para que lo
+  // pueda leer también"). Title + body are spoken as one phrase through the
+  // same natural server voice the tutor uses, with the shared play/pause state
+  // so a second tap stops it. Reading comprehension in a foreign language is
+  // far easier when you can hear the text while you follow it.
+  const passage = `${t.title}. ${t.text}`;
+  const [playing, setPlaying] = useState(false);
+  useEffect(() => onSpeakChange(() => setPlaying(isSpeaking(passage))), [passage]);
+  // Never let one passage keep talking over the next one, or over the results.
+  useEffect(() => () => stopFr(), []);
+
   if (done)
     return <ResultCard title="Lecture réussie !" score={`${score} / ${totalQ}`} message="Étoile débloquée." />;
 
   return (
     <div className="space-y-4">
       <div className="rounded-2xl border border-border bg-card p-5 shadow-soft">
-        <p className="text-xs font-bold tracking-widest text-blue uppercase">📖 {t.title}</p>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-xs font-bold tracking-widest text-blue uppercase">📖 {t.title}</p>
+          <button
+            onClick={() => speakFr(passage)}
+            className="inline-flex items-center gap-2 rounded-full bg-blue/10 px-4 py-2 text-sm font-semibold text-blue hover:bg-blue/20"
+            aria-label={playing ? "Pause" : "Écouter le texte"}
+          >
+            {playing ? <Pause className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+            {playing ? "Pause" : "Écouter le texte"}
+          </button>
+        </div>
         <p className="mt-3 whitespace-pre-line text-sm leading-relaxed text-navy">{t.text}</p>
       </div>
       <MCQuestion

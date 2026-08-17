@@ -2,6 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { ArrowLeft, ArrowRight, Sparkles } from "lucide-react";
 import { TopNav } from "@/components/TopNav";
 import { usePlusResources } from "@/lib/plus-resources";
+import { GenderRulesBonus, LifeExpressionsBonus } from "@/components/BonusMonth2";
 
 export type PlusResource = {
   id: string;
@@ -11,7 +12,39 @@ export type PlusResource = {
   subtitle: string;
   note?: string;
   youtubeId: string;
+  /** Month-2 bonuses carry a full lesson under the video; the video is the
+   *  teacher presenting it, the lesson is what the student comes back to. */
+  lesson?: "month2-expressions" | "month2-gender";
 };
+
+/**
+ * BONUS MES 2 — «JE COMPRENDS». Month-level in the client's map, so the same
+ * two items are offered on each of the month's weeks (5-8). youtubeId stays
+ * empty until the teacher records and pastes the links in the admin panel;
+ * the written lesson works from day one either way.
+ */
+const BONUS_MONTH2: PlusResource[] = [
+  {
+    id: "1",
+    emoji: "💬",
+    eyebrow: "Bonus Mes 2 · Expresiones",
+    title: "30 expressions de la vraie vie",
+    subtitle: "Las frases que usan todos los días y que ninguna academia te enseña.",
+    note: "El secreto para sonar natural: no traduzcas «ça marche» — asócialo a la situación.",
+    youtubeId: "",
+    lesson: "month2-expressions",
+  },
+  {
+    id: "2",
+    emoji: "⚖️",
+    eyebrow: "Bonus Mes 2 · Gramática",
+    title: "Le genre : masculin ou féminin ?",
+    subtitle: "Las terminaciones que te revelan el género — y el quiz para probarlo.",
+    note: "Aprende siempre la palabra CON su artículo: el artículo es la señal definitiva.",
+    youtubeId: "",
+    lesson: "month2-gender",
+  },
+];
 
 export const PLUS_RESOURCES_BY_WEEK: Record<string, PlusResource[]> = {
   "1": [
@@ -68,6 +101,10 @@ export const PLUS_RESOURCES_BY_WEEK: Record<string, PlusResource[]> = {
       youtubeId: "0dxhYxdnVic",
     },
   ],
+  "5": BONUS_MONTH2,
+  "6": BONUS_MONTH2,
+  "7": BONUS_MONTH2,
+  "8": BONUS_MONTH2,
 };
 
 export const Route = createFileRoute("/plus/$weekId/$itemId")({
@@ -103,7 +140,13 @@ function PlusItemPage() {
     return (
       <div className="mx-auto max-w-lg p-8 text-center">
         <p className="text-sm text-muted-foreground">Recurso no encontrado.</p>
-        <Link to="/day/$dayId" params={{ dayId: "1" }} className="mt-4 inline-block text-blue underline">Retour</Link>
+        <Link
+          to="/day/$dayId"
+          params={{ dayId: "1" }}
+          className="mt-4 inline-block text-blue underline"
+        >
+          Retour
+        </Link>
       </div>
     );
   }
@@ -134,8 +177,12 @@ function PlusItemPage() {
           <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-[10px] font-extrabold tracking-widest text-gold uppercase">
             <Sparkles className="h-3 w-3" /> Le petit plus · Recurso {idx + 1} de {resources.length}
           </div>
-          <p className="mt-3 text-[11px] font-bold tracking-widest text-gold uppercase">{resource.eyebrow}</p>
-          <h1 className="mt-1 font-display text-3xl font-extrabold sm:text-4xl">{resource.emoji} {resource.title}</h1>
+          <p className="mt-3 text-[11px] font-bold tracking-widest text-gold uppercase">
+            {resource.eyebrow}
+          </p>
+          <h1 className="mt-1 font-display text-3xl font-extrabold sm:text-4xl">
+            {resource.emoji} {resource.title}
+          </h1>
           <p className="mt-2 text-sm text-white/85">{resource.subtitle}</p>
         </div>
 
@@ -145,36 +192,62 @@ function PlusItemPage() {
           </div>
         )}
 
-        <div className="mt-6 overflow-hidden rounded-3xl border border-border bg-white shadow-soft">
-          <div className="relative w-full" style={{ aspectRatio: "16/9" }}>
-            <iframe
-              src={`https://www.youtube.com/embed/${resource.youtubeId}?rel=0`}
-              title={resource.title}
-              loading="lazy"
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              allowFullScreen
-              className="absolute inset-0 h-full w-full border-0"
-            />
+        {/* An empty id means the teacher hasn't recorded this one yet — show a
+            calm placeholder instead of a broken player, and let the written
+            lesson below carry the value in the meantime. */}
+        {resource.youtubeId ? (
+          <div className="mt-6 overflow-hidden rounded-3xl border border-border bg-white shadow-soft">
+            <div className="relative w-full" style={{ aspectRatio: "16/9" }}>
+              <iframe
+                src={`https://www.youtube.com/embed/${resource.youtubeId}?rel=0`}
+                title={resource.title}
+                loading="lazy"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+                className="absolute inset-0 h-full w-full border-0"
+              />
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="mt-6 grid place-items-center rounded-3xl border border-dashed border-border bg-white p-10 text-center shadow-soft">
+            <p className="font-display text-base font-extrabold text-navy">
+              🎬 El video llega pronto
+            </p>
+            <p className="mt-1 max-w-md text-sm text-navy/60">
+              Mientras tanto, toda la lección está aquí abajo — puedes estudiarla y escucharla desde
+              ya.
+            </p>
+          </div>
+        )}
+
+        {resource.lesson === "month2-expressions" && <LifeExpressionsBonus />}
+        {resource.lesson === "month2-gender" && <GenderRulesBonus />}
 
         <div className="mt-8 flex flex-wrap items-center justify-between gap-3">
           {prev ? (
             <button
-              onClick={() => navigate({ to: "/plus/$weekId/$itemId", params: { weekId, itemId: prev.id } })}
+              onClick={() =>
+                navigate({ to: "/plus/$weekId/$itemId", params: { weekId, itemId: prev.id } })
+              }
               className="inline-flex items-center gap-2 rounded-full border border-border bg-white px-5 py-2.5 text-sm font-semibold text-navy shadow-soft transition hover:bg-ice"
             >
               <ArrowLeft className="h-4 w-4" /> {prev.emoji} {prev.title}
             </button>
-          ) : <span />}
+          ) : (
+            <span />
+          )}
           {next ? (
             <button
-              onClick={() => navigate({ to: "/plus/$weekId/$itemId", params: { weekId, itemId: next.id } })}
+              onClick={() =>
+                navigate({ to: "/plus/$weekId/$itemId", params: { weekId, itemId: next.id } })
+              }
               className="inline-flex items-center gap-2 rounded-full bg-gradient-blue px-5 py-2.5 text-sm font-extrabold text-white shadow-card transition hover:brightness-105"
             >
               {next.emoji} {next.title} <ArrowRight className="h-4 w-4" />
             </button>
-          ) : <span />}
+          ) : (
+            <span />
+          )}
         </div>
       </main>
     </div>
