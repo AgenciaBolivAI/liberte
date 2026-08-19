@@ -28,6 +28,11 @@ export function AuthGate({ children }: { children: ReactNode }) {
     }
   }, [loading, user, isPublic, navigate]);
 
+  // TRIED AND REVERTED: skipping this spinner for public paths (`loading &&
+  // !isPublic`) so the landing paints before auth resolves. It broke hydration
+  // on the login page — the form was interactive before React attached, a click
+  // did a native submit, and sign-in died silently. Worth revisiting only with
+  // that hydration path fixed first; the landing was made fast by other means.
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#0d1b3a]">

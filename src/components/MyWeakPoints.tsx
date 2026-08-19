@@ -43,8 +43,13 @@ export function MyWeakPoints() {
     );
   }
 
-  // Nothing graded yet: say so plainly instead of showing empty boxes.
-  if (data.graded === 0) {
+  // Nothing at all yet: say so plainly instead of showing empty boxes. Note
+  // `graded` alone is NOT the test — a student can have a weekly report (with
+  // structured errors and pronunciation) before any individual activity is
+  // corrected, and gating on graded===0 hid exactly that content.
+  const isEmpty =
+    data.graded === 0 && data.commonErrors.length === 0 && data.pronunciation.length === 0;
+  if (isEmpty) {
     return (
       <section className="mt-8 rounded-3xl border border-border bg-white p-6 shadow-soft">
         <h2 className="flex items-center gap-2 font-display text-lg font-extrabold text-navy sm:text-xl">
@@ -64,8 +69,10 @@ export function MyWeakPoints() {
         <Target className="h-5 w-5 text-blue" /> Mes points à travailler
       </h2>
       <p className="mt-1 text-sm text-navy/70">
-        Lo que la corrección detecta una y otra vez en tus {data.graded} respuestas evaluadas. Esto
-        es exactamente lo que ve tu profesora.
+        {data.graded > 0
+          ? `Lo que la corrección detecta una y otra vez en tus ${data.graded} respuestas evaluadas. `
+          : "Lo que la corrección ha detectado en tu trabajo. "}
+        Esto es exactamente lo que ve tu profesora.
       </p>
 
       {data.weakPoints.length > 0 ? (
@@ -120,6 +127,57 @@ export function MyWeakPoints() {
               </div>
             ))}
           </div>
+        </>
+      )}
+
+      {data.commonErrors.length > 0 && (
+        <>
+          <h3 className="mt-7 font-display text-base font-extrabold text-navy">
+            Mes erreurs fréquentes · con la corrección y la regla
+          </h3>
+          <ul className="mt-3 space-y-2">
+            {data.commonErrors.map((e, i) => (
+              <li
+                key={`${e.corrected}-${i}`}
+                className="rounded-2xl border border-border bg-white p-4"
+              >
+                <div className="flex flex-wrap items-center gap-2 text-sm">
+                  <span className="rounded-lg bg-red-50 px-2 py-1 font-medium text-red-600 line-through">
+                    {e.said}
+                  </span>
+                  <span className="text-navy/40">→</span>
+                  <span className="rounded-lg bg-green-50 px-2 py-1 font-semibold text-green-700">
+                    {e.corrected}
+                  </span>
+                  <span className="ml-auto text-[10px] font-bold tracking-wide text-navy/40 uppercase">
+                    Semaine {e.week}
+                  </span>
+                </div>
+                {e.rule && <p className="mt-2 text-sm text-navy/75">📌 {e.rule}</p>}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+
+      {data.pronunciation.length > 0 && (
+        <>
+          <h3 className="mt-7 font-display text-base font-extrabold text-navy">
+            Ma prononciation · lo que se oyó vs. lo que debe sonar
+          </h3>
+          <ul className="mt-3 space-y-2">
+            {data.pronunciation.map((p, i) => (
+              <li key={`${p.word}-${i}`} className="rounded-2xl border border-border bg-white p-4">
+                <div className="flex flex-wrap items-baseline gap-2">
+                  <span className="font-display text-base font-extrabold text-navy">{p.word}</span>
+                  <span className="text-sm text-red-500">se oyó « {p.heard} »</span>
+                  <span className="text-navy/40">→</span>
+                  <span className="text-sm font-semibold text-green-700">« {p.target} »</span>
+                </div>
+                {p.tip && <p className="mt-2 text-sm text-navy/75">💡 {p.tip}</p>}
+              </li>
+            ))}
+          </ul>
         </>
       )}
 

@@ -200,10 +200,11 @@ function LandingPage() {
             className="lp-hero-bg absolute inset-0 h-full w-full object-cover opacity-30"
           />
           <div className="absolute inset-0 bg-linear-to-b from-transparent via-transparent to-[#0B1130]/80" />
-          <div
-            data-reveal
-            className="relative mx-auto w-full max-w-6xl px-4 py-20 sm:px-6 sm:py-28"
-          >
+          {/* NO data-reveal here on purpose: the hero is above the fold on
+              every load, and a scroll-reveal kept the headline and both CTAs at
+              opacity 0 until React had hydrated and the observer had fired. The
+              first thing a visitor saw was a photo with no words on it. */}
+          <div className="relative mx-auto w-full max-w-6xl px-4 py-20 sm:px-6 sm:py-28">
             <div className="max-w-2xl">
               <p className="inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-1.5 text-xs font-bold tracking-widest text-sky uppercase">
                 <Sparkles className="h-3.5 w-3.5" /> Programa de 6 meses · A2-B1

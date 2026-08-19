@@ -72,13 +72,13 @@
   --radius: 1rem;
 
   /* Brand */
-  --navy: oklch(0.42 0.075 265);          /* #3D5589 */
+  --navy: oklch(0.42 0.075 265); /* #3D5589 */
   --navy-soft: oklch(0.52 0.065 265);
-  --blue: oklch(0.72 0.145 232);          /* #4BB1EC */
+  --blue: oklch(0.72 0.145 232); /* #4BB1EC */
   --blue-deep: oklch(0.62 0.16 240);
-  --sky: oklch(0.84 0.075 232);           /* #9BCBEF */
-  --ice: oklch(0.975 0.012 232);          /* #EDF8FC */
-  --red: oklch(0.585 0.165 28);           /* #C44536 */
+  --sky: oklch(0.84 0.075 232); /* #9BCBEF */
+  --ice: oklch(0.975 0.012 232); /* #EDF8FC */
+  --red: oklch(0.585 0.165 28); /* #C44536 */
   --gold: oklch(0.82 0.13 85);
   --success: oklch(0.7 0.15 150);
 
@@ -116,7 +116,11 @@
   /* Gradients & shadows */
   --gradient-navy: linear-gradient(135deg, oklch(0.38 0.08 265) 0%, oklch(0.5 0.085 252) 100%);
   --gradient-blue: linear-gradient(135deg, var(--blue) 0%, var(--blue-deep) 100%);
-  --overlay-navy: linear-gradient(180deg, oklch(0.42 0.075 265 / 0.78) 0%, oklch(0.42 0.075 265 / 0.62) 100%);
+  --overlay-navy: linear-gradient(
+    180deg,
+    oklch(0.42 0.075 265 / 0.78) 0%,
+    oklch(0.42 0.075 265 / 0.62) 100%
+  );
   --shadow-card: 0 8px 30px -12px oklch(0.42 0.075 265 / 0.25);
   --shadow-soft: 0 4px 14px -4px oklch(0.42 0.075 265 / 0.15);
   --shadow-glow: 0 0 0 4px oklch(0.72 0.145 232 / 0.18);
@@ -133,13 +137,18 @@
   * {
     border-color: var(--color-border);
   }
-  html, body {
+  html,
+  body {
     font-family: var(--font-sans);
     background-color: var(--color-background);
     color: var(--color-foreground);
     -webkit-font-smoothing: antialiased;
   }
-  h1, h2, h3, h4, h5 {
+  h1,
+  h2,
+  h3,
+  h4,
+  h5 {
     font-family: var(--font-display);
     letter-spacing: -0.01em;
   }
@@ -215,14 +224,19 @@ html[data-city="on"] .lp-static {
 }
 
 /* Section entrances (useReveal adds .lp-in on first viewport entry). */
-[data-reveal] {
+/* Hiding is gated on the flag that useReveal sets synchronously before it
+   observes anything. Without the gate, a slow hydration (or JS that never
+   runs at all) left every section permanently invisible — the page looked
+   broken rather than merely un-animated. No flash: the flag is set before
+   paint for anything below the fold, and the hero carries no data-reveal. */
+html[data-reveal-ready] [data-reveal] {
   opacity: 0;
   transform: translateY(26px);
   transition:
     opacity 0.7s ease,
     transform 0.7s ease;
 }
-[data-reveal].lp-in {
+html[data-reveal-ready] [data-reveal].lp-in {
   opacity: 1;
   transform: none;
 }

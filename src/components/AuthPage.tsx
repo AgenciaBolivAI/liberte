@@ -5,6 +5,7 @@ import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/lib/auth-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -19,6 +20,13 @@ const signInSchema = z.object({
 
 export function AuthPage() {
   const navigate = useNavigate();
+  const { user: sessionUser } = useAuth();
+  // The form is server-rendered, so before React hydrates its onSubmit does
+  // not exist yet and a click performs a NATIVE submit: the page reloads with
+  // a bare "?" and the visitor is still staring at the login form, with no
+  // error to explain it. Only enable the button once we are interactive.
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => setHydrated(true), []);
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState("");
@@ -27,12 +35,17 @@ export function AuthPage() {
 
   useEffect(() => {
     // Someone with an active session doesn't need the login form.
-    supabase.auth.getSession().then(({ data }) => {
-      if (data.session) {
-        navigate({ to: "/liberte-plataforma-834798234728482934254-student", replace: true });
-      }
-    });
-  }, [navigate]);
+    //
+    // This REACTS to the auth context instead of sampling getSession() once on
+    // mount. The one-shot version only worked because AuthGate used to hold a
+    // spinner over this page until auth had resolved; the moment the login page
+    // was allowed to paint immediately, the single check ran before Supabase had
+    // restored the session from storage, saw null, and never looked again — so a
+    // signed-in visitor sat on the login form forever.
+    if (sessionUser) {
+      navigate({ to: "/liberte-plataforma-834798234728482934254-student", replace: true });
+    }
+  }, [sessionUser, navigate]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -194,7 +207,7 @@ export function AuthPage() {
 
             <Button
               type="submit"
-              disabled={loading}
+              disabled={loading || !hydrated}
               className="mt-2 h-11 w-full rounded-xl text-base font-semibold shadow-md transition-all hover:shadow-lg"
               style={{ backgroundColor: "#4FB2EA", color: "white" }}
             >

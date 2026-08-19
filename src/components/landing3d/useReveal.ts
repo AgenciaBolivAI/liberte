@@ -15,6 +15,10 @@ export function useReveal(): void {
       els.forEach((el) => el.classList.add("lp-in"));
       return;
     }
+    // Arm the CSS only now. Until this flag exists nothing is hidden, so a
+    // visitor on a slow connection reads the page instead of staring at
+    // invisible sections waiting for hydration.
+    document.documentElement.setAttribute("data-reveal-ready", "");
     const io = new IntersectionObserver(
       (entries) => {
         for (const e of entries) {
@@ -27,6 +31,9 @@ export function useReveal(): void {
       { threshold: 0.15 },
     );
     els.forEach((el) => io.observe(el));
-    return () => io.disconnect();
+    return () => {
+      io.disconnect();
+      document.documentElement.removeAttribute("data-reveal-ready");
+    };
   }, []);
 }

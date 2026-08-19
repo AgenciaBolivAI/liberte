@@ -1019,8 +1019,12 @@ g("12f. Month 2 · days 21-40 (JE COMPRENDS) render through the REAL lesson play
   const want2 = Array.from({ length: 20 }, (_, i) => 21 + i).join(",");
   eq("MONTH2 covers days 21-40", days2.join(","), want2);
   ok("each Month-2 day has 30 vocab words", days2.every((d) => M2[d].vocabulary.length === 30));
-  ok("each Month-2 day has flashcards + 4 grammar structures",
-     days2.every((d) => M2[d].flashQuiz.length >= 12 && M2[d].grammar.length === 4));
+  // >= 4, not === 4: the client's Mapa gives six days a grammar point the
+  // platform never taught (possessifs, verbes piliers, depuis/on, adverbes
+  // d'intensité, c'est vs il est, accord+BAPNE). Those were ADDED on top of the
+  // existing cards, so those days legitimately carry 6-7 now.
+  ok("each Month-2 day has flashcards + at least 4 grammar structures",
+     days2.every((d) => M2[d].flashQuiz.length >= 12 && M2[d].grammar.length >= 4));
   ok("each Month-2 day has the 4 vocab games (reading/5 listening/5 speaking/5 writing)",
      days2.every((d) => { const gm = M2[d].vocabGames; return gm.reading.length >= 1 && gm.listening.length === 5 && gm.speaking.length === 5 && gm.writing.length === 5; }));
   ok("each Month-2 day has a clés reading (3 questions) + 3 clés games (5 each)",
@@ -2204,6 +2208,52 @@ g("12o. 3D night-flight landing: SSR safety, fallbacks, flight wiring");
        ui.includes('<option value="admin">') && ui.includes("revoke(m, r)"));
   }
 
+  /* Mes 2 grammar must match the client's Mapa on the day it names.
+     Six days taught something else; these lock the document's points in place. */
+  {
+    const m2src = readFileSync("src/data/month2.ts", "utf8");
+    const m2start = m2src.indexOf("= {", m2src.indexOf("export const MONTH2"));
+    const M2 = JSON.parse(m2src.slice(m2start + 2).replace(/;\s*$/, "").trim());
+    const teaches = (day, re) =>
+      (M2[String(day)]?.grammar ?? []).some((g) => re.test(`${g.formula} ${g.use}`));
+    ok("J23 teaches the possessifs the document assigns to it", teaches(23, /mon\/ma\/mes/));
+    ok("J23 still teaches COD too (the document asks for BOTH)", teaches(23, /le\/la\/les/));
+    ok("J27 teaches C'est vs Il est", teaches(27, /c'est \+ article/i));
+    ok("J31 teaches les 4 verbes piliers", teaches(31, /verbes piliers/i));
+    ok("J36 teaches l'accord des adjectifs + BAPNE", teaches(36, /BAPNE/));
+    ok("J39 teaches depuis + présent and on = nous", teaches(39, /depuis \+ durée/i));
+    ok("J40 teaches les adverbes d'intensité", teaches(40, /verbe \+ beaucoup/i));
+    ok("month2.ts stays machine-readable after the patch (indexOf(\"= {\"))",
+       m2start !== -1);
+  }
+
+  /* Landing render speed — the four things that kept the page blank. */
+  {
+    const q = readFileSync("src/components/landing3d/quality.ts", "utf8");
+    ok("real Paris is OFF unless explicitly switched on (no Google round-trips)",
+       q.includes('import.meta.env.VITE_REAL_PARIS !== "1"'));
+    // NOTE: letting public routes render while auth is still loading was tried
+    // and REVERTED — it broke hydration on the login page (native form submit,
+    // sign-in silently dead). Do not reintroduce without fixing that first.
+    const auth = readFileSync("src/components/AuthPage.tsx", "utf8");
+    ok("the login page reacts to auth state instead of sampling it once",
+       auth.includes("if (sessionUser) {") && !auth.includes("supabase.auth.getSession().then"));
+    ok("the sign-in button cannot be submitted before hydration",
+       auth.includes("disabled={loading || !hydrated}"));
+    const idx = readFileSync("src/routes/index.tsx", "utf8");
+    const heroBlock = idx.slice(idx.indexOf('data-flight="0"'), idx.indexOf('data-flight="1"'));
+    // Strip JSX comments first — the block explains WHY it has no reveal.
+    ok("the hero copy is never hidden behind a scroll-reveal",
+       !/data-reveal/.test(heroBlock.replace(/\{\/\*[\s\S]*?\*\/\}/g, "")));
+    const css = readFileSync("src/styles.css", "utf8");
+    ok("nothing stays invisible if JS is slow or never runs",
+       css.includes("html[data-reveal-ready] [data-reveal] {") &&
+       !/^\[data-reveal\] \{/m.test(css));
+    ok("the reveal CSS is armed by JS before it observes",
+       readFileSync("src/components/landing3d/useReveal.ts", "utf8")
+         .includes('setAttribute("data-reveal-ready"'));
+  }
+
   /* Survey Aug-2026 fixes: speech grading + the student's own error panel. */
   {
     const aiSrc = readFileSync("src/lib/ai.ts", "utf8");
@@ -2221,6 +2271,13 @@ g("12o. 3D night-flight landing: SSR safety, fallbacks, flight wiring");
     ok("\"recurring\" means it actually happened more than once",
        ins.includes("w.times >= 2"));
     const panel = readFileSync("src/components/MyWeakPoints.tsx", "utf8");
+    ok("the student gets the SAME structured errors the coach reads",
+       ins.includes("aiErrors(rep.common_errors)") &&
+       ins.includes("aiPronunciation(rep.pronunciation)"));
+    ok("a weekly report alone is enough to show them (no activities needed)",
+       readFileSync("src/components/MyWeakPoints.tsx", "utf8").includes(
+         "data.graded === 0 && data.commonErrors.length === 0 && data.pronunciation.length === 0",
+       ));
     ok("the panel can never break the progress page",
        panel.includes("setFailed(true)") && panel.includes("if (failed) return null"));
     ok("the panel is hidden when a coach inspects another student",

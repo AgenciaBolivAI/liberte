@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { TIER_PARAMS, type Tier } from "./quality";
@@ -56,17 +56,11 @@ export function CityScene({ tier }: { tier: Exclude<Tier, "static"> }) {
     timeMats.push(...eiffel.materials);
     tickers.push(eiffel.tick);
 
-    root.add(buildLouvre(), buildSacreCoeur(), buildArc(), buildBridges(), buildCafe());
-
-    root.add(buildLamps(params.lamps));
-
-    const trails = buildTrails(params.trailDashes);
-    root.add(trails.mesh);
-    timeMats.push(trails.material);
-
-    const bateau = buildBateau();
-    root.add(bateau.sprite);
-    tickers.push(bateau.tick);
+    // Landmarks, street lamps, car trails and the bateau are built in a SECOND
+    // pass (see below). They are detail, not silhouette: none of them decide
+    // what the hero frame looks like, and building them here kept the whole
+    // city off screen while ~1600 lamp points and 260 trail quads were
+    // generated on the main thread.
 
     // Ground plane so nothing floats over the void between blocks.
     const ground = new THREE.Mesh(
@@ -81,6 +75,29 @@ export function CityScene({ tier }: { tier: Exclude<Tier, "static"> }) {
     // Built once per tier; tier never changes without a full remount.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tier]);
+
+  // Second pass — after the first frame is on screen. Pushed into the SAME
+  // arrays the frame loop reads, so the new materials animate the moment they
+  // exist, and everything is parented to `root` so disposal is unchanged.
+  useEffect(() => {
+    let cancelled = false;
+    const id = requestAnimationFrame(() => {
+      if (cancelled) return;
+      const { root, timeMats, tickers } = built;
+      root.add(buildLouvre(), buildSacreCoeur(), buildArc(), buildBridges(), buildCafe());
+      root.add(buildLamps(params.lamps));
+      const trails = buildTrails(params.trailDashes);
+      root.add(trails.mesh);
+      timeMats.push(trails.material);
+      const bateau = buildBateau();
+      root.add(bateau.sprite);
+      tickers.push(bateau.tick);
+    });
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(id);
+    };
+  }, [built, params.lamps, params.trailDashes]);
 
   useFrame(({ clock }) => {
     const t = clock.getElapsedTime();

@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { aiErrors, aiPronunciation, type AiError, type AiPronunciation } from "@/lib/ai-text";
 
 /**
  * "Mes points à travailler" — the student's OWN recurring errors.
@@ -18,6 +19,11 @@ export type Insights = {
   weakPoints: WeakPoint[];
   competences: CompetenceStat[];
   recentCorrections: { day: number; text: string }[];
+  /** The SAME structured objects the coach panel reads out of the stored weekly
+   *  reports — « dijiste X → lo correcto es Y → la regla es Z » — instead of the
+   *  flat strings the student used to get. Newest week first, deduped. */
+  commonErrors: (AiError & { week: number })[];
+  pronunciation: (AiPronunciation & { week: number })[];
   graded: number;
 };
 
@@ -40,7 +46,7 @@ export const myInsights = createServerFn({ method: "GET" })
   .handler(async ({ context }): Promise<Insights> => {
     // RLS restricts both tables to the caller's own rows — no user_id filter
     // needed, and none accepted: a student can never read someone else's.
-    const [acts, defis] = await Promise.all([
+    const [acts, defis, weekly] = await Promise.all([
       context.supabase
         .from("activity_results")
         .select("day_id, competence, aciertos, errores, punto_debil, created_at")
@@ -51,6 +57,11 @@ export const myInsights = createServerFn({ method: "GET" })
         .select("day_id, hits, misses, weak_points, created_at")
         .order("created_at", { ascending: false })
         .limit(200),
+      context.supabase
+        .from("weekly_evaluations")
+        .select("week_number, ai_report")
+        .order("week_number", { ascending: false })
+        .limit(24),
     ]);
 
     const weak = new Map<string, { label: string; times: number; lastDay: number }>();
@@ -109,5 +120,37 @@ export const myInsights = createServerFn({ method: "GET" })
       .filter((c) => c.hits + c.misses > 0)
       .sort((a, b) => a.accuracy - b.accuracy);
 
-    return { weakPoints, competences, recentCorrections: corrections.slice(0, 6), graded };
+    // Structured errors + pronunciation, read from the stored weekly reports
+    // with the very same normalizers the coach panel uses. Deduped on the
+    // corrected form / word so a repeated point is listed once, newest week.
+    const errSeen = new Set<string>();
+    const commonErrors: (AiError & { week: number })[] = [];
+    const proSeen = new Set<string>();
+    const pronunciation: (AiPronunciation & { week: number })[] = [];
+
+    for (const row of weekly.data ?? []) {
+      const week = Number(row.week_number) || 0;
+      const rep = (row.ai_report ?? {}) as Record<string, unknown>;
+      for (const e of aiErrors(rep.common_errors)) {
+        const k = key(e.corrected || e.said);
+        if (!k || errSeen.has(k)) continue;
+        errSeen.add(k);
+        if (commonErrors.length < 8) commonErrors.push({ ...e, week });
+      }
+      for (const p of aiPronunciation(rep.pronunciation)) {
+        const k = key(p.word);
+        if (!k || proSeen.has(k)) continue;
+        proSeen.add(k);
+        if (pronunciation.length < 8) pronunciation.push({ ...p, week });
+      }
+    }
+
+    return {
+      weakPoints,
+      competences,
+      recentCorrections: corrections.slice(0, 6),
+      commonErrors,
+      pronunciation,
+      graded,
+    };
   });

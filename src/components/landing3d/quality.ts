@@ -74,12 +74,18 @@ export const TIER_PARAMS: Record<Exclude<Tier, "static">, TierParams> = {
 };
 
 /**
- * Google Photorealistic 3D Tiles key (VITE_GOOGLE_3D_TILES_KEY). When present
- * on a non-mobile tier, the landing streams the REAL Paris; absent/empty means
- * the procedural night city (current behavior) everywhere. Phones always stay
- * procedural: the tiles stream tens of MB per visit.
+ * Google Photorealistic 3D Tiles key — OFF unless explicitly switched on.
+ *
+ * Real tiles cost three network round-trips to Google (session token -> root
+ * index -> first geometry) before a single building exists. That is dead time
+ * on a marketing page and it depends on someone else's servers staying up.
+ * The procedural city ships in our own bundle and paints as soon as the chunk
+ * lands, so it is the default for everyone.
+ *
+ * To turn real Paris back on you need BOTH the key and VITE_REAL_PARIS=1.
  */
 export function realTilesKey(): string | null {
+  if (import.meta.env.VITE_REAL_PARIS !== "1") return null;
   const key = import.meta.env.VITE_GOOGLE_3D_TILES_KEY as string | undefined;
   return key && key.trim().length > 10 ? key.trim() : null;
 }
