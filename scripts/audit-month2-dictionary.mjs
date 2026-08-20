@@ -105,7 +105,7 @@ const GRAMMAR = {
   15: /ne\.\.\.plus|ne\.\.\.jamais|ne\.\.\.rien|ne\.\.\.personne|n[ée]gation/i,
   16: /accord|bapne|adjectif/i,
   17: /est-ce que|inversion|quel\s*\/\s*quelle|quel \/ quelle/i,
-  18: /qui.*que|relatif/i,
+  18: /qui \(sujet\)|nom \+ qui|relatif/i,
   19: /depuis|on = nous|on \(nous\)/i,
   20: /tr[èe]s|trop|assez|adverbe/i,
 };

@@ -2222,9 +2222,35 @@ g("12o. 3D night-flight landing: SSR safety, fallbacks, flight wiring");
     ok("J31 teaches les 4 verbes piliers", teaches(31, /verbes piliers/i));
     ok("J36 teaches l'accord des adjectifs + BAPNE", teaches(36, /BAPNE/));
     ok("J39 teaches depuis + présent and on = nous", teaches(39, /depuis \+ durée/i));
+    ok("J38 teaches the pronoms relatifs qui/que", teaches(38, /nom \+ qui \+ verbe/i));
     ok("J40 teaches les adverbes d'intensité", teaches(40, /verbe \+ beaucoup/i));
     ok("month2.ts stays machine-readable after the patch (indexOf(\"= {\"))",
        m2start !== -1);
+  }
+
+  /* The natural voice must survive long text. A reading passage or a mascot
+     paragraph is 400-900 chars; those used to skip the server and play the
+     robotic browser voice students explicitly complained about. */
+  {
+    const sp = readFileSync("src/lib/speak.ts", "utf8");
+    ok("long text is chunked through the server voice, not dumped on the browser one",
+       sp.includes("void speakLongFr(text, _rate, my)") &&
+       !/text\.length > MAX_SERVER_TEXT\)\s*\{\s*speakLocalFallback/.test(sp));
+    ok("chunks split on sentence boundaries and respect the server cap",
+       sp.includes("export function splitForTts") &&
+       /\.split\(\/\(\?<=\[\.!\?/.test(sp) &&
+       sp.includes("buf.length + 1 + s.length <= max"));
+    ok("a sentence longer than the cap is wrapped, never sent oversized",
+       sp.includes("function hardWrap"));
+    ok("the next chunk is fetched while the current one plays (no gap)",
+       sp.includes("pending = i + 1 < chunks.length ? fetchChunk(chunks[i + 1]) : null"));
+    ok("a new click abandons the remaining chunks",
+       sp.includes("if (speakSeq !== seq || currentText !== text) return;"));
+    ok("the browser voice remains ONLY as a real failure fallback",
+       sp.includes("// Server voice unavailable"));
+    ok("TTS model and voice are untouched (gpt-4o-mini-tts / shimmer)",
+       (() => { const ai = readFileSync("src/lib/ai.ts", "utf8");
+         return ai.includes('TTS_MODEL = "gpt-4o-mini-tts"') && ai.includes('TTS_VOICE = "shimmer"'); })());
   }
 
   /* Landing render speed — the four things that kept the page blank. */

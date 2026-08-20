@@ -25,7 +25,9 @@ function notify() {
 
 export function onSpeakChange(cb: (text: string | null) => void): () => void {
   listeners.add(cb);
-  return () => { listeners.delete(cb); };
+  return () => {
+    listeners.delete(cb);
+  };
 }
 
 export function isSpeaking(text?: string) {
@@ -35,11 +37,19 @@ export function isSpeaking(text?: string) {
 
 export function stopFr() {
   if (currentAudio) {
-    try { currentAudio.pause(); } catch { /* ignore */ }
+    try {
+      currentAudio.pause();
+    } catch {
+      /* ignore */
+    }
     currentAudio = null;
   }
   if (typeof window !== "undefined" && "speechSynthesis" in window) {
-    try { window.speechSynthesis.cancel(); } catch { /* ignore */ }
+    try {
+      window.speechSynthesis.cancel();
+    } catch {
+      /* ignore */
+    }
   }
   currentText = null;
   notify();
@@ -67,9 +77,15 @@ if (typeof window !== "undefined" && "speechSynthesis" in window) {
   try {
     window.speechSynthesis.getVoices();
     window.speechSynthesis.addEventListener?.("voiceschanged", () => {
-      try { window.speechSynthesis.getVoices(); } catch { /* ignore */ }
+      try {
+        window.speechSynthesis.getVoices();
+      } catch {
+        /* ignore */
+      }
     });
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
 }
 
 function speakViaSynthesis(text: string, rate = 0.95): boolean {
@@ -85,10 +101,16 @@ function speakViaSynthesis(text: string, rate = 0.95): boolean {
     const v = pickFrenchVoice();
     if (v) u.voice = v;
     u.onend = () => {
-      if (currentText === text) { currentText = null; notify(); }
+      if (currentText === text) {
+        currentText = null;
+        notify();
+      }
     };
     u.onerror = () => {
-      if (currentText === text) { currentText = null; notify(); }
+      if (currentText === text) {
+        currentText = null;
+        notify();
+      }
     };
     currentText = text;
     notify();
@@ -106,17 +128,29 @@ function speakViaAudio(text: string, rate = 0.95): boolean {
     audio.crossOrigin = "anonymous";
     audio.playbackRate = rate;
     audio.onended = () => {
-      if (currentText === text) { currentText = null; currentAudio = null; notify(); }
+      if (currentText === text) {
+        currentText = null;
+        currentAudio = null;
+        notify();
+      }
     };
     currentAudio = audio;
     currentText = text;
     notify();
     void audio.play().catch(() => {
-      if (currentText === text) { currentText = null; currentAudio = null; notify(); }
+      if (currentText === text) {
+        currentText = null;
+        currentAudio = null;
+        notify();
+      }
     });
     return true;
   } catch {
-    if (currentText === text) { currentText = null; currentAudio = null; notify(); }
+    if (currentText === text) {
+      currentText = null;
+      currentAudio = null;
+      notify();
+    }
     return false;
   }
 }
@@ -136,13 +170,21 @@ function playMp3(b64: string, text: string, rate: number): boolean {
     const audio = new Audio(`data:audio/mp3;base64,${b64}`);
     audio.playbackRate = rate;
     audio.onended = () => {
-      if (currentText === text) { currentText = null; currentAudio = null; notify(); }
+      if (currentText === text) {
+        currentText = null;
+        currentAudio = null;
+        notify();
+      }
     };
     currentAudio = audio;
     currentText = text;
     notify();
     void audio.play().catch(() => {
-      if (currentText === text) { currentText = null; currentAudio = null; notify(); }
+      if (currentText === text) {
+        currentText = null;
+        currentAudio = null;
+        notify();
+      }
     });
     return true;
   } catch {
@@ -166,9 +208,13 @@ export function speakFr(text: string, _rate = 0.95): void {
   stopFr();
   const my = ++speakSeq;
 
-  // Long texts (mascot paragraphs) skip the server (input cap) → browser voice.
+  // Long texts used to skip the server entirely and drop to the robotic browser
+  // voice — the exact thing students complained about ("muy molesta, no se
+  // puede practicar"). A reading passage or a mascot paragraph is 400-900
+  // chars, so every one of them sounded robotic. Split it at sentence
+  // boundaries instead and play the natural voice chunk by chunk.
   if (text.length > MAX_SERVER_TEXT) {
-    speakLocalFallback(text, _rate);
+    void speakLongFr(text, _rate, my);
     return;
   }
 
@@ -197,6 +243,104 @@ export function speakFr(text: string, _rate = 0.95): void {
       if (speakSeq !== my || currentText !== text) return;
       speakLocalFallback(text, _rate);
     });
+}
+
+/** Split into ≤MAX_SERVER_TEXT pieces on sentence boundaries, so each piece is
+ *  still a natural unit to read aloud (never mid-word, never mid-sentence
+ *  unless a single sentence is itself longer than the cap). */
+export function splitForTts(text: string, max = MAX_SERVER_TEXT): string[] {
+  const out: string[] = [];
+  // Keep the punctuation with its sentence; « … » and « ! ? » all end one.
+  const sentences = text
+    .split(/(?<=[.!?…])\s+/)
+    .flatMap((s) => (s.length <= max ? [s] : hardWrap(s, max)))
+    .filter((s) => s.trim().length > 0);
+  let buf = "";
+  for (const s of sentences) {
+    if (!buf) buf = s;
+    else if (buf.length + 1 + s.length <= max) buf += " " + s;
+    else {
+      out.push(buf);
+      buf = s;
+    }
+  }
+  if (buf) out.push(buf);
+  return out;
+}
+
+/** Last resort for a single sentence longer than the cap: break on spaces. */
+function hardWrap(s: string, max: number): string[] {
+  const parts: string[] = [];
+  let buf = "";
+  for (const w of s.split(/\s+/)) {
+    if (!buf) buf = w;
+    else if (buf.length + 1 + w.length <= max) buf += " " + w;
+    else {
+      parts.push(buf);
+      buf = w;
+    }
+  }
+  if (buf) parts.push(buf);
+  return parts;
+}
+
+/** Play one MP3 and resolve when it finishes (or fails). */
+function playAndWait(b64: string, rate: number): Promise<void> {
+  return new Promise((resolve) => {
+    try {
+      const audio = new Audio(`data:audio/mp3;base64,${b64}`);
+      audio.playbackRate = rate;
+      audio.onended = () => resolve();
+      audio.onerror = () => resolve();
+      currentAudio = audio;
+      void audio.play().catch(() => resolve());
+    } catch {
+      resolve();
+    }
+  });
+}
+
+/** Natural voice for long text: fetch + play chunk by chunk, in order. The
+ *  `seq` guard means a new click (or stopFr) abandons the rest immediately. */
+async function speakLongFr(text: string, rate: number, seq: number): Promise<void> {
+  const chunks = splitForTts(text);
+  unlockAudioPlayback();
+  currentText = text;
+  notify();
+  // Fetch chunk i+1 WHILE chunk i is playing, so there is no silent gap
+  // between sentences — otherwise every chunk boundary is a ~1s pause.
+  const fetchChunk = async (chunk: string): Promise<string | null> => {
+    const hit = mp3Cache.get(chunk);
+    if (hit) return hit;
+    try {
+      const { audio } = await speakText({ data: { text: chunk } });
+      if (audio) mp3Cache.set(chunk, audio);
+      return audio ?? null;
+    } catch {
+      return null;
+    }
+  };
+
+  let pending: Promise<string | null> | null = fetchChunk(chunks[0]);
+  for (let i = 0; i < chunks.length; i++) {
+    const chunk = chunks[i];
+    if (speakSeq !== seq || currentText !== text) return; // superseded
+    const b64 = await (pending ?? fetchChunk(chunk));
+    pending = i + 1 < chunks.length ? fetchChunk(chunks[i + 1]) : null;
+    if (speakSeq !== seq || currentText !== text) return;
+    if (!b64) {
+      // Server voice unavailable — finish the rest with the browser voice
+      // rather than going silent mid-passage.
+      speakLocalFallback(chunk, rate);
+      return;
+    }
+    await playAndWait(b64, rate);
+  }
+  if (speakSeq === seq && currentText === text) {
+    currentText = null;
+    currentAudio = null;
+    notify();
+  }
 }
 
 export function hasFrenchVoice(): boolean {

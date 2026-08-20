@@ -11829,6 +11829,14 @@ export const MONTH2: Record<string, WeekDay> = {
     ],
     "grammar": [
       {
+        "formula": "nom + qui + verbe (sujet) · nom + que/qu' + sujet + verbe (objet direct)",
+        "use": "Los relativos unen dos frases y eliminan la repetición. QUI sustituye al SUJETO (el que hace la acción): « Le vol part à 14h » → Le vol qui part à 14h est annulé. QUE sustituye al OBJETO DIRECTO (el que la recibe): « J'ai perdu ma valise » → La valise que j'ai perdue est bleue. C'est l'agent qui s'occupe des bagages. · C'est la compagnie qu'on a choisie."
+      },
+      {
+        "formula": "truco: il/elle → qui · le/la/les → que",
+        "use": "Si puedes sustituirlo por il/elle/ils/elles, es QUI. Si puedes sustituirlo por le/la/les, es QUE. ⚠️ *le vol que part → le vol qui part (es sujeto). *la valise qui j'ai perdue → la valise que j'ai perdue (es objeto). Y no olvides la elisión: *la valise que elle → la valise qu'elle. Pronunciación: qui [ki] · que [kə] · qu' [k] ante vocal · qui part [kipaʁ]."
+      },
+      {
         "formula": "il dit que + indicatif",
         "use": "Para reportar una afirmación de otra persona: « Il dit que le vol est retardé. » (Él dice que el vuelo tiene retraso). Siempre con « que » + indicativo, nunca con dos puntos."
       },
