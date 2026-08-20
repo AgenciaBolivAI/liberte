@@ -105,3 +105,41 @@ test("admin analytics shows the desktop/mobile card", async ({ page }) => {
     await deleteStudent(admin, adminUser.id);
   }
 });
+
+/**
+ * The owner's complaint, end to end: "recibí un lead y solo veo un email, no sé
+ * quién es ni qué quiere". Seed one lead carrying every field and assert the
+ * panel actually puts all of it on screen — the name, the phone, the country
+ * and, above all, what the person asked for.
+ */
+test("the leads inbox shows who wrote and what they need", async ({ page }) => {
+  test.setTimeout(180_000);
+  const adminUser = await createStudent(admin);
+  const email = `lead-e2e-${Date.now()}@example.invalid`;
+  const NEED = "Necesito llegar a A2 antes de diciembre para una entrevista";
+  try {
+    await admin.from("user_roles").insert({ user_id: adminUser.id, role: "admin" });
+    await admin.from("leads").insert({
+      full_name: "Interesada E2E",
+      email,
+      phone: "+591 70999888",
+      nationality: "Bolivia",
+      message: NEED,
+      status: "pending",
+    });
+    await login(page, adminUser);
+    await page.goto("/liberte-profesor-panel-9382745-admin/interesados");
+
+    await expect(page.getByText("Interesada E2E")).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText(email)).toBeVisible();
+    await expect(page.getByText("+591 70999888")).toBeVisible();
+    await expect(page.getByText("Bolivia", { exact: false }).first()).toBeVisible();
+    await expect(page.getByText(NEED)).toBeVisible();
+    // And a way to answer without retyping the address.
+    await expect(page.locator(`a[href^="mailto:${email}"]`)).toBeVisible();
+    await expect(page.locator('a[href^="https://wa.me/591709998"]')).toBeVisible();
+  } finally {
+    await admin.from("leads").delete().eq("email", email);
+    await deleteStudent(admin, adminUser.id);
+  }
+});

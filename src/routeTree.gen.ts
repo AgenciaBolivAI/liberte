@@ -40,6 +40,7 @@ import { Route as LiberteProfesorPanel9382745AdminAccesosRouteImport } from './r
 import { Route as LiberteProfesorPanel9382745AdminAlumnosRouteImport } from './routes/liberte-profesor-panel-9382745-admin.alumnos'
 import { Route as LiberteProfesorPanel9382745AdminContenidoRouteImport } from './routes/liberte-profesor-panel-9382745-admin.contenido'
 import { Route as LiberteProfesorPanel9382745AdminEquipoRouteImport } from './routes/liberte-profesor-panel-9382745-admin.equipo'
+import { Route as LiberteProfesorPanel9382745AdminInteresadosRouteImport } from './routes/liberte-profesor-panel-9382745-admin.interesados'
 import { Route as SemaineWeekIdRouteImport } from './routes/semaine.$weekId'
 import { Route as ApiPublicLiberteFrancesSignupRouteImport } from './routes/api/public/liberte-frances-signup'
 import { Route as ApiTelegramRemindersRouteImport } from './routes/api/telegram/reminders'
@@ -211,6 +212,12 @@ const LiberteProfesorPanel9382745AdminEquipoRoute =
     path: '/equipo',
     getParentRoute: () => LiberteProfesorPanel9382745AdminRoute,
   } as any)
+const LiberteProfesorPanel9382745AdminInteresadosRoute =
+  LiberteProfesorPanel9382745AdminInteresadosRouteImport.update({
+    id: '/interesados',
+    path: '/interesados',
+    getParentRoute: () => LiberteProfesorPanel9382745AdminRoute,
+  } as any)
 const SemaineWeekIdRoute = SemaineWeekIdRouteImport.update({
   id: '/semaine/$weekId',
   path: '/semaine/$weekId',
@@ -274,6 +281,7 @@ export interface FileRoutesByFullPath {
   '/liberte-profesor-panel-9382745-admin/alumnos': typeof LiberteProfesorPanel9382745AdminAlumnosRoute
   '/liberte-profesor-panel-9382745-admin/contenido': typeof LiberteProfesorPanel9382745AdminContenidoRoute
   '/liberte-profesor-panel-9382745-admin/equipo': typeof LiberteProfesorPanel9382745AdminEquipoRoute
+  '/liberte-profesor-panel-9382745-admin/interesados': typeof LiberteProfesorPanel9382745AdminInteresadosRoute
   '/semaine/$weekId': typeof SemaineWeekIdRoute
   '/clasesenvivo/': typeof ClasesenvivoIndexRoute
   '/liberte-profesor-panel-9382745-admin/': typeof LiberteProfesorPanel9382745AdminIndexRoute
@@ -312,6 +320,7 @@ export interface FileRoutesByTo {
   '/liberte-profesor-panel-9382745-admin/alumnos': typeof LiberteProfesorPanel9382745AdminAlumnosRoute
   '/liberte-profesor-panel-9382745-admin/contenido': typeof LiberteProfesorPanel9382745AdminContenidoRoute
   '/liberte-profesor-panel-9382745-admin/equipo': typeof LiberteProfesorPanel9382745AdminEquipoRoute
+  '/liberte-profesor-panel-9382745-admin/interesados': typeof LiberteProfesorPanel9382745AdminInteresadosRoute
   '/semaine/$weekId': typeof SemaineWeekIdRoute
   '/clasesenvivo': typeof ClasesenvivoIndexRoute
   '/liberte-profesor-panel-9382745-admin': typeof LiberteProfesorPanel9382745AdminIndexRoute
@@ -352,6 +361,7 @@ export interface FileRoutesById {
   '/liberte-profesor-panel-9382745-admin/alumnos': typeof LiberteProfesorPanel9382745AdminAlumnosRoute
   '/liberte-profesor-panel-9382745-admin/contenido': typeof LiberteProfesorPanel9382745AdminContenidoRoute
   '/liberte-profesor-panel-9382745-admin/equipo': typeof LiberteProfesorPanel9382745AdminEquipoRoute
+  '/liberte-profesor-panel-9382745-admin/interesados': typeof LiberteProfesorPanel9382745AdminInteresadosRoute
   '/semaine/$weekId': typeof SemaineWeekIdRoute
   '/clasesenvivo/': typeof ClasesenvivoIndexRoute
   '/liberte-profesor-panel-9382745-admin/': typeof LiberteProfesorPanel9382745AdminIndexRoute
@@ -393,6 +403,7 @@ export interface FileRouteTypes {
     | '/liberte-profesor-panel-9382745-admin/alumnos'
     | '/liberte-profesor-panel-9382745-admin/contenido'
     | '/liberte-profesor-panel-9382745-admin/equipo'
+    | '/liberte-profesor-panel-9382745-admin/interesados'
     | '/semaine/$weekId'
     | '/clasesenvivo/'
     | '/liberte-profesor-panel-9382745-admin/'
@@ -431,6 +442,7 @@ export interface FileRouteTypes {
     | '/liberte-profesor-panel-9382745-admin/alumnos'
     | '/liberte-profesor-panel-9382745-admin/contenido'
     | '/liberte-profesor-panel-9382745-admin/equipo'
+    | '/liberte-profesor-panel-9382745-admin/interesados'
     | '/semaine/$weekId'
     | '/clasesenvivo'
     | '/liberte-profesor-panel-9382745-admin'
@@ -470,6 +482,7 @@ export interface FileRouteTypes {
     | '/liberte-profesor-panel-9382745-admin/alumnos'
     | '/liberte-profesor-panel-9382745-admin/contenido'
     | '/liberte-profesor-panel-9382745-admin/equipo'
+    | '/liberte-profesor-panel-9382745-admin/interesados'
     | '/semaine/$weekId'
     | '/clasesenvivo/'
     | '/liberte-profesor-panel-9382745-admin/'
@@ -734,6 +747,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LiberteProfesorPanel9382745AdminEquipoRouteImport
       parentRoute: typeof LiberteProfesorPanel9382745AdminRoute
     }
+    '/liberte-profesor-panel-9382745-admin/interesados': {
+      id: '/liberte-profesor-panel-9382745-admin/interesados'
+      path: '/interesados'
+      fullPath: '/liberte-profesor-panel-9382745-admin/interesados'
+      preLoaderRoute: typeof LiberteProfesorPanel9382745AdminInteresadosRouteImport
+      parentRoute: typeof LiberteProfesorPanel9382745AdminRoute
+    }
     '/semaine/$weekId': {
       id: '/semaine/$weekId'
       path: '/semaine/$weekId'
@@ -784,6 +804,7 @@ interface LiberteProfesorPanel9382745AdminRouteChildren {
   LiberteProfesorPanel9382745AdminAlumnosRoute: typeof LiberteProfesorPanel9382745AdminAlumnosRoute
   LiberteProfesorPanel9382745AdminContenidoRoute: typeof LiberteProfesorPanel9382745AdminContenidoRoute
   LiberteProfesorPanel9382745AdminEquipoRoute: typeof LiberteProfesorPanel9382745AdminEquipoRoute
+  LiberteProfesorPanel9382745AdminInteresadosRoute: typeof LiberteProfesorPanel9382745AdminInteresadosRoute
   LiberteProfesorPanel9382745AdminIndexRoute: typeof LiberteProfesorPanel9382745AdminIndexRoute
 }
 
@@ -797,6 +818,8 @@ const LiberteProfesorPanel9382745AdminRouteChildren: LiberteProfesorPanel9382745
       LiberteProfesorPanel9382745AdminContenidoRoute,
     LiberteProfesorPanel9382745AdminEquipoRoute:
       LiberteProfesorPanel9382745AdminEquipoRoute,
+    LiberteProfesorPanel9382745AdminInteresadosRoute:
+      LiberteProfesorPanel9382745AdminInteresadosRoute,
     LiberteProfesorPanel9382745AdminIndexRoute:
       LiberteProfesorPanel9382745AdminIndexRoute,
   }

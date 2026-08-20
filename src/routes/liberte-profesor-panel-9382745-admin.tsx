@@ -14,6 +14,7 @@ export const Route = createFileRoute("/liberte-profesor-panel-9382745-admin")({
 const TABS = [
   { to: "/liberte-profesor-panel-9382745-admin" as const, label: "Analítica", exact: true },
   { to: "/liberte-profesor-panel-9382745-admin/alumnos" as const, label: "Alumnos" },
+  { to: "/liberte-profesor-panel-9382745-admin/interesados" as const, label: "Interesados" },
   { to: "/liberte-profesor-panel-9382745-admin/contenido" as const, label: "Contenido" },
   { to: "/liberte-profesor-panel-9382745-admin/accesos" as const, label: "Accesos" },
   { to: "/liberte-profesor-panel-9382745-admin/equipo" as const, label: "Equipo" },

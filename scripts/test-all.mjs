@@ -2354,6 +2354,62 @@ g("12o. 3D night-flight landing: SSR safety, fallbacks, flight wiring");
      css.includes("prefers-reduced-motion: no-preference"));
 }
 
+g("12p. Leads: the owner must see WHO wrote and WHAT they need");
+{
+  // The complaint: "recibi un lead y solo veo un email, no se quien es ni que
+  // quiere". The data was in the row the whole time; nothing selected it and
+  // nothing had ever asked the prospect what they needed.
+  const adminFns = readFileSync("src/lib/admin.functions.ts", "utf8");
+  const leadSelect = /\.from\("leads"\)[\s\S]{0,400}?\.select\("([^"]*)"\)/.exec(adminFns);
+  ok("the analytics leads query is not email-only", !!leadSelect && leadSelect[1].includes("full_name"),
+     `leads select = ${leadSelect ? leadSelect[1] : "NOT FOUND"}`);
+  for (const col of ["full_name", "phone", "nationality", "message"]) {
+    ok(`leads query fetches ${col}`, !!leadSelect && leadSelect[1].includes(col));
+  }
+  ok("the activity feed names the person, not the address",
+     /who: l\.full_name \|\| l\.email/.test(adminFns),
+     "feed fell back to an email-only entry again");
+  ok("the feed line carries the contact details",
+     /detail: \[l\.email, l\.phone, l\.nationality\]/.test(adminFns));
+  ok("there is a server fn returning every lead field",
+     /export const getLeads/.test(adminFns) &&
+     /"id, full_name, email, phone, nationality, message, status, created_at"/.test(adminFns));
+  ok("lead status changes are admin-gated and whitelisted",
+     /export const setLeadStatus/.test(adminFns) &&
+     /\["pending", "contacted", "approved", "discarded"\]/.test(adminFns));
+
+  // The capture side: nothing asked what the person wanted help with.
+  const signup = readFileSync("src/routes/api/public/liberte-frances-signup.ts", "utf8");
+  ok("the signup endpoint accepts a message", /message: z\.string\(\)\.trim\(\)\.max\(1000\)/.test(signup));
+  ok("the message is persisted with the lead", /\.insert\(\{[^}]*message/.test(signup));
+  ok("the owner notification includes the message and the phone",
+     signup.includes("En qué necesita ayuda") && signup.includes("escapeHtml(phone"),
+     "owner email must carry what the lead asked for");
+
+  const landing = readFileSync("src/routes/index.tsx", "utf8");
+  ok("the public form asks what they need help with", landing.includes("<textarea"));
+  ok("the message is sent to the API", /message: message\.trim\(\)\.slice\(0, 1000\)/.test(landing));
+
+  // The inbox itself.
+  const inbox = readFileSync("src/components/LeadsInbox.tsx", "utf8");
+  for (const field of ["full_name", "l.email", "l.phone", "l.nationality"]) {
+    ok(`the inbox renders ${field}`, inbox.includes(field));
+  }
+  // Not a bare `includes("l.message")` — the search filter mentions the field
+  // too, so that assert stayed green even with the card gutted. Pin the render.
+  ok("the inbox renders WHAT the lead asked for, on the card",
+     inbox.includes("En qué necesita ayuda") &&
+     /whitespace-pre-wrap[^>]*>\{l\.message\}/.test(inbox),
+     "the message block is not rendered in the lead card");
+  ok("one tap to answer by mail and by WhatsApp",
+     inbox.includes("mailto:") && inbox.includes("https://wa.me/"));
+  ok("WhatsApp numbers are stripped to digits (wa.me rejects punctuation)",
+     /replace\(\/\\D\/g, ""\)/.test(inbox));
+  const adminLayout = readFileSync("src/routes/liberte-profesor-panel-9382745-admin.tsx", "utf8");
+  ok("the inbox has its own tab in the teacher panel",
+     adminLayout.includes('label: "Interesados"'));
+}
+
 /* ---------------- build output ---------------- */
 g("12. Build output");
 {

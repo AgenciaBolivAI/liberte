@@ -373,7 +373,12 @@ export const getAdminAnalytics = createServerFn({ method: "POST" })
           .from("profiles")
           .select("id, full_name, email, created_at, approved_at")
           .limit(100_000),
-        supabaseAdmin.from("leads").select("email, status, created_at").limit(100_000),
+        supabaseAdmin
+        .from("leads")
+        // full_name/phone/nationality/message ride along so the feed can name
+        // the person instead of printing a bare address.
+        .select("email, full_name, phone, nationality, message, status, created_at")
+        .limit(100_000),
         filtered(
           supabaseAdmin.from("day_completions").select("user_id, day_id, completed_at"),
           "completed_at",
@@ -569,7 +574,12 @@ export const getAdminAnalytics = createServerFn({ method: "POST" })
     type Feed = AdminAnalytics["recentActivity"][number];
     const feed: Feed[] = [];
     leadRows.forEach((l) =>
-      feed.push({ type: "lead", who: l.email ?? "lead", detail: "Nuevo lead", at: l.created_at }),
+      feed.push({
+        type: "lead",
+        who: l.full_name || l.email || "lead",
+        detail: [l.email, l.phone, l.nationality].filter(Boolean).join(" · ") || "Nuevo lead",
+        at: l.created_at,
+      }),
     );
     profileRows.forEach((p) =>
       feed.push({
@@ -659,4 +669,62 @@ export const getAdminAnalytics = createServerFn({ method: "POST" })
       topStudents,
       recentActivity,
     };
+  });
+
+/* ---------------- Leads (the enquiry inbox) ---------------- */
+
+export type LeadRow = {
+  id: string;
+  full_name: string;
+  email: string;
+  phone: string | null;
+  nationality: string | null;
+  message: string | null;
+  status: string;
+  created_at: string;
+};
+
+/**
+ * Every lead with EVERY field we hold.
+ *
+ * The analytics feed only ever selected `email, status, created_at`, so the
+ * owner saw an address and the words "Nuevo lead" — the name and phone were
+ * sitting in the row, unread, and nothing had ever asked what the person
+ * wanted. This is the inbox that makes a lead actionable.
+ */
+export const getLeads = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    await requireAdmin(context as Ctx);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data, error } = await supabaseAdmin
+      .from("leads")
+      .select("id, full_name, email, phone, nationality, message, status, created_at")
+      .order("created_at", { ascending: false })
+      .limit(500);
+    if (error) throw new Error(error.message);
+    return (data ?? []) as LeadRow[];
+  });
+
+/** Mark a lead as contacted / approved / discarded, so the inbox is a worklist
+ *  rather than a pile the owner has to remember her way through. */
+export const setLeadStatus = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => {
+    const d = input as { id?: string; status?: string };
+    if (!d?.id || !UUID_RE.test(String(d.id))) throw new Error("id inválido");
+    const allowed = ["pending", "contacted", "approved", "discarded"] as const;
+    const status = allowed.find((a) => a === d?.status);
+    if (!status) throw new Error("estado inválido");
+    return { id: String(d.id), status };
+  })
+  .handler(async ({ data, context }) => {
+    await requireAdmin(context as Ctx);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { error } = await supabaseAdmin
+      .from("leads")
+      .update({ status: data.status, updated_at: new Date().toISOString() })
+      .eq("id", data.id);
+    if (error) throw new Error(error.message);
+    return { ok: true };
   });

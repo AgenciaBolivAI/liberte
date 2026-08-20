@@ -461,6 +461,7 @@ export type Database = {
           email: string
           full_name: string
           id: string
+          message: string | null
           nationality: string | null
           phone: string | null
           status: string
@@ -471,6 +472,7 @@ export type Database = {
           email: string
           full_name: string
           id?: string
+          message?: string | null
           nationality?: string | null
           phone?: string | null
           status?: string
@@ -481,6 +483,7 @@ export type Database = {
           email?: string
           full_name?: string
           id?: string
+          message?: string | null
           nationality?: string | null
           phone?: string | null
           status?: string

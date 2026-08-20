@@ -11,6 +11,9 @@ const bodySchema = z
     email: z.string().trim().email().max(255),
     nationality: z.string().trim().transform(noCRLF).pipe(z.string().min(2).max(80)).optional(),
     phone: z.string().trim().transform(noCRLF).pipe(z.string().min(6).max(30)).optional(),
+    // What the person actually needs. Newlines are kept (it is a paragraph,
+    // not a header) but it is escaped before it reaches any email HTML.
+    message: z.string().trim().max(1000).optional(),
   })
   .strict();
 
@@ -139,7 +142,7 @@ export const Route = createFileRoute("/api/public/liberte-frances-signup")({
           return Response.json({ error: "Datos inválidos" }, { status: 400 });
         }
 
-        const { full_name, email, nationality, phone } = parsed.data;
+        const { full_name, email, nationality, phone, message } = parsed.data;
 
         const supabaseUrl = process.env.SUPABASE_URL;
         const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -177,7 +180,7 @@ export const Route = createFileRoute("/api/public/liberte-frances-signup")({
         if (isNewLead) {
           const { error: insErr } = await supabase
             .from("leads")
-            .insert({ full_name, email: emailLc, nationality, phone, status: "pending" });
+            .insert({ full_name, email: emailLc, nationality, phone, message, status: "pending" });
           if (insErr && !String(insErr.message).toLowerCase().includes("duplicate")) {
             console.error("Lead insert failed", insErr);
             return Response.json({ error: "No pudimos guardar tus datos" }, { status: 500 });
@@ -248,7 +251,12 @@ export const Route = createFileRoute("/api/public/liberte-frances-signup")({
               <tr><td><strong>Email:</strong></td><td>${escapeHtml(email)}</td></tr>
               <tr><td><strong>Nacionalidad:</strong></td><td>${escapeHtml(nationality ?? "—")}</td></tr>
               <tr><td><strong>Teléfono:</strong></td><td>${escapeHtml(phone ?? "—")}</td></tr>
+              <tr><td><strong>País:</strong></td><td>${escapeHtml(nationality ?? "—")}</td></tr>
               <tr><td><strong>Fecha:</strong></td><td>${new Date().toISOString()}</td></tr>
+            </table>
+            <p style="margin:18px 0 6px;font-weight:bold;">En qué necesita ayuda:</p>
+            <p style="white-space:pre-wrap;margin:0;padding:12px;background:#f4f6fb;border-radius:8px;">${escapeHtml(message ?? "— (no lo indicó)")}</p>
+            <table>
             </table>
           </body></html>`;
           await fetch("https://api.resend.com/emails", {

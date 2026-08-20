@@ -515,6 +515,9 @@ function LeadForm() {
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [nationality, setNationality] = useState("");
+  // The owner kept receiving leads she could not act on: an address and
+  // nothing about what the person wanted. Optional, so it cannot cost a lead.
+  const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState("");
@@ -532,6 +535,7 @@ function LeadForm() {
           email: email.trim(),
           ...(nationality.trim().length >= 2 ? { nationality: nationality.trim() } : {}),
           ...(phone.trim().length >= 6 ? { phone: phone.trim() } : {}),
+          ...(message.trim().length >= 2 ? { message: message.trim().slice(0, 1000) } : {}),
         }),
       });
       if (res.ok) {
@@ -609,6 +613,14 @@ function LeadForm() {
           className="h-12 rounded-xl bg-ice"
         />
       </div>
+      <textarea
+        value={message}
+        onChange={(e) => setMessage(e.target.value)}
+        placeholder="¿En qué quieres que te ayudemos? (opcional) — tu nivel, tu objetivo, cuándo quieres empezar…"
+        rows={3}
+        maxLength={1000}
+        className="w-full rounded-xl border border-input bg-ice px-3 py-2.5 text-base ring-offset-background placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none md:text-sm"
+      />
       {error && <p className="text-sm text-red">{error}</p>}
       <Button
         type="submit"
