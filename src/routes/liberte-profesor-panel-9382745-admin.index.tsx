@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { AdminAnalytics } from "@/components/AdminAnalytics";
 import { ApprovalQueue } from "@/components/ApprovalQueue";
+import { NewLeadsCard } from "@/components/NewLeadsCard";
 
 export const Route = createFileRoute("/liberte-profesor-panel-9382745-admin/")({
   component: AnalyticsTab,
@@ -9,6 +10,7 @@ export const Route = createFileRoute("/liberte-profesor-panel-9382745-admin/")({
 function AnalyticsTab() {
   return (
     <>
+      <NewLeadsCard />
       <ApprovalQueue />
       <AdminAnalytics />
     </>

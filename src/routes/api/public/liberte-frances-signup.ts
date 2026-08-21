@@ -193,7 +193,6 @@ export const Route = createFileRoute("/api/public/liberte-frances-signup")({
           return Response.json({ ok: true, emailed: false });
         }
 
-        // 2. Send welcome email via the Resend API
         if (!resendKey) {
           console.error("Missing RESEND_API_KEY — lead saved but email skipped");
           return Response.json(
@@ -205,6 +204,57 @@ export const Route = createFileRoute("/api/public/liberte-frances-signup")({
           );
         }
 
+        // 2. Tell the OWNER first.
+        //
+        // This used to be step 3, after the student's welcome email — and both
+        // welcome-email failure branches `return` early, so any Resend hiccup
+        // (an unverified sending domain, a rate limit) silently swallowed the
+        // owner's notification too. She would never learn the lead existed.
+        // Whether the prospect got their welcome mail must not decide whether
+        // the business hears about the lead.
+        try {
+          const adminHtml = `<!doctype html><html><body style="font-family:Arial,sans-serif;color:#1e2a45;padding:24px;">
+            <h2 style="margin:0 0 16px;">Nuevo interesado en Liberté</h2>
+            <table cellpadding="6" style="border-collapse:collapse;font-size:15px;">
+              <tr><td><strong>Nombre:</strong></td><td>${escapeHtml(full_name)}</td></tr>
+              <tr><td><strong>Email:</strong></td><td>${escapeHtml(email)}</td></tr>
+              <tr><td><strong>Teléfono:</strong></td><td>${escapeHtml(phone ?? "—")}</td></tr>
+              <tr><td><strong>País:</strong></td><td>${escapeHtml(nationality ?? "—")}</td></tr>
+            </table>
+            <p style="margin:18px 0 6px;font-weight:bold;">En qué necesita ayuda:</p>
+            <p style="white-space:pre-wrap;margin:0;padding:12px;background:#f4f6fb;border-radius:8px;">${escapeHtml(message ?? "— (no lo indicó)")}</p>
+            <p style="margin:18px 0 0;font-size:14px;">
+              Responde a este correo para escribirle directamente, o ábrelo en el panel:
+              <a href="https://www.libertefrances.com/liberte-profesor-panel-9382745-admin/interesados">Interesados</a>.
+            </p>
+          </body></html>`;
+          const notifyRes = await fetch("https://api.resend.com/emails", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${resendKey}`,
+            },
+            body: JSON.stringify({
+              from: "Liberté <hola@libertefrances.com>",
+              to: ["libertedirec@gmail.com"],
+              // Static subject: full_name is attacker-controlled and a CRLF in
+              // it could otherwise inject email headers. reply_to IS safe to
+              // personalise — zod already validated it as an email address —
+              // and it means hitting Reply answers the prospect instead of
+              // bouncing back to our own inbox.
+              reply_to: emailLc,
+              subject: "Nuevo interesado en Liberté",
+              html: adminHtml,
+            }),
+          });
+          if (!notifyRes.ok) {
+            console.error(`Admin notify failed [${notifyRes.status}]: ${await notifyRes.text()}`);
+          }
+        } catch (err) {
+          console.error("Admin notify threw", err);
+        }
+
+        // 3. Send welcome email via the Resend API
         try {
           const resendRes = await fetch("https://api.resend.com/emails", {
             method: "POST",
@@ -241,47 +291,6 @@ export const Route = createFileRoute("/api/public/liberte-frances-signup")({
             { status: 502 },
           );
         }
-
-        // 3. Notify admin (best-effort, does not block success)
-        try {
-          const adminHtml = `<!doctype html><html><body style="font-family:Arial,sans-serif;color:#1e2a45;padding:24px;">
-            <h2 style="margin:0 0 16px;">Nuevo registro en Liberté 🎉</h2>
-            <table cellpadding="6" style="border-collapse:collapse;font-size:15px;">
-              <tr><td><strong>Nombre:</strong></td><td>${escapeHtml(full_name)}</td></tr>
-              <tr><td><strong>Email:</strong></td><td>${escapeHtml(email)}</td></tr>
-              <tr><td><strong>Nacionalidad:</strong></td><td>${escapeHtml(nationality ?? "—")}</td></tr>
-              <tr><td><strong>Teléfono:</strong></td><td>${escapeHtml(phone ?? "—")}</td></tr>
-              <tr><td><strong>País:</strong></td><td>${escapeHtml(nationality ?? "—")}</td></tr>
-              <tr><td><strong>Fecha:</strong></td><td>${new Date().toISOString()}</td></tr>
-            </table>
-            <p style="margin:18px 0 6px;font-weight:bold;">En qué necesita ayuda:</p>
-            <p style="white-space:pre-wrap;margin:0;padding:12px;background:#f4f6fb;border-radius:8px;">${escapeHtml(message ?? "— (no lo indicó)")}</p>
-            <table>
-            </table>
-          </body></html>`;
-          await fetch("https://api.resend.com/emails", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${resendKey}`,
-            },
-            body: JSON.stringify({
-              from: "Liberté <hola@libertefrances.com>",
-              to: ["libertedirec@gmail.com"],
-              // Static subject/reply-to: full_name is attacker-controlled and a
-              // CRLF in it could otherwise inject email headers or send the
-              // admin's reply to the attacker.
-              reply_to: "hola@libertefrances.com",
-              subject: "Nuevo registro en Liberté",
-              html: adminHtml,
-            }),
-          }).then(async (r) => {
-            if (!r.ok) console.error(`Admin notify failed [${r.status}]: ${await r.text()}`);
-          });
-        } catch (err) {
-          console.error("Admin notify threw", err);
-        }
-
 
         return Response.json({ ok: true, emailed: true });
       },

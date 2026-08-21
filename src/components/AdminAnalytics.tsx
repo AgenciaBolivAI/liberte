@@ -24,6 +24,7 @@ import {
   Users,
   X,
 } from "lucide-react";
+import { LeadsDrill } from "@/components/LeadsDrill";
 import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
 import {
@@ -447,7 +448,10 @@ function DrillPanel({ metric, data, onClose }: { metric: string; data: Analytics
   const showStudents = metric === "activeStudents" || metric === "daysCompleted" || metric === "avgDefiScore";
   const showStars = metric === "starsAwarded";
   const feedType = metric === "newStudents" ? "signup" : metric === "newLeads" ? "lead" : null;
-  const feed = feedType ? data.recentActivity.filter((f) => f.type === feedType) : [];
+  // `newLeads` renders full lead cards below, so the name-only list would just
+  // repeat the same people with less information.
+  const feed =
+    feedType && metric !== "newLeads" ? data.recentActivity.filter((f) => f.type === feedType) : [];
   const hasSeriesData = series.some((r) => r.value > 0);
 
   return (
@@ -520,6 +524,11 @@ function DrillPanel({ metric, data, onClose }: { metric: string; data: Analytics
                 ))}
               </ul>
             )}
+          </div>
+        )}
+        {metric === "newLeads" && (
+          <div className="sm:col-span-2">
+            <LeadsDrill />
           </div>
         )}
         {feed.length > 0 && (

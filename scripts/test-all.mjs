@@ -461,7 +461,10 @@ g("9b. Hands-free voice tutor");
   ok("signup endpoint no longer updates leads by email", !/\.from\("leads"\)\s*\.update/.test(sup));
   ok("signup endpoint doesn't re-send mail for known emails", sup.includes("isNewLead"));
   ok("signup endpoint doesn't echo zod internals", !sup.includes("parsed.error.issues"));
-  ok("signup admin email uses a static reply-to", sup.includes('reply_to: "hola@libertefrances.com"'));
+  ok("signup admin email keeps a static subject (full_name is attacker-controlled)",
+     /subject: "Nuevo interesado en Liberté"/.test(sup) && !/subject: `/.test(sup));
+  ok("signup admin reply-to is the zod-validated lead address, never raw input",
+     /reply_to: emailLc/.test(sup) && !/reply_to: `/.test(sup) && !/reply_to: full_name/.test(sup));
   // Audit M1: grading writes go through the service role.
   const defiSrc = readFileSync("src/lib/defi.functions.ts", "utf8");
   ok("defi_results written via service role", defiSrc.replace(/\r\n/g, "\n").includes('supabaseAdmin\n      .from("defi_results")'));
@@ -2391,7 +2394,7 @@ g("12p. Leads: the owner must see WHO wrote and WHAT they need");
   ok("the message is sent to the API", /message: message\.trim\(\)\.slice\(0, 1000\)/.test(landing));
 
   // The inbox itself.
-  const inbox = readFileSync("src/components/LeadsInbox.tsx", "utf8");
+  const inbox = readFileSync("src/components/LeadCard.tsx", "utf8");
   for (const field of ["full_name", "l.email", "l.phone", "l.nationality"]) {
     ok(`the inbox renders ${field}`, inbox.includes(field));
   }
@@ -2408,6 +2411,53 @@ g("12p. Leads: the owner must see WHO wrote and WHAT they need");
   const adminLayout = readFileSync("src/routes/liberte-profesor-panel-9382745-admin.tsx", "utf8");
   ok("the inbox has its own tab in the teacher panel",
      adminLayout.includes('label: "Interesados"'));
+
+  // A tab nobody was told about is the same as no panel: the owner reported
+  // still not seeing lead data AFTER the inbox shipped. Unanswered leads have
+  // to greet her on the page she actually opens.
+  const analyticsTab = readFileSync("src/routes/liberte-profesor-panel-9382745-admin.index.tsx", "utf8");
+  ok("new leads surface on the panel's FIRST screen, not only behind a tab",
+     analyticsTab.includes("<NewLeadsCard />"));
+  const card = readFileSync("src/components/NewLeadsCard.tsx", "utf8");
+  const leadCard = readFileSync("src/components/LeadCard.tsx", "utf8");
+  // The fields live in the shared card now; what matters is that the shared
+  // card carries them and that Analítica shows leads whole.
+  ok("that card shows the name, the message and a way to answer",
+     leadCard.includes("l.full_name") && leadCard.includes("{l.message}") &&
+     leadCard.includes("mailto:") && leadCard.includes("https://wa.me/") &&
+     card.includes("<LeadCard"));
+  // "Everything should be seen in the admin panel": each surface that mentions
+  // a lead must render the SAME whole card, never a thinner slice.
+  for (const [surface, file] of [
+    ["the Interesados tab", "src/components/LeadsInbox.tsx"],
+    ["the Analítica card", "src/components/NewLeadsCard.tsx"],
+    ["the 'Leads nuevos' drill-down", "src/components/LeadsDrill.tsx"],
+  ]) {
+    const src = readFileSync(file, "utf8");
+    ok(`${surface} renders the full lead card`,
+       src.includes("<LeadCard") && src.includes('from "@/components/LeadCard"'));
+  }
+  const analytics = readFileSync("src/components/AdminAnalytics.tsx", "utf8");
+  ok("tapping the leads counter opens the people, not a date table",
+     analytics.includes("<LeadsDrill />") && /metric === "newLeads" &&/.test(analytics));
+  ok("the drill does not also repeat a name-only list",
+     /feedType && metric !== "newLeads"/.test(analytics));
+
+  ok("the card only nags while leads are unanswered",
+     card.includes('l.status === "pending"') && card.includes("pending.length === 0) return null"));
+
+  // The owner notification must not depend on the STUDENT's welcome mail.
+  // It used to sit after it, and both failure branches return early.
+  const notifyAt = signup.indexOf("libertedirec@gmail.com");
+  const welcomeAt = signup.indexOf("welcomeEmailHtml(full_name)");
+  ok("the owner is notified BEFORE the student welcome email",
+     notifyAt > 0 && welcomeAt > 0 && notifyAt < welcomeAt,
+     "a Resend failure on the welcome mail would swallow the lead notification again");
+  ok("the owner can reply straight to the prospect",
+     /reply_to: emailLc/.test(signup),
+     "reply_to must be the lead, not our own inbox");
+  ok("the RESEND key is checked before either send",
+     signup.indexOf("Missing RESEND_API_KEY") < notifyAt);
 }
 
 /* ---------------- build output ---------------- */

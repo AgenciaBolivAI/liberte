@@ -143,3 +143,45 @@ test("the leads inbox shows who wrote and what they need", async ({ page }) => {
     await deleteStudent(admin, adminUser.id);
   }
 });
+
+/**
+ * "Everything should be seen in the admin panel." A lead must be legible from
+ * every surface that mentions one — the tab, the Analítica landing screen, and
+ * the drill-down behind the "Leads nuevos" counter — not just from the tab the
+ * owner was never told about.
+ */
+test("a lead is legible from every panel surface, not just the tab", async ({ page }) => {
+  test.setTimeout(240_000);
+  const adminUser = await createStudent(admin);
+  const email = `lead-surf-${Date.now()}@example.invalid`;
+  const NEED = "Quiero hablar francés para mi trabajo en marzo";
+  try {
+    await admin.from("user_roles").insert({ user_id: adminUser.id, role: "admin" });
+    await admin.from("leads").insert({
+      full_name: "Surface Probe", email, phone: "+591 70111222",
+      nationality: "Bolivia", message: NEED, status: "pending",
+    });
+    await login(page, adminUser);
+
+    // 1) Analítica — the page she actually lands on.
+    await page.goto("/liberte-profesor-panel-9382745-admin");
+    await expect(page.getByText("Interesados sin contactar", { exact: false })).toBeVisible({ timeout: 45_000 });
+    await expect(page.getByText("Surface Probe").first()).toBeVisible();
+    await expect(page.getByText(NEED).first()).toBeVisible();
+    await expect(page.locator(`a[href^="mailto:${email}"]`).first()).toBeVisible();
+
+    // 2) The "Leads nuevos" counter must open the person, not a date table.
+    await page.getByText("Leads nuevos", { exact: false }).first().click();
+    await expect(page.getByText("Quiénes son")).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText(NEED).nth(1)).toBeVisible();
+
+    // 3) The full inbox.
+    await page.goto("/liberte-profesor-panel-9382745-admin/interesados");
+    await expect(page.getByText("Surface Probe")).toBeVisible({ timeout: 45_000 });
+    await expect(page.getByText("+591 70111222")).toBeVisible();
+    await expect(page.getByText(NEED)).toBeVisible();
+  } finally {
+    await admin.from("leads").delete().eq("email", email);
+    await deleteStudent(admin, adminUser.id);
+  }
+});
