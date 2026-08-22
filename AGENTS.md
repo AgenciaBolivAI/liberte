@@ -176,7 +176,31 @@ npm run lint       # eslint .
 npm run format     # prettier --write .
 npm run test:all   # full end-to-end suite (scripts/test-all.mjs)
 npm run verify     # tsc --noEmit && vite build && test:all
+npm run audit:tts  # does the French audio actually SOUND French? (real API)
 ```
+
+### Whenever vocabulary is added or edited: `npm run audit:tts`
+
+Reading the code cannot tell you how a word is pronounced. OpenAI TTS infers
+the LANGUAGE from the input text, so an isolated French word spelled like an
+English one gets read in English — a client caught « annuler » being spoken as
+"annually" on day 22, and the audit then found the same fault on basic
+pronouns (« moi », « toi », « elle », « nous », « eux ») across many days.
+
+`scripts/audit-tts-language.mjs` synthesizes each short vocabulary item through
+the real production prompt, transcribes it back with `whisper-1`
+(`verbose_json`, **no** language hint) and reports anything that does not come
+back French. It mirrors the runtime repair, so what it audits is what the
+student hears.
+
+```bash
+npm run audit:tts             # every short item in month 2
+npm run audit:tts -- --day 22 # one day
+npm run audit:tts -- --list "annuler,reporter"
+```
+
+`test-all` group 12r runs the same check on the known-bad words on every run,
+so a regression fails the suite without waiting for a client to hear it.
 
 ## Testing strategy
 

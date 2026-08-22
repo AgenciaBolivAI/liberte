@@ -91,6 +91,14 @@ if (typeof window !== "undefined" && "speechSynthesis" in window) {
 function speakViaSynthesis(text: string, rate = 0.95): boolean {
   if (typeof window === "undefined" || !("speechSynthesis" in window)) return false;
   const synth = window.speechSynthesis;
+  // NO French voice installed => refuse. Setting `u.lang = "fr-FR"` does NOT
+  // make the engine speak French: with no French voice it reads the text with
+  // the default system voice, which on most Windows/Android devices is
+  // English. That is silently "suena en inglés" for every single phrase — the
+  // exact complaint. Returning false hands over to the Google fr audio path,
+  // which is always French.
+  const v = pickFrenchVoice();
+  if (!v) return false;
   try {
     synth.resume();
     synth.cancel();
@@ -98,8 +106,7 @@ function speakViaSynthesis(text: string, rate = 0.95): boolean {
     u.lang = "fr-FR";
     u.rate = rate;
     u.pitch = 1.05;
-    const v = pickFrenchVoice();
-    if (v) u.voice = v;
+    u.voice = v;
     u.onend = () => {
       if (currentText === text) {
         currentText = null;

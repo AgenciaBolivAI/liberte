@@ -146,7 +146,24 @@ export async function callChat(
 
 /** French text → spoken MP3, returned base64 so it can cross the server-fn
  *  boundary as JSON. Instructions keep the pace slow enough for A1 learners. */
-export async function speakFrenchBase64(text: string): Promise<string> {
+/** Words in a text — the ambiguity only exists for very short inputs. */
+function wordCount(text: string): number {
+  return text.trim().split(/\s+/).filter(Boolean).length;
+}
+
+/** Longest input we bother language-checking. A real sentence gives the model
+ *  more than enough French to lock onto; an isolated token does not. */
+const AMBIGUOUS_MAX_WORDS = 3;
+
+/** Measured repair: adding French context in front of the word made every
+ *  known-bad item come back French, 24/24 across three runs
+ *  (scripts/probe-tts-strategies.mjs). Only used when the bare audio actually
+ *  came out wrong, so students never hear this on a word that was already fine. */
+function withFrenchContext(text: string): string {
+  return `En français : ${text}`;
+}
+
+async function synthesizeFr(text: string): Promise<Uint8Array> {
   const res = await fetch(`${OPENAI_BASE}/audio/speech`, {
     method: "POST",
     signal: deadline("tts"),
@@ -159,21 +176,91 @@ export async function speakFrenchBase64(text: string): Promise<string> {
       voice: TTS_VOICE,
       input: text.slice(0, 800),
       response_format: "mp3",
+      // The language is NOT negotiable and must be stated first. OpenAI TTS
+      // infers the language from the input text, so an isolated token spelled
+      // like an English word was read in English — measured, not guessed:
+      // « annuler » came back as "annually", « reporter » as "Reporter" and
+      // « la date » as "La datte". This instruction helps but is NOT reliable
+      // on its own (the failing set changed between runs), which is why short
+      // texts are verified below.
       instructions:
-        "Speak in clear, natural French with a warm, encouraging tone. Slightly slower than native pace, articulating each word so a beginner learner can follow.",
+        "The text is always FRENCH. Read it aloud in French, with French phonetics, never English and never Spanish — even for a single isolated word, and even when the word is spelled exactly like an English word (annuler, reporter, la date, agenda, client, message, important, double, table, menu, orange). Use a warm, encouraging tone, slightly slower than native pace, articulating each word so a beginner learner can follow.",
     }),
   });
   if (!res.ok) {
     const b = await res.text().catch(() => "");
     throw new Error(`TTS ${res.status}: ${b.slice(0, 200)}`);
   }
-  const buf = new Uint8Array(await res.arrayBuffer());
+  return new Uint8Array(await res.arrayBuffer());
+}
+
+/**
+ * What language does this audio actually sound like?
+ *
+ * whisper-1 + verbose_json is the only transcription endpoint that reports a
+ * DETECTED language, and no language hint is sent — that is the whole point.
+ * Returns null when the check itself could not run: a failed check must never
+ * cost the student their audio.
+ */
+async function detectSpokenLanguage(mp3: Uint8Array): Promise<string | null> {
+  try {
+    const form = new FormData();
+    form.append("file", new Blob([mp3 as BlobPart], { type: "audio/mpeg" }), "clip.mp3");
+    form.append("model", "whisper-1");
+    form.append("response_format", "verbose_json");
+    const res = await fetch(`${OPENAI_BASE}/audio/transcriptions`, {
+      method: "POST",
+      signal: deadline("stt"),
+      headers: { Authorization: `Bearer ${requireOpenAIKey()}` },
+      body: form,
+    });
+    if (!res.ok) return null;
+    const j = (await res.json()) as { language?: string };
+    return typeof j.language === "string" ? j.language.toLowerCase() : null;
+  } catch {
+    return null;
+  }
+}
+
+function toBase64(buf: Uint8Array): string {
   let bin = "";
   const CHUNK = 0x8000;
   for (let i = 0; i < buf.length; i += CHUNK) {
     bin += String.fromCharCode(...buf.subarray(i, i + CHUNK));
   }
   return btoa(bin);
+}
+
+/**
+ * French audio that is verified to actually SOUND French.
+ *
+ * A client reported a day-22 vocabulary word being read in English. The cause
+ * is that TTS infers language from the input, and « annuler », « reporter »,
+ * « noter » are spelled like English words, so they were read as "annually",
+ * "Reporter", "No tea". A learner then practises the wrong pronunciation —
+ * which is the opposite of what this product is for.
+ *
+ * Prompt instructions alone did not fix it (non-deterministic between runs), so
+ * short texts are synthesized, listened back to, and re-synthesized with French
+ * context if they came out in the wrong language. The result is cached by the
+ * caller under the original text, so a repair costs one extra check ONCE per
+ * phrase, and students never hear the carrier on a word that was already right.
+ */
+export async function speakFrenchBase64(text: string): Promise<string> {
+  const audio = await synthesizeFr(text);
+  if (wordCount(text) > AMBIGUOUS_MAX_WORDS) return toBase64(audio);
+
+  const lang = await detectSpokenLanguage(audio);
+  // null = the check could not run; French = nothing to repair.
+  if (lang === null || lang.startsWith("fr")) return toBase64(audio);
+
+  console.warn(`[tts] "${text}" came out as ${lang} — re-synthesizing with French context`);
+  try {
+    return toBase64(await synthesizeFr(withFrenchContext(text)));
+  } catch {
+    // Wrong-language audio still beats no audio at all.
+    return toBase64(audio);
+  }
 }
 
 export async function transcribeFr(audioBase64: string, mimeType: string): Promise<string> {

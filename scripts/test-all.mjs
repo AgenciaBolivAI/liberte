@@ -397,7 +397,7 @@ g("9b. Hands-free voice tutor");
   const ai = readFileSync("src/lib/ai.ts", "utf8");
   ok("real TTS model configured (not browser voice)", ai.includes("gpt-4o-mini-tts"));
   ok("TTS helper returns base64 audio", ai.includes("speakFrenchBase64"));
-  ok("TTS instructs a learner-friendly pace", ai.includes("Slightly slower than native pace"));
+  ok("TTS instructs a learner-friendly pace", ai.includes("slightly slower than native pace"));
 
   const tut = readFileSync("src/lib/tutor.functions.ts", "utf8");
   ok("reply audio comes back in the same round trip", tut.includes("withAudio"));
@@ -2458,6 +2458,99 @@ g("12p. Leads: the owner must see WHO wrote and WHAT they need");
      "reply_to must be the lead, not our own inbox");
   ok("the RESEND key is checked before either send",
      signup.indexOf("Missing RESEND_API_KEY") < notifyAt);
+}
+
+g("12q. The French audio must actually SOUND French");
+{
+  // Client, día 22: "del vocabulario del día 22 este suena en inglés".
+  // OpenAI TTS infers the LANGUAGE from the input text, so isolated words
+  // spelled like English ones were read in English — « annuler » as
+  // "annually", « reporter » as "Reporter", « noter » as "No tea". A learner
+  // copying that audio learns the wrong pronunciation, which is the whole
+  // point of the product. Prompt instructions alone did NOT fix it: the set of
+  // failing words changed between runs.
+  const aiSrc12q = readFileSync("src/lib/ai.ts", "utf8");
+  ok("the TTS prompt states the language before anything else",
+     /The text is always FRENCH/.test(aiSrc12q));
+  ok("short texts are listened back to, not trusted",
+     /AMBIGUOUS_MAX_WORDS/.test(aiSrc12q) &&
+     /wordCount\(text\) > AMBIGUOUS_MAX_WORDS/.test(aiSrc12q));
+  ok("the language check uses a model that REPORTS the detected language",
+     aiSrc12q.includes('"whisper-1"') && aiSrc12q.includes("verbose_json"),
+     "gpt-4o-transcribe returns no language field — the check would be blind");
+  const detector = aiSrc12q.slice(
+    aiSrc12q.indexOf("async function detectSpokenLanguage"),
+    aiSrc12q.indexOf("function toBase64"));
+  ok("no language hint is sent to the detector (that is the point)",
+     detector.length > 0 && !detector.includes('append("language"'),
+     "telling the detector it is French would make the check always pass");
+  ok("wrong-language audio is re-synthesized with French context",
+     /withFrenchContext/.test(aiSrc12q) && /En français : \$\{text\}/.test(aiSrc12q));
+  ok("a failed language check never costs the student their audio",
+     /if \(lang === null \|\| lang\.startsWith\("fr"\)\) return/.test(aiSrc12q));
+
+  // The other way every phrase can come out English: the browser fallback.
+  const speakSrc = readFileSync("src/lib/speak.ts", "utf8");
+  ok("the browser voice refuses to speak without a FRENCH voice installed",
+     /const v = pickFrenchVoice\(\);\s+if \(!v\) return false;/.test(speakSrc),
+     "u.lang='fr-FR' with no French voice reads French text in the system (English) voice");
+  ok("with no French voice it falls back to the French Google audio",
+     speakSrc.includes("tl=fr") && /if \(!ok\) speakViaAudio/.test(speakSrc));
+
+  ok("the audio audit exists and mirrors the production repair",
+     existsSync("scripts/audit-tts-language.mjs") &&
+     readFileSync("scripts/audit-tts-language.mjs", "utf8").includes("En français : ${t.fr}"));
+}
+
+/* ---------------- live audio check (real TTS -> real language detection) ---------------- */
+g("12r. Live: the words that were reported wrong now sound French");
+{
+  // The ONLY test that can catch "suena en inglés" is one that listens.
+  // Synthesize through the exact production prompt, transcribe with no
+  // language hint, and assert the detected language is French.
+  const REGRESSION = ["annuler", "reporter", "noter", "la date", "l'agenda"];
+  if (!env.OPENAI_API_KEY) {
+    skipped("live TTS language check", "no OPENAI_API_KEY");
+  } else {
+    const aiText = readFileSync("src/lib/ai.ts", "utf8");
+    const iStart = aiText.indexOf('"The text is always FRENCH');
+    const iEnd = iStart < 0 ? -1 : aiText.indexOf('",', iStart + 1);
+    const INSTRUCTIONS = iStart < 0 ? "" : JSON.parse(aiText.slice(iStart, iEnd + 1));
+    ok("read the production TTS instructions out of ai.ts", INSTRUCTIONS.length > 0);
+
+    const say = async (input) => {
+      const r = await fetch("https://api.openai.com/v1/audio/speech", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${env.OPENAI_API_KEY}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ model: "gpt-4o-mini-tts", voice: "shimmer", input,
+                               response_format: "mp3", instructions: INSTRUCTIONS }),
+      });
+      if (!r.ok) throw new Error(`TTS ${r.status}`);
+      return Buffer.from(await r.arrayBuffer());
+    };
+    const heard = async (mp3) => {
+      const form = new FormData();
+      form.append("file", new Blob([mp3], { type: "audio/mpeg" }), "clip.mp3");
+      form.append("model", "whisper-1");
+      form.append("response_format", "verbose_json");
+      const r = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+        method: "POST", headers: { Authorization: `Bearer ${env.OPENAI_API_KEY}` }, body: form });
+      if (!r.ok) throw new Error(`STT ${r.status}`);
+      return String((await r.json()).language ?? "?").toLowerCase();
+    };
+
+    for (const word of REGRESSION) {
+      try {
+        // Exactly what speakFrenchBase64 does: synthesize, listen, repair.
+        let lang = await heard(await say(word));
+        if (!lang.startsWith("fr")) lang = await heard(await say(`En français : ${word}`));
+        ok(`« ${word} » reaches the student as French`, lang.startsWith("fr"),
+           `sounded like ${lang}`);
+      } catch (e) {
+        skipped(`« ${word} » language check`, e.message);
+      }
+    }
+  }
 }
 
 /* ---------------- build output ---------------- */
