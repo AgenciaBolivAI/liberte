@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { callChat, parseScore10, transcribeFr } from "@/lib/ai";
+import { callChat, parseScore10, transcribeFrDetailed } from "@/lib/ai";
+import { isNotFrench } from "@/lib/french-text";
 import { assertDayNotLocked } from "@/lib/content-access.functions";
 import { requireApprovedStudent } from "@/lib/approval";
 import { aiText, aiTextList } from "@/lib/ai-text";
@@ -59,6 +60,27 @@ export const correctActivity = createServerFn({ method: "POST" })
     // Same hard gate as evaluateDefi: a day an admin disabled can't run the
     // paid per-activity AI correction either. Admins bypass.
     await assertDayNotLocked(context, data.dayId);
+
+    // Liberté teaches French: an answer written in Spanish or Portuguese is
+    // not a weak answer, it is not an answer. Refuse it BEFORE the corrector
+    // sees it — no token spent, no mark recorded, and the student is asked for
+    // French instead of being handed a bad grade for avoiding the practice.
+    // (`frenchness` returns "unsure" for short answers with no marker, and
+    // those go through to normal correction — see src/lib/french-text.ts.)
+    if (isNotFrench(data.response)) {
+      return {
+        resultado: "incorrecto" as const,
+        nota: null,
+        notGraded: true as const,
+        aciertos: [] as string[],
+        errores: [] as { dijo: string; correcto: string; regla: string }[],
+        punto_debil: "",
+        practica_recomendada: "",
+        feedback_alumno:
+          "Écris ta réponse en français ! · Escribe tu respuesta en francés — es justo lo que estás practicando. Usa el vocabulario del día, aunque sea una frase corta.",
+      };
+    }
+
     const user = JSON.stringify({
       dia: data.dayId,
       seccion: data.section,
@@ -143,7 +165,9 @@ export const transcribeStage = createServerFn({ method: "POST" })
     // Was completely ungated: any signed-in account could burn STT tokens.
     // (transcribeFr also caps the payload at MAX_AUDIO_B64.)
     await requireApprovedStudent(context);
-    return { text: await transcribeFr(data.audioBase64, data.mimeType) };
+    // `reason` lets the UI say "we heard you, but not in French" instead of
+    // "we didn't hear you" — and, above all, never grade a discarded answer.
+    return await transcribeFrDetailed(data.audioBase64, data.mimeType);
   });
 
 /* ---------------- Evaluate & save ---------------- */

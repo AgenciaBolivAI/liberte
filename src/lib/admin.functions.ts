@@ -728,3 +728,166 @@ export const setLeadStatus = createServerFn({ method: "POST" })
     if (error) throw new Error(error.message);
     return { ok: true };
   });
+
+/* ---------------- Account access: revoke, restore, delete ---------------- */
+
+/**
+ * Revoke or restore a student's access WITHOUT touching their work.
+ *
+ * This is the answer to "they didn't pay": clearing `approved_at` locks the
+ * content immediately and puts them back in the approval queue, and every day
+ * completed, star and recording is still there when they pay. Deleting for a
+ * missed payment throws all of that away and cannot be undone.
+ */
+export const setStudentAccess = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => {
+    const d = input as { userId?: string; approved?: boolean };
+    if (!d?.userId || !UUID_RE.test(String(d.userId))) throw new Error("userId inválido");
+    return { userId: String(d.userId), approved: d.approved === true };
+  })
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    await requireAdmin(ctx);
+    // Locking yourself out of the panel you are standing in.
+    if (data.userId === ctx.userId) throw new Error("No puedes quitarte el acceso a ti mismo.");
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { error } = await supabaseAdmin
+      .from("profiles")
+      .update(
+        data.approved
+          ? { approved_at: new Date().toISOString(), approved_by: ctx.userId }
+          : { approved_at: null, approved_by: null },
+      )
+      .eq("id", data.userId);
+    if (error) throw new Error(error.message);
+    return { ok: true, approved: data.approved };
+  });
+
+export type DeletionSummary = {
+  email: string | null;
+  full_name: string | null;
+  daysCompleted: number;
+  stars: number;
+};
+
+/**
+ * Permanently delete an account and everything it owns.
+ *
+ * Irreversible: every table that holds the student's work cascades from
+ * auth.users, so progress, recordings, grades and reports all go with it.
+ * Guards, in order of how badly each would hurt:
+ *   - admin only;
+ *   - never yourself;
+ *   - never the last admin (nobody could open the panel afterwards);
+ *   - the caller must retype the account's email, so a mis-click cannot do it.
+ * What was destroyed is copied into `account_deletions` FIRST — that table is
+ * deliberately not linked to auth.users so it survives the deletion.
+ */
+export const deleteStudentAccount = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => {
+    const d = input as { userId?: string; confirmEmail?: string; reason?: string };
+    if (!d?.userId || !UUID_RE.test(String(d.userId))) throw new Error("userId inválido");
+    if (!d?.confirmEmail) throw new Error("Escribe el correo de la cuenta para confirmar.");
+    return {
+      userId: String(d.userId),
+      confirmEmail: String(d.confirmEmail).trim().toLowerCase(),
+      reason: String(d.reason ?? "").slice(0, 500),
+    };
+  })
+  .handler(async ({ data, context }): Promise<{ ok: true; deleted: DeletionSummary }> => {
+    const ctx = context as Ctx;
+    await requireAdmin(ctx);
+    if (data.userId === ctx.userId) throw new Error("No puedes eliminar tu propia cuenta.");
+
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    const { data: profile } = await supabaseAdmin
+      .from("profiles")
+      .select("id, full_name, email")
+      .eq("id", data.userId)
+      .maybeSingle();
+    if (!profile) throw new Error("Esa cuenta ya no existe.");
+
+    // Typing the address is the last line of defence against deleting the
+    // wrong person from a long list.
+    const realEmail = (profile.email ?? "").trim().toLowerCase();
+    if (!realEmail || realEmail !== data.confirmEmail) {
+      throw new Error("El correo no coincide con el de la cuenta. No se eliminó nada.");
+    }
+
+    // Never leave the platform without an administrator.
+    const { data: adminRows } = await supabaseAdmin
+      .from("user_roles")
+      .select("user_id")
+      .eq("role", "admin");
+    const adminIds = (adminRows ?? []).map((r) => r.user_id as string);
+    if (adminIds.includes(data.userId) && adminIds.length <= 1) {
+      throw new Error("Es la única cuenta administradora: asigna otro admin antes de eliminarla.");
+    }
+
+    // Snapshot BEFORE the delete — afterwards there is nothing left to count.
+    const [completions, stars] = await Promise.all([
+      supabaseAdmin.from("day_completions").select("day_id").eq("user_id", data.userId),
+      supabaseAdmin.from("star_awards").select("amount").eq("user_id", data.userId),
+    ]);
+    const summary: DeletionSummary = {
+      email: profile.email ?? null,
+      full_name: profile.full_name ?? null,
+      daysCompleted: (completions.data ?? []).length,
+      stars: (stars.data ?? []).reduce((s, r) => s + Number(r.amount ?? 0), 0),
+    };
+
+    const { data: actor } = await supabaseAdmin
+      .from("profiles")
+      .select("email")
+      .eq("id", ctx.userId)
+      .maybeSingle();
+
+    // Write the audit row first: if the delete then fails we have a harmless
+    // extra record, whereas the reverse order can destroy an account and leave
+    // no trace of who did it.
+    await supabaseAdmin.from("account_deletions").insert({
+      deleted_user_id: data.userId,
+      email: summary.email,
+      full_name: summary.full_name,
+      reason: data.reason || null,
+      days_completed: summary.daysCompleted,
+      stars: summary.stars,
+      deleted_by: ctx.userId,
+      deleted_by_email: actor?.email ?? null,
+    });
+
+    // Everything the student owns cascades from auth.users.
+    const { error } = await supabaseAdmin.auth.admin.deleteUser(data.userId);
+    if (error) throw new Error(error.message);
+
+    return { ok: true, deleted: summary };
+  });
+
+export type DeletionLogRow = {
+  id: string;
+  email: string | null;
+  full_name: string | null;
+  reason: string | null;
+  days_completed: number;
+  stars: number;
+  deleted_by_email: string | null;
+  created_at: string;
+};
+
+/** The record of who deleted whom — the only thing left after an account goes. */
+export const getDeletionLog = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    await requireAdmin(context as Ctx);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data, error } = await supabaseAdmin
+      .from("account_deletions")
+      .select("id, email, full_name, reason, days_completed, stars, deleted_by_email, created_at")
+      .order("created_at", { ascending: false })
+      .limit(100);
+    if (error) return [] as DeletionLogRow[];
+    return (data ?? []) as DeletionLogRow[];
+  });

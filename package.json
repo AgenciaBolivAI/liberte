@@ -14,7 +14,9 @@
     "test:e2e": "playwright test",
     "verify": "tsc --noEmit && vite build && node scripts/test-all.mjs",
     "verify:full": "npm run verify && npm run test:e2e",
-    "audit:tts": "node scripts/audit-tts-language.mjs"
+    "audit:tts": "node scripts/audit-tts-language.mjs",
+    "audit:stt": "node scripts/audit-stt-language.mjs",
+    "audit:text": "node scripts/audit-text-language.mjs"
   },
   "dependencies": {
     "@fontsource/dm-sans": "^5.2.8",

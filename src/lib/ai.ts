@@ -202,10 +202,14 @@ async function synthesizeFr(text: string): Promise<Uint8Array> {
  * Returns null when the check itself could not run: a failed check must never
  * cost the student their audio.
  */
-async function detectSpokenLanguage(mp3: Uint8Array): Promise<string | null> {
+async function detectSpokenLanguage(
+  bytes: Uint8Array,
+  mimeType = "audio/mpeg",
+  filename = "clip.mp3",
+): Promise<string | null> {
   try {
     const form = new FormData();
-    form.append("file", new Blob([mp3 as BlobPart], { type: "audio/mpeg" }), "clip.mp3");
+    form.append("file", new Blob([bytes as BlobPart], { type: mimeType }), filename);
     form.append("model", "whisper-1");
     form.append("response_format", "verbose_json");
     const res = await fetch(`${OPENAI_BASE}/audio/transcriptions`, {
@@ -263,7 +267,76 @@ export async function speakFrenchBase64(text: string): Promise<string> {
   }
 }
 
+
+/* ---------------- is this transcript even French? ---------------- */
+
+/**
+ * Letters French orthography simply never uses. Spanish á í ó ú ñ ¿ ¡ and
+ * Portuguese ã õ are conclusive: a transcript containing one is not French,
+ * whatever language the model was told to use.
+ */
+const NON_FRENCH_LETTERS = /[ãõñáíóúÁÍÓÚÃÕÑ¿¡]/;
+
+/**
+ * Letters Spanish and Portuguese do NOT have, so one of these is real
+ * evidence of French. `é è à ç` are deliberately absent: Spanish "sé/qué"
+ * and Portuguese "está/você" carry them too, and treating them as proof let
+ * « No sé qué decir, la verdad no entiendo nada » through as a French answer.
+ */
+const FRENCH_ONLY_LETTERS = /[êëîïûùÿœæ]/i;
+
+/**
+ * Elision — j', l', d', qu', n', m', s', c', t' — is a French fingerprint.
+ * Neither Spanish nor Portuguese elides with an apostrophe like this.
+ */
+const FRENCH_ELISION = /\b[jlndmstc]'|\bqu'/i;
+
+/**
+ * Everyday French words that are NOT also everyday Spanish or Portuguese
+ * words. "la", "no", "que", "un", "a", "en" and friends are excluded
+ * precisely because they are shared and would vouch for a Spanish transcript.
+ */
+const FRENCH_WORDS =
+  /\b(je|il|elle|nous|vous|ils|elles|les|des|une|du|au|aux|est|sont|avec|dans|pour|qui|quoi|ne|pas|très|oui|bien|fois|semaine|jour|heure|heures|bonjour|merci|madame|monsieur|voudrais|prendre|aller|faire|suis|avez|allez|comment|pourquoi|beaucoup|aujourd)\b/i;
+
+/**
+ * A transcript that is confidently NOT French.
+ *
+ * A student said « Je m'entraîne trois fois par semaine » and the platform
+ * transcribed « Não vamos não. » — Portuguese — then graded that 0.0/10
+ * against the expected phrase. `language: "fr"` was already being sent; the
+ * model hallucinated anyway on a quiet recording, and nothing downstream ever
+ * asked whether the words it produced were French. Grading a hallucination is
+ * worse than admitting we did not hear the student.
+ *
+ * Exported so it can be tested exhaustively without spending an API call.
+ */
+export function isDefinitelyNotFrench(text: string): boolean {
+  const s = text.trim();
+  if (!s) return false; // empty is "nothing heard", handled separately
+  if (NON_FRENCH_LETTERS.test(s)) return true;
+  return false;
+}
+
+/** Does the text carry positive evidence of being French? */
+export function looksFrench(text: string): boolean {
+  const s = text.trim();
+  if (!s) return false;
+  return FRENCH_ONLY_LETTERS.test(s) || FRENCH_ELISION.test(s) || FRENCH_WORDS.test(s);
+}
+
+/** Why a transcript was thrown away, so the UI can say something true. */
+export type TranscribeResult = { text: string; reason?: "silent" | "not-french" };
+
+/** Back-compatible string form for callers that only need the words. */
 export async function transcribeFr(audioBase64: string, mimeType: string): Promise<string> {
+  return (await transcribeFrDetailed(audioBase64, mimeType)).text;
+}
+
+export async function transcribeFrDetailed(
+  audioBase64: string,
+  mimeType: string,
+): Promise<TranscribeResult> {
   const key = requireOpenAIKey();
   // Reject oversized payloads BEFORE decoding — a huge base64 string would
   // otherwise materialize hundreds of MB in memory per concurrent request.
@@ -282,30 +355,73 @@ export async function transcribeFr(audioBase64: string, mimeType: string): Promi
         : "webm";
   // Near-empty audio makes transcription models hallucinate, often in an
   // unrelated language (Cyrillic is a common failure). Refuse it outright.
-  if (bytes.length < 4000) return "";
-  const blob = new Blob([bytes], { type: mimeType });
-  const fd = new FormData();
-  fd.append("model", STT_MODEL);
-  fd.append("file", blob, `audio.${ext}`);
-  fd.append("language", "fr");
-  // NOTE: deliberately no `prompt` bias. Verified against the API: with a
-  // prompt, near-silent audio makes the model echo the prompt back as if the
-  // student had said it — a fabricated transcript, worse than no transcript.
-  // With language alone, silence correctly yields "".
-  const res = await fetch(`${OPENAI_BASE}/audio/transcriptions`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${key}` },
-    body: fd,
-    signal: deadline("stt"),
-  }).catch((e) => asTimeout(e, "La transcripción"));
-  if (!res.ok) {
-    const b = await res.text().catch(() => "");
-    throw new Error(`STT ${res.status}: ${b.slice(0, 200)}`);
+  if (bytes.length < 4000) return { text: "", reason: "silent" };
+  const filename = `audio.${ext}`;
+
+  // Transcribe and identify the spoken language AT THE SAME TIME.
+  //
+  // This is a platform for learning French: an answer in Spanish, Portuguese or
+  // English is not a valid answer, it is the student avoiding the practice. So
+  // the language is checked on EVERY graded answer, not only when the
+  // transcript happens to look suspicious — the earlier version let a
+  // Spanish-sounding answer through whenever the model forced it into
+  // French-looking words.
+  //
+  // The two calls run in parallel, so being strict costs no extra wall-clock:
+  //   - STT_MODEL with language=fr gives the best transcript of French speech
+  //   - whisper-1 verbose_json is the only endpoint that REPORTS the language,
+  //     and is asked with no hint at all, so it can disagree.
+  const transcribeText = async (): Promise<string> => {
+    const fd = new FormData();
+    fd.append("model", STT_MODEL);
+    fd.append("file", new Blob([bytes as BlobPart], { type: mimeType }), filename);
+    fd.append("language", "fr");
+    // NOTE: deliberately no `prompt` bias. Verified against the API: with a
+    // prompt, near-silent audio makes the model echo the prompt back as if the
+    // student had said it — a fabricated transcript, worse than no transcript.
+    // With language alone, silence correctly yields "".
+    const res = await fetch(`${OPENAI_BASE}/audio/transcriptions`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key}` },
+      body: fd,
+      signal: deadline("stt"),
+    }).catch((e) => asTimeout(e, "La transcripción"));
+    if (!res.ok) {
+      const b = await res.text().catch(() => "");
+      throw new Error(`STT ${res.status}: ${b.slice(0, 200)}`);
+    }
+    return ((await res.json()) as { text?: string }).text?.trim() ?? "";
+  };
+
+  const [text, spoken] = await Promise.all([
+    transcribeText(),
+    detectSpokenLanguage(bytes, mimeType, filename),
+  ]);
+
+  if (!text) return { text: "", reason: "silent" };
+
+  // The rule, applied first and without exception: if it was not spoken in
+  // French, the platform did not understand it. `spoken === null` only means
+  // the detector itself failed — fall through to the spelling guards rather
+  // than punish the student for our outage.
+  if (spoken !== null && !spoken.startsWith("fr")) {
+    console.warn(`[stt] answer spoken in ${spoken}, not accepted: "${text.slice(0, 60)}"`);
+    return { text: "", reason: "not-french" };
   }
-  const json = (await res.json()) as { text?: string };
-  const text = (json.text ?? "").trim();
-  // Guard against hallucinated output in a non-Latin script (the model
-  // inventing Cyrillic/CJK text from noise) — treat it as "nothing heard".
-  if (text && /[Ѐ-ӿ一-鿿؀-ۿ]/.test(text)) return "";
-  return text;
+
+  // Belt and braces on the transcript itself, for when the detector is wrong or
+  // unavailable. Non-Latin script = invented from noise; the letters below do
+  // not exist in French at all.
+  if (/[Ѐ-ӿ一-鿿؀-ۿ]/.test(text)) return { text: "", reason: "not-french" };
+  if (isDefinitelyNotFrench(text)) {
+    console.warn(`[stt] discarding non-French transcript: "${text.slice(0, 60)}"`);
+    return { text: "", reason: "not-french" };
+  }
+  // Detector unavailable AND nothing positively French about the words: do not
+  // hand a guess to the grader.
+  if (spoken === null && !looksFrench(text)) {
+    console.warn(`[stt] no French evidence and no detector, discarding: "${text.slice(0, 60)}"`);
+    return { text: "", reason: "not-french" };
+  }
+  return { text };
 }

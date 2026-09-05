@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { callChat, parseScore10, transcribeFr } from "@/lib/ai";
+import { callChat, parseScore10, transcribeFrDetailed } from "@/lib/ai";
 import { assertWeekNotLocked } from "@/lib/content-access.functions";
 import { requireApprovedStudent } from "@/lib/approval";
 import { aiStrengths, aiErrors, aiPronunciation, aiTextList } from "@/lib/ai-text";
@@ -162,7 +162,9 @@ export const transcribeAudio = createServerFn({ method: "POST" })
     return { audioBase64: d.audioBase64, mimeType: d.mimeType || "audio/webm" };
   })
   .handler(async ({ data }) => {
-    return { text: await transcribeFr(data.audioBase64, data.mimeType) };
+    // `reason` lets the UI say "we heard you, but not in French" instead of
+    // "we didn't hear you" — and, above all, never grade a discarded answer.
+    return await transcribeFrDetailed(data.audioBase64, data.mimeType);
   });
 
 /* ---------- Evaluate the whole week 1 test ---------- */

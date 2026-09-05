@@ -10,6 +10,7 @@
  * Uses the real Supabase project. Creates a throwaway student, then deletes it.
  */
 import { readFileSync, existsSync, readdirSync } from "node:fs";
+import { loadServerLib, cleanupServerLibs } from "./lib/load-server-lib.mjs";
 import { createClient } from "@supabase/supabase-js";
 
 /* ---------------- harness ---------------- */
@@ -2551,6 +2552,208 @@ g("12r. Live: the words that were reported wrong now sound French");
       }
     }
   }
+}
+
+g("12s. The platform must UNDERSTAND French (not grade a hallucination)");
+{
+  // Client: a student said « Je m'entraîne trois fois par semaine », the
+  // platform transcribed « Não vamos não. » — Portuguese — and graded that
+  // 0.0/10 against the expected phrase. `language: "fr"` was already sent; the
+  // model hallucinated on a quiet recording and nothing downstream ever asked
+  // whether the words were French.
+  //
+  // These run the REAL functions, not a grep of the source: every previous
+  // assert in this suite could only see what the code SAID, which is exactly
+  // how a transcription returning Portuguese shipped.
+  const ai = await loadServerLib("src/lib/ai.ts");
+
+  const NOT_FRENCH = ["Não vamos não.", "¿Qué dices?", "Mañana la canción", "Ação não", "Está bien"];
+  for (const s of NOT_FRENCH) {
+    ok(`rejects non-French transcript "${s}"`, ai.isDefinitelyNotFrench(s));
+  }
+  const FRENCH = [
+    "Je m'entraîne trois fois par semaine.", "Je me lève à sept heures.", "Oui, d'accord.",
+    "Bonjour madame, comment allez-vous ?", "Je voudrais un café s'il vous plaît",
+    "Nous allons au marché demain", "trois fois par semaine",
+  ];
+  for (const s of FRENCH) {
+    ok(`keeps French transcript "${s.slice(0, 34)}"`,
+       !ai.isDefinitelyNotFrench(s) && ai.looksFrench(s));
+  }
+  // The trap that let Spanish through: é/è/à/ç are shared with Spanish and
+  // Portuguese, so they must NOT count as proof of French on their own.
+  ok("a Spanish sentence with é is not treated as French",
+     !ai.looksFrench("No sé qué decir, la verdad no entiendo nada"),
+     "shared accents must not vouch for a Spanish transcript");
+
+  const speak = readFileSync("src/lib/ai.ts", "utf8");
+  ok("a discarded transcript reports WHY", /reason: "not-french"/.test(speak) && /reason: "silent"/.test(speak));
+  const dayPageStt = readFileSync("src/routes/day.$dayId.tsx", "utf8");
+  ok("the speaking exercise never grades a discarded answer",
+     dayPageStt.includes('t.reason === "not-french"') && dayPageStt.includes("rec.reset();"));
+  ok("the student is told it was not French, not that we heard nothing",
+     dayPageStt.includes("pas entendue en français"));
+  ok("the STT audit exists", existsSync("scripts/audit-stt-language.mjs"));
+  const aiStt = readFileSync("src/lib/ai.ts", "utf8");
+  ok("the spoken language is checked on EVERY answer, not only on suspicion",
+     /await Promise\.all\(\[\s+transcribeText\(\),\s+detectSpokenLanguage\(/.test(aiStt),
+     "a conditional check let Spanish through whenever the words looked French");
+  ok("being strict costs no extra wall-clock (the two calls run in parallel)",
+     aiStt.includes("Promise.all([") && aiStt.includes("transcribeText(),"));
+  ok("a non-French answer is refused before anything else",
+     /if \(spoken !== null && !spoken\.startsWith\("fr"\)\)/.test(aiStt));
+  ok("a detector outage does not punish the student",
+     aiStt.includes("spoken === null") && /spoken !== null &&/.test(aiStt));
+}
+
+g("12t. Live: real non-French speech must never reach the grader");
+{
+  if (!env.OPENAI_API_KEY) {
+    skipped("live STT language check", "no OPENAI_API_KEY");
+  } else {
+    // The bundled server code reads process.env, while this suite parses .env
+    // into a local object — without this the whole group SKIPPED, which reads
+    // like a pass. A skipped safety check is the failure mode to avoid.
+    process.env.OPENAI_API_KEY = env.OPENAI_API_KEY;
+    const ai = await loadServerLib("src/lib/ai.ts");
+    const say = async (input, instructions) => {
+      const r = await fetch("https://api.openai.com/v1/audio/speech", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${env.OPENAI_API_KEY}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ model: "gpt-4o-mini-tts", voice: "alloy", input,
+                               response_format: "mp3", instructions }),
+      });
+      if (!r.ok) throw new Error(`TTS ${r.status}`);
+      return Buffer.from(await r.arrayBuffer()).toString("base64");
+    };
+    // This is a platform to LEARN French. An answer in another language is not
+    // an answer, so none of these may ever reach the grader — and French must
+    // survive however heavy the accent.
+    const CASES = [
+      ["Portuguese (the reported case)", "Não vamos não. Eu não sei o que dizer.",
+       "Read this Portuguese naturally.", false],
+      ["Spanish", "No sé qué decir, la verdad no entiendo nada.",
+       "Read this Spanish naturally.", false],
+      ["English", "I don't know what to say.", "Read this English naturally.", false],
+      ["French", "Je m'entraîne trois fois par semaine.", "Read this French naturally.", true],
+      ["French, heavy beginner accent", "Je me lève à sept heures.",
+       "Read this French with a very heavy Spanish accent, hesitant beginner.", true],
+      ["French, one word", "Bonjour.", "Read this French naturally.", true],
+    ];
+    for (const [label, text, instr, shouldSurvive] of CASES) {
+      try {
+        const out = (await ai.transcribeFr(await say(text, instr), "audio/mpeg")).trim();
+        const survived = out.length > 0;
+        ok(`${label} ${shouldSurvive ? "is transcribed" : "never reaches the grader"}`,
+           survived === shouldSurvive,
+           survived ? `graded as "${out.slice(0, 40)}"` : "a real French answer was discarded");
+      } catch (e) {
+        skipped(`${label} STT check`, e.message);
+      }
+    }
+  }
+  cleanupServerLibs();
+}
+
+g("12u. Written answers and the AI tutor are French-only too");
+{
+  // Same product rule as speech: this is a course to LEARN French, so an answer
+  // written in Spanish or Portuguese is not a weak answer, it is not an answer.
+  const ft = await loadServerLib("src/lib/french-text.ts");
+
+  const NOT_FRENCH = [
+    "No sé qué decir, la verdad no entiendo nada",
+    "Hola, quiero practicar mi francés",
+    "Não vamos não. Eu não sei o que dizer.",
+    "Muito obrigado pela ajuda",
+    "Mañana voy a estudiar mucho",
+  ];
+  for (const s of NOT_FRENCH) ok(`refuses "${s.slice(0, 34)}"`, ft.isNotFrench(s));
+
+  // The dangerous direction: refusing a student who DID write French. The
+  // JS `` trap (ASCII-only, so /sé/ matched inside « sécurité ») refused 15
+  // real course strings; these are the exact shapes that broke.
+  const REAL_FRENCH = [
+    "télécharger", "la sécurité", "séparément", "un prélèvement", "un numéro de téléphone",
+    "J'ai une réservation au nom de García, pour deux personnes.",
+    "Bien cordialement, Ana García.", "trop grand / grande",
+    "Je m'entraîne trois fois par semaine.", "Trois.", "À huit heures.",
+  ];
+  for (const s of REAL_FRENCH) {
+    ok(`never refuses real French "${s.slice(0, 34)}"`, !ft.isNotFrench(s),
+       "a correct answer would be thrown out");
+  }
+  ok("short unmarked answers are left to normal correction, not refused",
+     ft.frenchness("Trois.") === "unsure" && ft.frenchness("Merci.") !== "not-french");
+
+  const ftSrc = readFileSync("src/lib/french-text.ts", "utf8");
+  ok("the detector matches whole tokens, never \b (ASCII-only) regexes",
+     ftSrc.includes("FRENCH_TOKENS.has(t)") && ftSrc.includes("ES_PT_TOKENS.has(t)"));
+  ok("a Spanish surname alone does not condemn a French sentence",
+     /es > 0 && NON_FRENCH_LETTERS\.test\(text\)/.test(ftSrc));
+
+  const defiSrcFr = readFileSync("src/lib/defi.functions.ts", "utf8");
+  ok("a non-French written answer is refused BEFORE the corrector",
+     /if \(isNotFrench\(data\.response\)\)/.test(defiSrcFr) &&
+     defiSrcFr.indexOf("isNotFrench(data.response)") < defiSrcFr.indexOf("callChat(CORRECTOR_SYSTEM"));
+  ok("a refused written answer carries NO mark",
+     /notGraded: true as const/.test(defiSrcFr) && /nota: null/.test(defiSrcFr));
+  const dayFr = readFileSync("src/routes/day.$dayId.tsx", "utf8");
+  ok("the feedback card hides the grade when nothing was graded",
+     dayFr.includes("c.nota !== null && !c.notGraded"));
+
+  const tutorSrc = readFileSync("src/lib/tutor.functions.ts", "utf8");
+  ok("the tutor refuses a non-French message without calling the model",
+     /if \(isNotFrench\(data\.text\)\)/.test(tutorSrc) &&
+     tutorSrc.indexOf("isNotFrench(data.text)") < tutorSrc.indexOf("await callChat(buildTutorSystem"));
+  ok("the tutor answers in French and offers the phrase she needs",
+     tutorSrc.includes("je ne comprends qu'en français") && tutorSrc.includes("tutorCtx.vocab[0]"));
+  ok("the tutor prompt forbids answering the content of another language",
+     tutorSrc.includes("NO respondas a lo que dijo"));
+  const convSrc = readFileSync("src/routes/conversation.tsx", "utf8");
+  ok("the spoken tutor says WHY it refused instead of looping in silence",
+     convSrc.includes("ne comprend que le français"));
+  ok("the written-French audit exists", existsSync("scripts/audit-text-language.mjs"));
+  cleanupServerLibs();
+}
+
+g("12v. Deleting an account: the guards, and the record that outlives it");
+{
+  const af = readFileSync("src/lib/admin.functions.ts", "utf8");
+  ok("there is a delete-account server fn", /export const deleteStudentAccount/.test(af));
+  ok("only an admin can delete", /deleteStudentAccount[\s\S]{0,900}?await requireAdmin/.test(af));
+  ok("an admin cannot delete their own account",
+     /data\.userId === ctx\.userId\) throw new Error\("No puedes eliminar tu propia cuenta/.test(af));
+  ok("the last admin cannot be deleted (nobody could open the panel again)",
+     /adminIds\.includes\(data\.userId\) && adminIds\.length <= 1/.test(af));
+  ok("the caller must retype the account's email",
+     /realEmail !== data\.confirmEmail/.test(af));
+  ok("what was destroyed is counted BEFORE the delete",
+     af.indexOf("Snapshot BEFORE the delete") < af.indexOf("auth.admin.deleteUser"));
+  ok("the audit row is written before the account is destroyed",
+     af.indexOf('from("account_deletions")') < af.indexOf("auth.admin.deleteUser"),
+     "deleting first can destroy an account and leave no trace of who did it");
+  ok("the audit table is not linked to auth.users, so it survives",
+     readFileSync("supabase/migrations/20260821000000_account_deletions.sql", "utf8")
+       .includes("Copies, not references"));
+
+  ok("revoking access is a separate, reversible action", /export const setStudentAccess/.test(af));
+  ok("revoking clears approval and keeps the work",
+     /approved_at: null, approved_by: null/.test(af) &&
+     !/setStudentAccess[\s\S]{0,700}?deleteUser/.test(af));
+  ok("an admin cannot lock themselves out",
+     /No puedes quitarte el acceso a ti mismo/.test(af));
+  ok("the deletion log is readable by admins", /export const getDeletionLog/.test(af));
+
+  const ui = readFileSync("src/components/StudentAccountActions.tsx", "utf8");
+  ok("delete is behind a typed-email confirmation in the UI",
+     /typed\.trim\(\)\.toLowerCase\(\) !== \(email \?\? ""\)\.trim\(\)\.toLowerCase\(\)/.test(ui));
+  ok("the UI states that revoking keeps the progress",
+     ui.includes("conserva todo su progreso"));
+  ok("the UI warns the deletion cannot be undone", ui.includes("No se puede deshacer"));
+  const alumnos = readFileSync("src/routes/liberte-profesor-panel-9382745-admin.alumnos.tsx", "utf8");
+  ok("the actions are on the student card", alumnos.includes("<StudentAccountActions"));
+  ok("the card exposes a stable test hook", alumnos.includes("data-student={student.id}"));
 }
 
 /* ---------------- build output ---------------- */

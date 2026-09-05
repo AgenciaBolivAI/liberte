@@ -266,7 +266,13 @@ function ConversationPage() {
       );
       const said = r.text.trim();
       if (!said) {
-        listenTurn(); // silence or noise — listen again
+        // Say WHY. Looping the turn in silence after a Spanish answer leaves
+        // the student thinking the mic is broken, when the platform simply
+        // does not accept anything but French.
+        if ((r as { reason?: string }).reason === "not-french") {
+          toast.message("Lib ne comprend que le français — essaie en français !");
+        }
+        listenTurn(); // silence, noise, or not French — listen again
         return;
       }
       await handleSend(said, { voice: true });
@@ -313,6 +319,9 @@ function ConversationPage() {
         const r = await transcribeStage({
           data: { audioBase64: b64, mimeType: blob.type || "audio/webm" },
         });
+        if (!r.text.trim() && (r as { reason?: string }).reason === "not-french") {
+          toast.message("Lib ne comprend que le français — essaie en français !");
+        }
         // The transcript goes to the input so the student can review/edit it.
         setInput((prev) => (prev ? `${prev} ${r.text}` : r.text));
       } catch (e) {

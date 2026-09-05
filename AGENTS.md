@@ -177,6 +177,8 @@ npm run format     # prettier --write .
 npm run test:all   # full end-to-end suite (scripts/test-all.mjs)
 npm run verify     # tsc --noEmit && vite build && test:all
 npm run audit:tts  # does the French audio actually SOUND French? (real API)
+npm run audit:stt  # does the platform UNDERSTAND spoken French? (real API)
+npm run audit:text # does the written detector ever refuse REAL French? (free)
 ```
 
 ### Whenever vocabulary is added or edited: `npm run audit:tts`
@@ -201,6 +203,51 @@ npm run audit:tts -- --list "annuler,reporter"
 
 `test-all` group 12r runs the same check on the known-bad words on every run,
 so a regression fails the suite without waiting for a client to hear it.
+
+### Tests can now run REAL server code
+
+`scripts/lib/load-server-lib.mjs` bundles a `src/lib/*.ts` module with rolldown
+(already a dependency) and imports it, so a test can CALL a server function
+instead of grepping its source. Two client-reported bugs shipped precisely
+because every assert only checked what the code *said*:
+
+- TTS spoke French words in English (« annuler » → "annually")
+- STT transcribed a French answer as Portuguese (« Não vamos não. ») and the
+  grader scored that 0.0/10 against the expected phrase
+
+Both are now covered by tests that synthesize real audio and run the real
+functions (`test-all` groups 12q-12t). When you touch `ai.ts`, the STT/TTS
+models, or their guards, run `npm run audit:tts` and `npm run audit:stt`.
+
+**Only French is understood — by design, on every surface.** Speech, written
+exercises and the AI tutor all refuse another language: an answer in Spanish or
+Portuguese is not a weak answer, it is not an answer, and grading it teaches the
+student that avoiding French works.
+
+- **Spoken** — the recording's language is identified (whisper-1 `verbose_json`,
+  no hint) on EVERY graded answer, in parallel with the transcription, so the
+  rule costs no extra wall-clock (~1.5 s median, unchanged). Do not weaken this
+  into a conditional check: that let Spanish through whenever the model forced
+  the words into French-looking spelling.
+- **Written** — `isNotFrench()` refuses before the corrector is called: no token
+  spent, and **no mark recorded**. A refused answer shows "En français, s'il te
+  plaît", never "0.0 / 10".
+- **Tutor** — a non-French message never reaches the model. Lib replies in
+  French that she only understands French and offers the day's phrase.
+
+`src/lib/french-text.ts` is three-valued on purpose: `"unsure"` (a short answer
+like « Trois. » with no marker) goes through to normal correction, because
+refusing those punishes the students who did the work.
+
+**Never use `\b` on French text.** JavaScript's word boundary is ASCII-only, so an
+accented letter acts as a separator and `/\bsé\b/` matches inside « sécurité »,
+`/\bél\b/` inside « télécharger ». That mistake refused 15 real
+course strings. Match whole tokens. `npm run audit:text` runs the detector over
+all 2,416 French strings in the curriculum and fails if a single one is refused.
+
+**A discarded transcript must never be graded.** `transcribeFrDetailed` returns
+`{ text, reason }` where `reason` is `"silent"` or `"not-french"`; an empty text
+means the answer is re-recorded with no mark, never scored.
 
 ## Testing strategy
 

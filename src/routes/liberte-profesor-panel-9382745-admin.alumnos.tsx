@@ -10,6 +10,7 @@ import { Star, Loader2, ChevronDown, ChevronUp } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
 import { StudentDetailPanel } from "@/components/StudentDetailPanel";
+import { StudentAccountActions } from "@/components/StudentAccountActions";
 
 export const Route = createFileRoute("/liberte-profesor-panel-9382745-admin/alumnos")({
   component: AlumnosTab,
@@ -26,6 +27,7 @@ type ProfileRow = {
   mother_tongue: string | null;
   objective: string | null;
   created_at: string;
+  approved_at: string | null;
 };
 
 type StudentStats = ProfileRow & {
@@ -51,7 +53,7 @@ function AlumnosTab() {
       const [{ data: profiles }, { data: stars }, { data: days }, { data: defis }, { data: acts }] = await Promise.all([
         supabase
           .from("profiles")
-          .select("id, full_name, email, phone, nationality, country_residence, birth_date, mother_tongue, objective, created_at")
+          .select("id, full_name, email, phone, nationality, country_residence, birth_date, mother_tongue, objective, created_at, approved_at")
           .order("created_at", { ascending: false }),
         supabase.from("star_awards").select("user_id, amount, created_at"),
         supabase.from("day_completions").select("user_id, day_id, completed_at"),
@@ -183,7 +185,9 @@ function StudentCard({ student, rank }: { student: StudentStats; rank: number | 
   const currentWeek = Math.min(student.weeksCompleted + 1, TOTAL_WEEKS);
 
   return (
-    <div className="rounded-3xl border border-border bg-card p-5 shadow-card">
+    // Stable hook for the account tests: matching a card by the text inside it
+    // picks the innermost div, which does not contain the action buttons.
+    <div data-student={student.id} className="rounded-3xl border border-border bg-card p-5 shadow-card">
       <div className="flex flex-wrap items-start gap-4">
         <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-gradient-blue font-display text-xl font-extrabold text-white">
           {initial}
@@ -277,6 +281,15 @@ function StudentCard({ student, rank }: { student: StudentStats; rank: number | 
       {open && (
         <div className="mt-5 border-t border-border pt-5">
           <StudentDetailPanel userId={student.id} />
+          <StudentAccountActions
+            userId={student.id}
+            email={student.email}
+            fullName={student.full_name}
+            approved={Boolean(student.approved_at)}
+            // A deleted or newly-locked account must not linger on screen as if
+            // nothing happened.
+            onChanged={() => window.location.reload()}
+          />
         </div>
       )}
     </div>

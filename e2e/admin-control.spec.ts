@@ -185,3 +185,91 @@ test("a lead is legible from every panel surface, not just the tab", async ({ pa
     await deleteStudent(admin, adminUser.id);
   }
 });
+
+/**
+ * Deleting an account is the one action in the panel that cannot be undone, so
+ * it is tested end to end: the guards must hold, the data must actually be
+ * gone, and the audit row must survive the account it describes.
+ */
+test("an admin can delete an account, and the guards hold", async ({ page }) => {
+  test.setTimeout(240_000);
+  const adminUser = await createStudent(admin);
+  const victim = await createStudent(admin);
+  try {
+    await admin.from("user_roles").insert({ user_id: adminUser.id, role: "admin" });
+    // Give them work, so the deletion has something real to destroy.
+    await admin.from("day_completions").insert({ user_id: victim.id, day_id: 1 });
+    await admin.from("star_awards").insert({ user_id: victim.id, amount: 2, reason: "day_done" });
+
+    await login(page, adminUser);
+    await page.goto("/liberte-profesor-panel-9382745-admin/alumnos");
+
+    const card = page.locator(`[data-student="${victim.id}"]`);
+    await expect(card).toBeVisible({ timeout: 45_000 });
+    await card.getByRole("button", { name: /Ver detalle/ }).click();
+    await card.getByRole("button", { name: "Eliminar cuenta" }).click();
+
+    // The confirm button stays disabled until the email is typed exactly.
+    const confirm = card.getByRole("button", { name: "Eliminar definitivamente" });
+    await expect(confirm).toBeDisabled();
+    await card.locator('input[autocomplete="off"]').fill("wrong@example.invalid");
+    await expect(confirm).toBeDisabled();
+    await card.locator('input[autocomplete="off"]').fill(victim.email);
+    await expect(confirm).toBeEnabled();
+    await confirm.click();
+
+    // The account and everything it owned must actually be gone.
+    await expect(async () => {
+      const { data: prof } = await admin.from("profiles").select("id").eq("id", victim.id);
+      expect(prof ?? []).toHaveLength(0);
+      const { data: days } = await admin.from("day_completions").select("day_id").eq("user_id", victim.id);
+      expect(days ?? []).toHaveLength(0);
+      const { data: stars } = await admin.from("star_awards").select("amount").eq("user_id", victim.id);
+      expect(stars ?? []).toHaveLength(0);
+    }).toPass({ timeout: 40_000 });
+
+    // ...and the record of it must outlive the account.
+    const { data: log } = await admin
+      .from("account_deletions")
+      .select("email, days_completed, stars, deleted_by_email")
+      .eq("deleted_user_id", victim.id)
+      .maybeSingle();
+    expect(log?.email).toBe(victim.email);
+    expect(log?.days_completed).toBe(1);
+    expect(log?.stars).toBe(2);
+    expect(log?.deleted_by_email).toBe(adminUser.email);
+  } finally {
+    await admin.from("account_deletions").delete().eq("deleted_user_id", victim.id);
+    await deleteStudent(admin, victim.id);
+    await deleteStudent(admin, adminUser.id);
+  }
+});
+
+test("revoking access locks the student out but keeps their work", async ({ page }) => {
+  test.setTimeout(180_000);
+  const adminUser = await createStudent(admin);
+  const target = await createStudent(admin);
+  try {
+    await admin.from("user_roles").insert({ user_id: adminUser.id, role: "admin" });
+    await admin.from("day_completions").insert({ user_id: target.id, day_id: 1 });
+
+    await login(page, adminUser);
+    await page.goto("/liberte-profesor-panel-9382745-admin/alumnos");
+    const card = page.locator(`[data-student="${target.id}"]`);
+    await expect(card).toBeVisible({ timeout: 45_000 });
+    await card.getByRole("button", { name: /Ver detalle/ }).click();
+    await card.getByRole("button", { name: /Retirar acceso/ }).click();
+
+    await expect(async () => {
+      const { data } = await admin.from("profiles").select("approved_at").eq("id", target.id).maybeSingle();
+      expect(data?.approved_at).toBeNull();
+    }).toPass({ timeout: 40_000 });
+
+    // The whole point: the work is still there when they pay.
+    const { data: days } = await admin.from("day_completions").select("day_id").eq("user_id", target.id);
+    expect(days ?? []).toHaveLength(1);
+  } finally {
+    await deleteStudent(admin, target.id);
+    await deleteStudent(admin, adminUser.id);
+  }
+});

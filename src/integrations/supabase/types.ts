@@ -14,6 +14,45 @@ export type Database = {
   }
   public: {
     Tables: {
+      account_deletions: {
+        Row: {
+          created_at: string
+          deleted_by: string | null
+          deleted_by_email: string | null
+          deleted_user_id: string
+          days_completed: number
+          email: string | null
+          full_name: string | null
+          id: string
+          reason: string | null
+          stars: number
+        }
+        Insert: {
+          created_at?: string
+          deleted_by?: string | null
+          deleted_by_email?: string | null
+          deleted_user_id: string
+          days_completed?: number
+          email?: string | null
+          full_name?: string | null
+          id?: string
+          reason?: string | null
+          stars?: number
+        }
+        Update: {
+          created_at?: string
+          deleted_by?: string | null
+          deleted_by_email?: string | null
+          deleted_user_id?: string
+          days_completed?: number
+          email?: string | null
+          full_name?: string | null
+          id?: string
+          reason?: string | null
+          stars?: number
+        }
+        Relationships: []
+      }
       activity_results: {
         Row: {
           aciertos: Json

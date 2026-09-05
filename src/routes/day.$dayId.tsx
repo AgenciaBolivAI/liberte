@@ -2126,7 +2126,11 @@ function normalize(s: string) {
 
 type Correction = {
   resultado: "correcto" | "parcial" | "incorrecto";
-  nota: number;
+  /** null when the answer was refused rather than corrected (not written in
+   *  French). A refused answer carries NO mark — showing "0.0 / 10" for
+   *  answering in Spanish would be a grade for something we never judged. */
+  nota: number | null;
+  notGraded?: boolean;
   aciertos: string[];
   errores: { dijo: string; correcto: string; regla: string }[];
   feedback_alumno: string;
@@ -2138,12 +2142,16 @@ function FeedbackCard({ c }: { c: Correction }) {
       ? { label: "✓ Bien joué !", cls: "border-success/40 bg-success/10 text-success" }
       : c.resultado === "parcial"
         ? { label: "≈ Presque !", cls: "border-blue/30 bg-blue/10 text-blue" }
-        : { label: "Essaie encore", cls: "border-red/30 bg-red/10 text-red" };
+        : c.notGraded
+          ? { label: "En français, s'il te plaît", cls: "border-gold/50 bg-gold/10 text-navy" }
+          : { label: "Essaie encore", cls: "border-red/30 bg-red/10 text-red" };
   return (
     <div className={`mt-3 space-y-2 rounded-xl border p-3 text-sm ${tone.cls}`}>
       <div className="flex items-center justify-between">
         <span className="font-bold">{tone.label}</span>
-        <span className="text-xs opacity-80">Note : {c.nota.toFixed(1)} / 10</span>
+        {c.nota !== null && !c.notGraded && (
+          <span className="text-xs opacity-80">Note : {c.nota.toFixed(1)} / 10</span>
+        )}
       </div>
       {c.feedback_alumno && <p className="text-navy">{c.feedback_alumno}</p>}
       {c.aciertos.length > 0 && (
@@ -2374,13 +2382,25 @@ function SpeakingGame({ items, onAward, dayId = 0, section = "vocab" }: {
       setStatus("Transcribiendo…");
       const { transcribeStage, correctActivity } = await import("@/lib/defi.functions");
       const audioBase64 = await blobToBase64(rec.blob);
-      const t = (await transcribeStage({ data: { audioBase64, mimeType: rec.mimeType } })) as { text: string };
+      const t = (await transcribeStage({ data: { audioBase64, mimeType: rec.mimeType } })) as {
+        text: string;
+        reason?: "silent" | "not-french";
+      };
       // Empty transcript = the mic didn't pick anything up. Before, this threw in
       // correctActivity and fell into the "la corrección llegará en un momento"
       // dead end (it never arrived). Tell the student and let them re-record.
+      //
+      // `not-french` is the other half: a student said « Je m'entraîne trois fois
+      // par semaine » and the model hallucinated « Não vamos não. », which was
+      // then graded 0.0/10 against the expected phrase. A discarded answer must
+      // never be scored — re-record instead, with no mark recorded.
       if (!t.text?.trim()) {
         rec.reset();
-        setStatus("🎤 On n’a pas entendu l’audio. Rapproche-toi du micro et réessaie.");
+        setStatus(
+          t.reason === "not-french"
+            ? "🇫🇷 On ne t’a pas entendue en français. Réessaie en français, doucement."
+            : "🎤 On n’a pas entendu l’audio. Rapproche-toi du micro et réessaie.",
+        );
         playTone("no");
         return;
       }

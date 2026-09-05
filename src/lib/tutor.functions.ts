@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { callChat, speakFrenchBase64 } from "@/lib/ai";
+import { isNotFrench } from "@/lib/french-text";
 import { getTutorDayContext, TUTOR_MAX_DAY, type TutorDayContext } from "@/lib/tutorContext";
 import type { RichDay } from "@/data/week34.meta";
 import { effectiveOverride, OPEN_THROUGH_DAY } from "@/lib/unlock";
@@ -149,7 +150,7 @@ REGLAS:
 2. Francés MUY sencillo: máximo 2 frases CORTAS (10-12 palabras), presente y fórmulas hechas. El alumno es principiante — nada de subjuntivo ni frases largas.
 3. Termina casi siempre con una pregunta corta que invite al alumno a cumplir su siguiente objetivo pendiente.
 4. Corrige con cariño: máximo UNA corrección por turno y solo si el error es importante; si no, "correction" = null.
-5. Si el alumno escribe en español o parece perdido: mantente en francés sencillo, y en "suggestion" dale exactamente la frase que necesita.
+5. Si el alumno escribe en OTRO IDIOMA (español, portugués, inglés): NO respondas a lo que dijo. Eres francófona y solo entiendes francés. Di en francés muy sencillo que no lo has entendido (« Pardon, je ne comprends qu'en français. ») y en "suggestion" dale la frase francesa exacta que necesita para seguir. Nunca traduzcas su mensaje ni contestes su pregunta en español.
 6. "reply_es" = traducción natural al español de tu "reply_fr" (siempre).
 7. "suggestion" = una frase corta en francés que el alumno PODRÍA decir ahora para avanzar en sus objetivos, con su traducción (siempre).
 8. "objectives_done" = lista ACUMULADA de números de objetivos que el alumno YA cumplió en TODA la conversación (historial + este turno). Sé GENEROSO: si comunicó la idea del objetivo, cuenta — aunque tenga errores de gramática. Ejemplo: « bonjour, je veux un café » cumple el objetivo "saludar y pedir una bebida" → [1].
@@ -270,6 +271,31 @@ export const sendTutorMessage = createServerFn({ method: "POST" })
     }
 
     const tutorCtx = await resolveTutorContext(c, data.dayId);
+
+    // Lib only understands French — enforced here, not left to the model's
+    // judgement. This is a French course: answering a Spanish message in
+    // substance teaches the student that Spanish works, which is the opposite
+    // of practising. No token is spent either. Short unmarked answers come back
+    // "unsure" from `frenchness` and go through normally.
+    if (isNotFrench(data.text)) {
+      // Scaffold from the day's own vocabulary so the nudge is useful, not a
+      // dead end: she is told what she COULD say in French right now.
+      const word = tutorCtx.vocab[0];
+      return {
+        reply: "Pardon, je ne comprends qu'en français. Essaie en français !",
+        replyEs: "Perdona, solo entiendo francés. Inténtalo en francés.",
+        suggestion: word
+          ? { fr: word.fr, es: word.es }
+          : { fr: "Je ne comprends pas. Tu peux répéter ?", es: "No entiendo. ¿Puedes repetir?" },
+        correction: null as TutorCorrection,
+        encouragement: null as string | null,
+        objectivesDone: prevObjectives,
+        audio: null as string | null,
+        remaining: Math.max(0, TUTOR_DAILY_LIMIT - used),
+        notFrench: true,
+      };
+    }
+
     const out = await callChat(buildTutorSystem(tutorCtx, data.withAudio), [
       ...history,
       { role: "user", content: data.text },
@@ -355,6 +381,7 @@ export const sendTutorMessage = createServerFn({ method: "POST" })
       objectivesDone,
       audio,
       remaining: Math.max(0, TUTOR_DAILY_LIMIT - (used + 1)),
+      notFrench: false,
     };
   });
 
