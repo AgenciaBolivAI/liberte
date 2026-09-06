@@ -39,6 +39,8 @@ import {
   SEQUENTIAL_LESSON_GATE,
 } from "@/lib/unlock";
 import { AuthoredDayView } from "@/components/AuthoredDayView";
+import { Month3Page } from "@/components/arcade/Month3Page";
+import { isMonth3 } from "@/data/month3";
 import { useContentOverrides } from "@/lib/content-access";
 import { useAdminPreview } from "@/lib/admin-preview";
 import { AdminPreviewBanner } from "@/components/AdminPreviewBanner";
@@ -285,6 +287,11 @@ function DynamicDayGate({ dayId }: { dayId: string }) {
       </div>
     );
   }
+  // Month 3 (days 41-60) has no authored lesson yet, so a "blocks" day there
+  // would render an empty shell. Give it the arcade instead — the client asked
+  // for the games in Month 3 only, and this is exactly where nothing exists.
+  // A teacher-authored rich day still wins: that path returns "rich" above.
+  if (phase === "blocks" && isMonth3(dayId)) return <Month3Page dayId={dayId} />;
   if (phase === "blocks") return <AuthoredDayView dayId={Math.min(Number(dayId), 120)} />;
   return <DayPage />;
 }

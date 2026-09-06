@@ -14,6 +14,7 @@ import { day9Vocabulary, day9GrammarStructures } from "@/data/day9";
 import { day10Vocabulary, day10GrammarStructures } from "@/data/day10";
 import { WEEK34 } from "@/data/week34";
 import { MONTH2 } from "@/data/month2";
+import { MONTH3 } from "@/data/month3";
 
 export type TutorScenario = {
   // Who Lib plays in this day's scene + where it happens (fed to the prompt).
@@ -193,7 +194,108 @@ for (const [key, d] of Object.entries({ ...WEEK34, ...MONTH2 })) {
   };
 }
 
-export const TUTOR_MAX_DAY = 40;
+/* ---------------- Days 41-60 — Mois 3 « JE M'EXPRIME » ----------------
+ *
+ * TUTOR_MAX_DAY used to be 40, so a Month-3 student got Math.min(45, 40) = 40:
+ * the day-40 train-station scene, day-40 vocabulary, day-40 grammar. Silently.
+ * She had spent the day on « mon enfance » and the passé composé and Lib opened
+ * with a ticket counter.
+ *
+ * Month 3 has no `tutor` block in its data — the client's document gives themes,
+ * grammar, objectives and 30 words + 30 phrases per day, and nothing else. So
+ * the scene is built FROM those fields: the topic and the objectives are the
+ * document's own, the vocabulary is the day's 30 words, and the grammar list is
+ * the day's grammar point followed by three of the document's own sentences as
+ * models. Only the framing — who Lib plays and how she opens — is written here,
+ * one per theme.
+ *
+ * The month is « je m'exprime »: unlike months 1-2 there is no counter, no
+ * ticket and no form. Lib is a French friend who asks about your life and keeps
+ * asking, which is also exactly the shape that stops a scene from ending after
+ * two turns.
+ */
+const MONTH3_SCENES: Record<string, { role: string; opener_fr: string; opener_es: string }> = {
+  "Mi infancia": {
+    role: "una amiga francesa curiosa, tomando un café; le pregunta al alumno por su infancia",
+    opener_fr: "Raconte-moi… tu étais comment quand tu étais petit(e) ?",
+    opener_es: "Cuéntame… ¿cómo eras de pequeño/a?",
+  },
+  "Mi familia": {
+    role: "una amiga francesa que todavía no conoce a la familia del alumno y quiere saberlo todo",
+    opener_fr: "Et ta famille, elle est comment ? Parle-moi d'eux.",
+    opener_es: "¿Y tu familia, cómo es? Háblame de ellos.",
+  },
+  "Mi país": {
+    role: "una vecina francesa que nunca ha viajado al país del alumno y le hace preguntas",
+    opener_fr: "Ton pays, je ne le connais pas du tout. Raconte-moi !",
+    opener_es: "Tu país no lo conozco nada. ¡Cuéntame!",
+  },
+  "Mis estudios": {
+    role: "una amiga francesa que pregunta por la trayectoria de estudios del alumno",
+    opener_fr: "Tu as étudié quoi, toi ? Et ça se passait comment ?",
+    opener_es: "¿Tú qué estudiaste? ¿Y cómo era aquello?",
+  },
+  "Mi experiencia laboral": {
+    role: "una conocida francesa que pregunta por el trabajo que el alumno tenía antes",
+    opener_fr: "Et le travail, tu faisais quoi avant d'arriver ici ?",
+    opener_es: "¿Y de trabajo, qué hacías antes de llegar aquí?",
+  },
+  "Mis viajes": {
+    role: "una amiga francesa que planea un viaje y quiere saber los planes del alumno",
+    opener_fr: "Alors, tu pars où bientôt ? Raconte-moi tes projets !",
+    opener_es: "¿Y tú a dónde te vas pronto? ¡Cuéntame tus planes!",
+  },
+  "Mis sueños": {
+    role: "una amiga francesa de confianza, en una conversación tranquila por la noche",
+    opener_fr: "Dis-moi un rêve que tu gardes depuis longtemps.",
+    opener_es: "Dime un sueño que llevas guardando desde hace mucho.",
+  },
+  "Mis objetivos": {
+    role: "una amiga francesa que pregunta al alumno a dónde quiere llegar",
+    opener_fr: "Dans cinq ans, tu te vois où ? Sois précis(e) !",
+    opener_es: "Dentro de cinco años, ¿dónde te ves? ¡Sé concreto/a!",
+  },
+  "Mis emociones": {
+    role: "una amiga francesa que nota algo y pregunta de verdad cómo está el alumno",
+    opener_fr: "Aujourd'hui, tu te sens comment ? Vraiment, hein.",
+    opener_es: "Hoy, ¿cómo te sientes? De verdad, eh.",
+  },
+  "Una experiencia importante": {
+    role: "una amiga francesa que escucha sin interrumpir una historia importante del alumno",
+    opener_fr: "Il y a une expérience qui t'a changé(e) ? Raconte-moi.",
+    opener_es: "¿Hay una experiencia que te cambió? Cuéntamela.",
+  },
+};
+
+for (const [key, d] of Object.entries(MONTH3)) {
+  const id = Number(key);
+  const scene = MONTH3_SCENES[d.theme] ?? {
+    role: `una amiga francesa que pregunta al alumno sobre « ${d.theme} »`,
+    opener_fr: "Alors, raconte-moi !",
+    opener_es: "¡Venga, cuéntame!",
+  };
+  TUTOR_DAY_TOPICS[id] = `${d.theme} — ${d.grammar}`;
+  TUTOR_SCENARIOS[id] = {
+    ...scene,
+    objectives: [
+      // The document's own objective for the day, verbatim.
+      d.objective,
+      `Usa el punto de gramática del día: ${d.grammar}`,
+      "Pregúntale a Lib por su experiencia y sigue la conversación",
+    ],
+  };
+  CONTEXTS[id] = {
+    vocab: asVocab(d.vocabulary),
+    // The grammar point, then three of the document's OWN sentences as models —
+    // the tutor should echo the course's French, not French it invented.
+    grammar: [
+      d.grammar,
+      ...d.vocabulary.slice(0, 3).map((v) => `Modelo: « ${v.example} »`),
+    ],
+  };
+}
+
+export const TUTOR_MAX_DAY = 60;
 
 export function getTutorDayContext(dayId: number): TutorDayContext {
   const id = Math.max(1, Math.min(TUTOR_MAX_DAY, Math.round(dayId) || 1));

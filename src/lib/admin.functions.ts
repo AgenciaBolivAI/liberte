@@ -44,6 +44,9 @@ export const getPendingStudents = createServerFn({ method: "GET" })
       .from("profiles")
       .select("id, full_name, email, nationality, created_at")
       .is("approved_at", null)
+      // A denied request is answered, not waiting. Leaving it in the queue is
+      // why an admin who did not want to let someone in had no way to clear it.
+      .is("denied_at", null)
       .order("created_at", { ascending: false });
     // Pre-migration (column missing) → empty queue instead of a crash.
     if (error) return [] as PendingStudent[];
@@ -62,7 +65,14 @@ export const approveStudent = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: profile, error } = await supabaseAdmin
       .from("profiles")
-      .update({ approved_at: new Date().toISOString(), approved_by: context.userId })
+      // Approving also clears a previous denial — the decision is reversible.
+      .update({
+        approved_at: new Date().toISOString(),
+        approved_by: context.userId,
+        denied_at: null,
+        denied_by: null,
+        denied_reason: null,
+      })
       .eq("id", data.userId)
       .select("email")
       .maybeSingle();
@@ -890,4 +900,54 @@ export const getDeletionLog = createServerFn({ method: "GET" })
       .limit(100);
     if (error) return [] as DeletionLogRow[];
     return (data ?? []) as DeletionLogRow[];
+  });
+
+
+/**
+ * Deny an access request.
+ *
+ * Reversible and distinct from deletion: the person keeps their account and the
+ * admin can still approve them later, but the request leaves the queue and the
+ * student stops staring at a "waiting" screen that would never resolve.
+ */
+export const denyStudent = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => {
+    const d = input as { userId?: string; reason?: string };
+    if (!d?.userId || !UUID_RE.test(String(d.userId))) throw new Error("userId inválido");
+    return { userId: String(d.userId), reason: String(d.reason ?? "").slice(0, 500) };
+  })
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    await requireAdmin(ctx);
+    if (data.userId === ctx.userId) throw new Error("No puedes denegarte el acceso a ti mismo.");
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { error } = await supabaseAdmin
+      .from("profiles")
+      .update({
+        approved_at: null,
+        approved_by: null,
+        denied_at: new Date().toISOString(),
+        denied_by: ctx.userId,
+        denied_reason: data.reason || null,
+      })
+      .eq("id", data.userId);
+    if (error) throw new Error(error.message);
+    // The matching lead, if any, is no longer a live prospect.
+    try {
+      const { data: prof } = await supabaseAdmin
+        .from("profiles")
+        .select("email")
+        .eq("id", data.userId)
+        .maybeSingle();
+      if (prof?.email) {
+        await supabaseAdmin
+          .from("leads")
+          .update({ status: "discarded" })
+          .ilike("email", escapeLike(prof.email.toLowerCase()));
+      }
+    } catch {
+      // non-fatal
+    }
+    return { ok: true };
   });

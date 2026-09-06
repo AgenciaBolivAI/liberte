@@ -76,8 +76,8 @@ const MONTHS = [
   },
   {
     img: mois3,
-    name: "JE CRÉE",
-    subtitle: "Creo",
+    name: "JE M'EXPRIME",
+    subtitle: "Me expreso",
     desc: "Construyes frases propias y cuentas historias.",
   },
   {

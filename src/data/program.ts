@@ -21,7 +21,7 @@ export type RestWeek = {
 const monthThemes = [
   { name: "J'OSE", subtitle: "Me atrevo" },
   { name: "JE COMPRENDS", subtitle: "Comprendo" },
-  { name: "JE CRÉE", subtitle: "Creo" },
+  { name: "JE M'EXPRIME", subtitle: "Me expreso" },
   { name: "JE PARLE", subtitle: "Hablo" },
   { name: "JE VOYAGE", subtitle: "Viajo" },
   { name: "JE SUIS LIBRE", subtitle: "Soy libre" },

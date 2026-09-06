@@ -77,7 +77,8 @@ const ES_PT_TOKENS = new Set(
    "decir hablar puedo puede vamos voy nada todo toda hacer cosa gente año años más así " +
    "aquí allí eso esto esa ese dice dijo ser estar del los las unos unas desde hasta después " +
    "antes otro otra bueno buena mejor peor grande pequeño trabajo casa tiempo vida quiere " +
-   "necesito ayuda ayudar entiende aprender estudiar " +
+   "necesito necesita ayuda ayudas ayudar ayudame entiende entiendes aprender estudiar " +
+   "con sin pronunciación gramática español inglés francés practicar hablo hablas " +
    "não você obrigado obrigada muito sim com uma eu ele ela nós isso aquilo fazer dizer tem " +
    "são pelo pela mas onde tudo coisa ano aqui ali " +
    "buenos buenas días noches tardes señor señora señorita por favor perdón disculpe " +
@@ -93,10 +94,12 @@ function score(text: string): { fr: number; es: number } {
   }
   if (FRENCH_ONLY_LETTERS.test(text)) fr += 2;
   if (FRENCH_ELISION.test(text)) fr += 2;
-  // A Spanish letter only counts when there is also a Spanish WORD. Otherwise
-  // it is a proper noun — « Bien cordialement, Ana García. » is French, and
-  // refusing it would mark a correct answer wrong because of a surname.
-  if (es > 0 && NON_FRENCH_LETTERS.test(text)) es += 2;
+  // A Spanish letter next to Spanish words is conclusive; a Spanish letter in
+  // text that ALSO has French evidence is a proper noun (« au nom de García »)
+  // and must not condemn the sentence. But a Spanish letter with NO French
+  // evidence at all is Spanish: « Me ayudas con la pronunciación » was slipping
+  // through as "unsure" because none of its words were on either list.
+  if (NON_FRENCH_LETTERS.test(text) && (es > 0 || fr === 0)) es += 2;
   return { fr, es };
 }
 

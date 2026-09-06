@@ -592,6 +592,9 @@ export type Database = {
       }
       profiles: {
         Row: {
+          denied_at: string | null
+          denied_by: string | null
+          denied_reason: string | null
           assigned_coach: string | null
           approved_at: string | null
           approved_by: string | null
@@ -613,6 +616,9 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          denied_at?: string | null
+          denied_by?: string | null
+          denied_reason?: string | null
           assigned_coach?: string | null
           approved_at?: string | null
           approved_by?: string | null
@@ -634,6 +640,9 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          denied_at?: string | null
+          denied_by?: string | null
+          denied_reason?: string | null
           assigned_coach?: string | null
           approved_at?: string | null
           approved_by?: string | null

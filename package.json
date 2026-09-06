@@ -16,7 +16,9 @@
     "verify:full": "npm run verify && npm run test:e2e",
     "audit:tts": "node scripts/audit-tts-language.mjs",
     "audit:stt": "node scripts/audit-stt-language.mjs",
-    "audit:text": "node scripts/audit-text-language.mjs"
+    "audit:text": "node scripts/audit-text-language.mjs",
+    "audit:month3": "node scripts/audit-month3.mjs",
+    "gen:month3": "node scripts/gen-month3-data.mjs"
   },
   "dependencies": {
     "@fontsource/dm-sans": "^5.2.8",

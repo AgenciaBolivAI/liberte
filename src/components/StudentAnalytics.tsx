@@ -20,7 +20,7 @@ const RED = "#C44536";
 type Analytics = Awaited<ReturnType<typeof getStudentAnalytics>>;
 
 const MONTH_NAME: Record<number, string> = {
-  1: "J'OSE", 2: "JE COMPRENDS", 3: "JE CRÉE", 4: "JE PARLE", 5: "JE VOYAGE", 6: "JE SUIS LIBRE",
+  1: "J'OSE", 2: "JE COMPRENDS", 3: "JE M'EXPRIME", 4: "JE PARLE", 5: "JE VOYAGE", 6: "JE SUIS LIBRE",
 };
 
 const STATUS: Record<WeekAnalytics["status"], { label: string; cls: string }> = {

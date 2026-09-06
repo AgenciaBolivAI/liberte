@@ -161,7 +161,7 @@ type EvalRow = {
 const MONTH_THEMES = [
   "J'OSE 🗼",
   "JE COMPRENDS 📞",
-  "JE CRÉE ✍️",
+  "JE M'EXPRIME 🗣️",
   "JE PARLE 🗣️",
   "JE VOYAGE ✈️",
   "JE SUIS LIBRE 🕊️",

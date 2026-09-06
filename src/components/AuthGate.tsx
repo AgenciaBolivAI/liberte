@@ -12,7 +12,7 @@ const PUBLIC_PATHS = [
 ];
 
 export function AuthGate({ children }: { children: ReactNode }) {
-  const { loading, user, approved } = useAuth();
+  const { loading, user, approved , denied } = useAuth();
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const isPublic = PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/"));
@@ -56,7 +56,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
 
   // Logged in but not yet approved by an admin: content stays locked.
   if (user && !isPublic && !approved) {
-    return <PendingApproval />;
+    return <PendingApproval denied={denied} />;
   }
 
   return <>{children}</>;

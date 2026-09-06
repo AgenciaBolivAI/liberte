@@ -201,6 +201,13 @@ const PRONUNCIATION_TARGETS: Record<number, string> = {
   6: "cordialement [kɔʁdjalmɑ̃], répéter [ʁepete], plus [ply], moins [mwɛ̃]",
   7: "lui [lɥi], leur [lœʁ], je viens de [ʒəvjɛ̃də], d'abord [daboʁ], ensuite [ɑ̃sɥit]",
   8: "remplissez [ʁɑ̃plise], cochez [koʃe], il dit que [ildikə], je voudrais savoir [ʒəvudʁɛsavwaʁ]",
+  // Mois 3 « JE M'EXPRIME » — the sounds the client's own Mes 3 phrases keep
+  // hitting: the passé composé auxiliaries, the -MENT adverbs, the two pronouns
+  // (y / en) and the futur endings.
+  9: "j'ai passé [ʒepɑse], il est né [ile ne], enfance [ɑ̃fɑ̃s], doucement [dusmɑ̃]",
+  10: "j'y vais [ʒivɛ], j'en ai [ʒɑ̃ne], il y avait [iljavɛ], c'était [setɛ], ensuite [ɑ̃sɥit]",
+  11: "je vais partir [ʒəvɛpaʁtiʁ], qui [ki] / que [kə], depuis [dəpɥi], je ferai [ʒəfəʁe]",
+  12: "elle m'a dit que [ɛlmadikə], je me sens [ʒəməsɑ̃], grâce à [gʁɑsa], si je réussis [siʒəʁeysi]",
 };
 
 /** Push a finished weekly report into the teacher's Mensajes inbox (sender =

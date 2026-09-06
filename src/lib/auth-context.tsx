@@ -24,6 +24,8 @@ type AuthCtx = {
   profile: ProfileFields | null;
   isAdmin: boolean;
   approved: boolean;
+  /** The request was answered with a NO — a different thing from still waiting. */
+  denied: boolean;
   refresh: () => Promise<void>;
   refreshProfile: () => Promise<void>;
   refreshAvatar: () => Promise<void>;
@@ -39,6 +41,7 @@ const Ctx = createContext<AuthCtx>({
   profile: null,
   isAdmin: false,
   approved: true,
+  denied: false,
   refresh: async () => {},
   refreshProfile: async () => {},
   refreshAvatar: async () => {},
@@ -59,6 +62,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<ProfileFields | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [approved, setApproved] = useState(true);
+  const [denied, setDenied] = useState(false);
   const [loading, setLoading] = useState(true);
   // The signed-in user id as last applied. Lets the auth listener recognise a
   // no-op event (same user) without depending on `user` state inside the
@@ -112,7 +116,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const { data, error } = await supabase
         .from("profiles")
-        .select("approved_at")
+        .select("approved_at, denied_at")
         .eq("id", uid)
         .maybeSingle();
       if (error) {
@@ -120,6 +124,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
       setApproved(data ? data.approved_at != null : true);
+      setDenied(Boolean(data?.denied_at));
     } catch {
       setApproved(true);
     }
@@ -214,12 +219,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       profile,
       isAdmin,
       approved: approved || isAdmin,
+      denied: denied && !isAdmin,
       refresh,
       refreshProfile,
       refreshAvatar,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [loading, user, session, fullName, avatarUrl, avatarPath, profile, isAdmin, approved],
+    [loading, user, session, fullName, avatarUrl, avatarPath, profile, isAdmin, approved, denied],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

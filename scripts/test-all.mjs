@@ -438,7 +438,8 @@ g("9b. Hands-free voice tutor");
   ok("NO prompt bias (it fabricates transcripts on silence)", !ai.includes('fd.append("prompt"'));
 
   // Tutor must not parrot its opener at unintelligible input.
-  ok("prompt forbids repeating the opener", tut.includes("NUNCA repitas tu frase de apertura"));
+  const tutPrompt = readFileSync("src/lib/tutorPrompt.ts", "utf8");
+  ok("prompt forbids repeating the opener", tutPrompt.includes("NUNCA repitas tu frase de apertura"));
 
   // The loop must never strand the student on a spinner (reported on-device).
   ok("turn double-finish guarded", conv.includes("turnBusyRef"));
@@ -449,7 +450,7 @@ g("9b. Hands-free voice tutor");
   ok("max turn shortened for mobile uploads", aud.includes("MAX_TURN_MS = 15_000"));
   // Voice turns request a compact payload (measured 3.3s -> 1.4s).
   ok("voice mode uses a trimmed JSON schema", tut.includes("buildTutorSystem(tutorCtx, data.withAudio)"));
-  ok("trimmed schema documented with the measurement", tut.includes("3.3s → 1.4s"));
+  ok("trimmed schema documented with the measurement", tutPrompt.includes("3.3s → 1.4s"));
 
   // Audit H1(a)/H2: AI cost guards.
   const aiSrc = readFileSync("src/lib/ai.ts", "utf8");
@@ -919,12 +920,13 @@ g("12c. Weeks 3-4 · days 11-20 render through the REAL lesson player");
 
   // Tutor now covers weeks 3-4, driven by the same WEEK34 data.
   const tc = readFileSync("src/lib/tutorContext.ts", "utf8");
-  ok("TUTOR_MAX_DAY raised to 40", /TUTOR_MAX_DAY\s*=\s*40/.test(tc));
+  // Raised to 60 when Month 3 landed: 40 clamped every Month-3 day onto day 40.
+  ok("TUTOR_MAX_DAY covers the whole programme that has content", /TUTOR_MAX_DAY\s*=\s*60/.test(tc));
   ok("tutor pulls scenes 11-40 from WEEK34 + MONTH2",
      tc.includes("...WEEK34, ...MONTH2") && tc.includes("TUTOR_SCENARIOS[id]") && tc.includes("CONTEXTS[id]"));
   ok("each WEEK34 day carries a complete 3-objective tutor scene",
      days34.every((d) => W34[d].tutor && W34[d].tutor.objectives.length === 3 && W34[d].tutor.opener_fr && W34[d].tutor.opener_es && W34[d].tutor.topic && W34[d].tutor.role));
-  ok("scene picker lists all 40 scenes", readFileSync("src/routes/conversation.tsx", "utf8").includes("tutorDayGroups(40)"));
+  ok("scene picker lists every scene that exists", readFileSync("src/routes/conversation.tsx", "utf8").includes("tutorDayGroups(TUTOR_MAX_DAY)"));
   ok("tutor day-group helper defaults to 40", readFileSync("src/data/program.ts", "utf8").includes("tutorDayGroups(maxDay = 40)"));
 
   // "Weeks with content" is a single source of truth (derived from LESSON_DAYS),
@@ -1886,7 +1888,8 @@ g("12l. AI deadlines (stuck 'Corrigiendo...') . tutor role discipline");
 
   // STUDENT REPORT: "el Tutor IA no entiende bien los roles: responde cosas
   // que uno deberia responder" — Lib was speaking the STUDENT's lines.
-  const tut = readFileSync("src/lib/tutor.functions.ts", "utf8");
+  // The prompt now lives in its own pure module so tests can RUN it.
+  const tut = readFileSync("src/lib/tutorPrompt.ts", "utf8");
   ok("tutor prompt forbids speaking the student's lines, with a worked example",
      tut.includes("LOS DOS PAPELES SON DISTINTOS") &&
      tut.includes('NUNCA escribas en "reply_fr" una frase que le toca decir al ALUMNO') &&
@@ -2671,7 +2674,7 @@ g("12u. Written answers and the AI tutor are French-only too");
   for (const s of NOT_FRENCH) ok(`refuses "${s.slice(0, 34)}"`, ft.isNotFrench(s));
 
   // The dangerous direction: refusing a student who DID write French. The
-  // JS `` trap (ASCII-only, so /sé/ matched inside « sécurité ») refused 15
+  // JS `\b` trap (ASCII-only, so /\bsé\b/ matched inside « sécurité ») refused 15
   // real course strings; these are the exact shapes that broke.
   const REAL_FRENCH = [
     "télécharger", "la sécurité", "séparément", "un prélèvement", "un numéro de téléphone",
@@ -2690,7 +2693,8 @@ g("12u. Written answers and the AI tutor are French-only too");
   ok("the detector matches whole tokens, never \b (ASCII-only) regexes",
      ftSrc.includes("FRENCH_TOKENS.has(t)") && ftSrc.includes("ES_PT_TOKENS.has(t)"));
   ok("a Spanish surname alone does not condemn a French sentence",
-     /es > 0 && NON_FRENCH_LETTERS\.test\(text\)/.test(ftSrc));
+     /NON_FRENCH_LETTERS\.test\(text\) && \(es > 0 \|\| fr === 0\)/.test(ftSrc),
+     "must still count when there is no French evidence at all — « Me ayudas con la pronunciación »");
 
   const defiSrcFr = readFileSync("src/lib/defi.functions.ts", "utf8");
   ok("a non-French written answer is refused BEFORE the corrector",
@@ -2703,14 +2707,43 @@ g("12u. Written answers and the AI tutor are French-only too");
      dayFr.includes("c.nota !== null && !c.notGraded"));
 
   const tutorSrc = readFileSync("src/lib/tutor.functions.ts", "utf8");
+  const tutPromptSrc = readFileSync("src/lib/tutorPrompt.ts", "utf8");
   ok("the tutor refuses a non-French message without calling the model",
      /if \(isNotFrench\(data\.text\)\)/.test(tutorSrc) &&
-     tutorSrc.indexOf("isNotFrench(data.text)") < tutorSrc.indexOf("await callChat(buildTutorSystem"));
+     tutorSrc.indexOf("isNotFrench(data.text)") < tutorSrc.indexOf("await callChat("),
+     "the language guard must come before the model call, however that call is formatted");
   ok("the tutor answers in French and offers the phrase she needs",
      tutorSrc.includes("je ne comprends qu'en français") && tutorSrc.includes("tutorCtx.vocab[0]"));
-  ok("the tutor prompt forbids answering the content of another language",
-     tutorSrc.includes("NO respondas a lo que dijo"));
+  // The language rule is enforced in CODE before the model is called, so the
+  // prompt must NOT also carry it: measured, the prompt version made the model
+  // answer « Pardon, je ne comprends qu'en français » to a student writing
+  // perfectly good French, 4 times out of 4, on every model tried.
+  ok("the prompt does NOT second-guess the language (the code already did)",
+     !tutPromptSrc.includes("NO respondas a lo que dijo") &&
+     tutPromptSrc.includes("el sistema ya rechaza cualquier otro idioma antes de llegar a ti"));
+  ok("the prompt tells Lib to engage with an off-scene French question",
+     tutPromptSrc.includes("no la rechaces"),
+     "stonewalling a genuine question is what ended conversations");
   const convSrc = readFileSync("src/routes/conversation.tsx", "utf8");
+  // THE tutor bug the client reported: the voice loop re-armed itself from
+  // inside handleSend's try, while setSending(false) only ran in the finally
+  // afterwards. listenRef is reassigned every render, so turn 2 ran through a
+  // closure that had captured sending === true and returned SILENTLY at the
+  // guard — no error, no toast, one spoken exchange and then a spinner that
+  // never resolved. A ref is read at call time and cannot go stale.
+  ok("the voice loop cannot stall on a stale `sending` closure",
+     /if \(!text \|\| sendingRef\.current\) return;/.test(convSrc),
+     "reading the render-scoped `sending` here is what gave the student exactly one turn");
+  ok("the flag is cleared BEFORE the turn is handed back",
+     /setSendingBoth\(false\);[\s\S]{0,120}?listenRef\.current\(\)/.test(convSrc));
+  const tp = readFileSync("src/lib/tutorPrompt.ts", "utf8");
+  ok("the scene does not end when the objectives are done",
+     tp.includes("NO cierres la escena") && tp.includes("abres un tema NUEVO"));
+  ok("objectives cannot all be ticked in one turn (that killed the scene in 2 messages)",
+     tp.includes("UN objetivo por turno como máximo"));
+  const aiSrcTutor = readFileSync("src/lib/ai.ts", "utf8");
+  ok("the tutor runs on the stronger model, measured not assumed",
+     /export const TUTOR_MODEL/.test(aiSrcTutor) && aiSrcTutor.includes("probe-tutor-models.mjs"));
   ok("the spoken tutor says WHY it refused instead of looping in silence",
      convSrc.includes("ne comprend que le français"));
   ok("the written-French audit exists", existsSync("scripts/audit-text-language.mjs"));
@@ -2754,6 +2787,210 @@ g("12v. Deleting an account: the guards, and the record that outlives it");
   const alumnos = readFileSync("src/routes/liberte-profesor-panel-9382745-admin.alumnos.tsx", "utf8");
   ok("the actions are on the student card", alumnos.includes("<StudentAccountActions"));
   ok("the card exposes a stable test hook", alumnos.includes("data-student={student.id}"));
+
+  // Denying a request: an unanswered request used to sit in the queue forever
+  // while the person waited on a screen that would never resolve.
+  ok("there is a deny-request server fn", /export const denyStudent/.test(af));
+  ok("denying is admin-gated and not self-inflictable",
+     /denyStudent[\s\S]{0,600}?await requireAdmin/.test(af) &&
+     /No puedes denegarte el acceso a ti mismo/.test(af));
+  ok("a denied request leaves the approval queue",
+     /\.is\("denied_at", null\)/.test(af));
+  ok("approving clears a previous denial (the decision is reversible)",
+     /denied_at: null,\s+denied_by: null/.test(af));
+  const queue = readFileSync("src/components/ApprovalQueue.tsx", "utf8");
+  ok("the queue has a Denegar action next to Aprobar",
+     queue.includes("handleDeny") && queue.includes("Denegar"));
+  const gate = readFileSync("src/components/AuthGate.tsx", "utf8");
+  const pend = readFileSync("src/components/PendingApproval.tsx", "utf8");
+  ok("a denied student is told, instead of waiting forever",
+     gate.includes("denied={denied}") && pend.includes("Inscription non retenue"));
+}
+
+g("12w. Month 3 content matches the client's document");
+{
+  const dict = JSON.parse(readFileSync("scripts/data/month3-dictionary.json", "utf8"));
+  eq("20 days transcribed", dict.days.length, 20);
+  const words = dict.days.reduce((a, d) => a + d.vocabulary.length, 0);
+  eq("600 vocabulary items", words, 600);
+  const withPhrase = dict.days.reduce(
+    (a, d) => a + d.vocabulary.filter((v) => v.example && v.exampleEs).length, 0);
+  eq("every word carries the document's phrase, FR and ES", withPhrase, 600);
+  ok("every day has its grammar point and objective",
+     dict.days.every((d) => d.grammar && d.objective && d.theme));
+  ok("no day repeats a word (the día-14 duplicate was replaced)",
+     dict.days.every((d) => new Set(d.vocabulary.map((v) => v.fr)).size === d.vocabulary.length));
+  ok("día 14 « faire confiance » duplicate is gone, replaced from the client's own Resumen",
+     dict.days.find((d) => d.day === 14).vocabulary.filter((v) => v.fr === "faire confiance").length === 1 &&
+     dict.days.find((d) => d.day === 14).vocabulary.some((v) => v.fr === "faire du bien"));
+  ok("the client's ruling on weeks is recorded (Resumen manda, 4 semanas de 5)",
+     String(dict._weeks || "").includes("4 semanas de 5"));
+  ok("the audit exists and is wired to npm", existsSync("scripts/audit-month3.mjs"));
+
+  const gen = readFileSync("src/data/month3.ts", "utf8");
+  ok("month3.ts is generated, not hand-written", gen.includes("AUTO-GENERATED"));
+  ok("month3.ts covers platform days 41-60",
+     gen.includes("MONTH3_FIRST_DAY = 41") && gen.includes("MONTH3_LAST_DAY = 60"));
+}
+
+g("12x. The Month-3 arcade: it must be playable, and it must be fair");
+{
+  const eng = await loadServerLib("src/components/arcade/engine.ts");
+  const m3 = await loadServerLib("src/data/month3.ts");
+
+  // The bug that matters most: a decoy that is ALSO a correct answer tells a
+  // student she is wrong when she is right. Multi-sense glosses ("ganas /
+  // prisa", "padre / madre") made 35 such pairs slip through the first guard.
+  const senses = (es) => new Set(es.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .replace(/\(.*?\)/g, "").split(/[\/,;]| o /)
+    .map((x) => x.replace(/[^a-z ]/g, " ").trim()).filter((x) => x.length >= 3));
+  let leaks = 0, built = 0, starved = 0, phraseRounds = 0;
+  for (const day of Object.values(m3.MONTH3)) {
+    const rs = eng.buildRounds(day.vocabulary, { seed: eng.daySeed(day.platformDay, 1), decoys: 3 });
+    built += rs.length;
+    for (const r of rs) {
+      if (r.targets.filter((x) => !x.correct).length < 2) starved++;
+      const ans = day.vocabulary.find((v) => v.fr === r.answerFr);
+      const A = senses(ans.es);
+      for (const tgt of r.targets.filter((x) => !x.correct)) {
+        const dec = day.vocabulary.find((v) => v.fr === tgt.label);
+        if ([...senses(dec.es)].some((x) => A.has(x))) leaks++;
+      }
+    }
+    phraseRounds += eng.buildPhraseRounds(day.vocabulary, { seed: eng.daySeed(day.platformDay, 2), decoys: 3 }).length;
+  }
+  eq("every one of the 600 words becomes a playable round", built, 600);
+  eq("no decoy is secretly a correct answer", leaks, 0);
+  eq("no round is left without enough decoys", starved, 0);
+  ok("the grammar game has rounds on every day", phraseRounds > 400, `only ${phraseRounds}`);
+
+  // Fairness policy, in numbers, so it cannot be quietly tightened.
+  ok("a wrong tap costs TIME, never points", eng.WRONG_TAP_PENALTY_MS === 1500);
+  ok("targets live long enough for an adult beginner to decode",
+     eng.LIFETIME_MS.easy >= 5000 && eng.LIFETIME_MS.hard >= 3000);
+  ok("difficulty rises on accuracy, and a miss steps it straight back",
+     eng.nextDifficulty("easy", 4, false) === "mid" && eng.nextDifficulty("hard", 9, true) === "mid");
+  ok("finishing is never worth zero stars if she hit anything",
+     eng.starsFor({ hits: 1, misses: 9, best: 1, streak: 0 }) >= 1);
+  ok("the same day always builds the same game (seeded, so replay is spacing)",
+     JSON.stringify(eng.buildRounds(m3.MONTH3["41"].vocabulary, { seed: eng.daySeed(41, 1), decoys: 3 })) ===
+     JSON.stringify(eng.buildRounds(m3.MONTH3["41"].vocabulary, { seed: eng.daySeed(41, 1), decoys: 3 })));
+
+  const src = readFileSync("src/components/arcade/WhackGame.tsx", "utf8");
+  ok("the prompt is Spanish and the answer French (recall, not recognition)",
+     src.includes("round.promptEs") && src.includes("speakFr(t.label)"));
+  const phr = readFileSync("src/components/arcade/PhraseGame.tsx", "utf8");
+  ok("the grammar game speaks the COMPLETED sentence back",
+     phr.includes('round.masked.replace("____", round.answer)'));
+  const shell = readFileSync("src/components/arcade/ArcadeShell.tsx", "utf8");
+  ok("a bad round names the words she missed instead of just a score",
+     shell.includes("Para la próxima") && shell.includes("missedWords"));
+  const loopSrc = readFileSync("src/components/arcade/useGameLoop.ts", "utf8");
+  ok("leaving the tab pauses instead of losing the round",
+     loopSrc.includes("visibilitychange") && loopSrc.includes("prefers-reduced-motion"));
+
+  const route = readFileSync("src/routes/day.$dayId.tsx", "utf8");
+  ok("the games are wired to Month 3 ONLY, as the client asked",
+     /isMonth3\(dayId\)/.test(route) && route.includes("<Month3Page"));
+  cleanupServerLibs();
+}
+
+g("12x. Month 3 is a real month everywhere, not a clamp to day 40");
+{
+  // Three silent fallbacks used to make days 41-60 serve MONTH-1/2 content:
+  //   · TUTOR_MAX_DAY = 40  → Math.min(45,40): day 45 got the day-40 scene
+  //   · variantsForWeek(9)  → VARIANTS: the SEMAINE 1 café bank
+  //   · month 3 was labelled "JE CRÉE" while the client's document says
+  //     "MES 3: JE M'EXPRIME"
+  // None of them threw. Each one just quietly taught the wrong month.
+  const tc = await loadServerLib("src/lib/tutorContext.ts");
+  const m3 = await loadServerLib("src/data/month3.ts");
+
+  ok("the tutor reaches day 60, not day 40", tc.TUTOR_MAX_DAY === 60,
+     `TUTOR_MAX_DAY is ${tc.TUTOR_MAX_DAY} — every Month-3 day clamps to it`);
+
+  // Execute it: a day that clamps returns SOMEONE ELSE'S day, and the only way
+  // to see that is to call the function and read the dayId back.
+  let clamped = [];
+  let emptyVocab = [];
+  for (let d = 1; d <= 60; d++) {
+    const ctx = tc.getTutorDayContext(d);
+    if (ctx.dayId !== d) clamped.push(d);
+    if (!ctx.vocab?.length || !ctx.grammar?.length || !ctx.scenario) emptyVocab.push(d);
+  }
+  ok("no day 1-60 is silently served another day's scene",
+     clamped.length === 0, `clamped: ${clamped.join(", ")}`);
+  ok("every day 1-60 has a scene, vocabulary and grammar",
+     emptyVocab.length === 0, `empty: ${emptyVocab.join(", ")}`);
+
+  // The content is the DOCUMENT'S, day by day — not something adjacent.
+  let wrongTopic = [];
+  let notFromDoc = [];
+  for (let d = 41; d <= 60; d++) {
+    const day = m3.month3Day(d);
+    const ctx = tc.getTutorDayContext(d);
+    if (!ctx.topic.includes(day.theme) || !ctx.topic.includes(day.grammar)) wrongTopic.push(d);
+    // Its vocabulary must be THIS day's 30 words, in the document's own order.
+    const docFirst = day.vocabulary[0].fr;
+    if (ctx.vocab[0]?.fr !== docFirst || ctx.vocab.length !== day.vocabulary.length) {
+      notFromDoc.push(d);
+    }
+  }
+  ok("each Month-3 scene carries its own theme AND its own grammar point",
+     wrongTopic.length === 0, `wrong: ${wrongTopic.join(", ")}`);
+  ok("each Month-3 scene is loaded with that day's 30 document words",
+     notFromDoc.length === 0, `wrong vocab: ${notFromDoc.join(", ")}`);
+  ok("the day-45 scene is about « Mi país », not the day-40 train station",
+     tc.getTutorDayContext(45).topic.includes("Mi país") &&
+     !JSON.stringify(tc.TUTOR_SCENARIOS[45]).includes("gare"));
+  ok("Month-3 objectives quote the document's own objective for the day",
+     tc.TUTOR_SCENARIOS[41].objectives[0] === m3.month3Day(41).objective);
+
+  // The picker has to actually OFFER those days, or the fix is unreachable.
+  const conv = readFileSync("src/routes/conversation.tsx", "utf8");
+  ok("the scene picker follows TUTOR_MAX_DAY instead of a hard-coded 40",
+     conv.includes("tutorDayGroups(TUTOR_MAX_DAY)") && !/tutorDayGroups\(40\)/.test(conv));
+
+  /* ---- the weekly challenge, weeks 9-12 ---- */
+  const sem = readFileSync("src/routes/semaine.$weekId.tsx", "utf8");
+  for (const w of [9, 10, 11, 12]) {
+    ok(`semaine ${w} has its own bank (it used to serve the week-1 café)`,
+       new RegExp(`\\n  ${w}: WEEK${w}_VARIANTS,`).test(sem));
+  }
+  ok("no Month-3 week still points at the café bank",
+     !/\n  (9|10|11|12): VARIANTS,/.test(sem));
+  // Not just "a different bank" — the RIGHT grammar for those five days.
+  const bank = (n) => {
+    const at = sem.indexOf(`const WEEK${n}_VARIANTS`);
+    return sem.slice(at, sem.indexOf("];", at));
+  };
+  ok("semaine 9 drills the passé composé of days 41-45",
+     /passé composé/i.test(bank(9)) && /-MENT/.test(bank(9)));
+  ok("semaine 10 drills the pronouns Y / EN and the imparfait",
+     /con Y/.test(bank(10)) && /con EN/.test(bank(10)) && /imparfait/i.test(bank(10)));
+  ok("semaine 11 drills futur proche, qui / que and futur simple",
+     /futur proche/i.test(bank(11)) && /QUI o QUE/.test(bank(11)) && /futur simple/i.test(bank(11)));
+  ok("semaine 12 drills discours indirect and si + présent → futur",
+     /discurso indirecto/i.test(bank(12)) && /si \+ présent/i.test(bank(12)));
+  ok("the week-9 café is gone: no croissant in a month about your childhood",
+     !/croissant/i.test(bank(9) + bank(10) + bank(11) + bank(12)));
+  const wk = readFileSync("src/lib/week.functions.ts", "utf8");
+  ok("weeks 9-12 have their own pronunciation targets",
+     [9, 10, 11, 12].every((w) => new RegExp(`\\n  ${w}: "`).test(wk)));
+
+  /* ---- the month's name, from the client's own document ---- */
+  const dict = JSON.parse(readFileSync("scripts/data/month3-dictionary.json", "utf8"));
+  ok("the document names month 3 « JE M'EXPRIME »", dict.month === "JE M'EXPRIME");
+  for (const f of [
+    "src/data/program.ts", "src/routes/index.tsx", "src/routes/progress.tsx",
+    "src/routes/semaine.$weekId.tsx", "src/routes/clasesenvivo.index.tsx",
+    "src/components/StudentAnalytics.tsx", "src/components/StudentWeeklyReports.tsx",
+  ]) {
+    const src = readFileSync(f, "utf8");
+    ok(`${f.split("/").pop()} calls month 3 what the document calls it`,
+       src.includes("JE M'EXPRIME") && !src.includes("JE CRÉE"));
+  }
+  cleanupServerLibs();
 }
 
 /* ---------------- build output ---------------- */

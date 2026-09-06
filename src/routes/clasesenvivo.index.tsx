@@ -98,7 +98,7 @@ const MES1_CLASSES: ClassCard[] = [
 const MONTHS = [
   { id: 1, label: "MES 1 · J'OSE", unlocked: true },
   { id: 2, label: "MES 2 · JE VIS", unlocked: false },
-  { id: 3, label: "MES 3 · JE CRÉE", unlocked: false },
+  { id: 3, label: "MES 3 · JE M'EXPRIME", unlocked: false },
   { id: 4, label: "MES 4 · JE PARLE", unlocked: false },
   { id: 5, label: "MES 5 · JE VOYAGE", unlocked: false },
   { id: 6, label: "MES 6 · JE SUIS LIBRE", unlocked: false },

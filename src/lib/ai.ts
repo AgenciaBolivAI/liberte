@@ -26,6 +26,22 @@ export const STT_MODEL = process.env.OPENAI_STT_MODEL || "gpt-4o-transcribe";
 // Natural French speech for the conversation tutor. The browser's built-in
 // speechSynthesis is robotic, which is actively harmful when students are
 // modelling their pronunciation on it.
+/**
+ * The CONVERSATION tutor runs on a stronger model than the graders.
+ *
+ * Measured against the two failures pulled from real stored conversations
+ * (scripts/probe-tutor-models.mjs — role theft on day 7, stonewalling a genuine
+ * French question on day 1): gpt-4o at temperature 0.6 broke the scene 0 times
+ * out of 6, gpt-4o-mini 1-2 out of 6. The tutor has to hold a role, track three
+ * objectives and emit strict JSON at the same time; that is where the extra
+ * capability actually shows. Graders stay on the cheap tier — they classify one
+ * short answer and are called far more often.
+ *
+ * Overridable without a deploy, like STT_MODEL.
+ */
+export const TUTOR_MODEL = process.env.OPENAI_TUTOR_MODEL || "gpt-4o";
+export const TUTOR_TEMPERATURE = 0.6;
+
 export const TTS_MODEL = "gpt-4o-mini-tts";
 export const TTS_VOICE = "shimmer";
 

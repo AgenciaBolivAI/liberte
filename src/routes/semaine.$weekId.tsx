@@ -37,7 +37,7 @@ type Variant = {
 
 /** Month label for a week (4 weeks per month) — weeks 5-8 are month 2, so the
  *  page and the student PDF must not keep saying "Mois 1 : J'OSE". */
-const MONTH_THEMES = ["J'OSE 🗼", "JE COMPRENDS 📞", "JE CRÉE ✍️", "JE PARLE 🗣️", "JE VOYAGE ✈️", "JE SUIS LIBRE 🕊️"];
+const MONTH_THEMES = ["J'OSE 🗼", "JE COMPRENDS 📞", "JE M'EXPRIME 🗣️", "JE PARLE 🗣️", "JE VOYAGE ✈️", "JE SUIS LIBRE 🕊️"];
 function monthLabelForWeek(weekNumber: number): string {
   const m = Math.max(1, Math.ceil(weekNumber / 4));
   return `Mois ${m} : ${MONTH_THEMES[m - 1] ?? ""}`.trim();
@@ -293,6 +293,130 @@ const WEEK8_VARIANTS: Variant[] = [
   },
 ];
 
+/* ---------------- Mois 3 « JE M'EXPRIME » (semaines 9-12) ----------------
+ *
+ * Weeks 9-12 used to fall through to VARIANTS — the SEMAINE 1 café bank. A
+ * student who had just spent five days on « mon enfance » and the passé
+ * composé was handed « Bonjour, un café s'il vous plaît » and graded on it.
+ * Silent, and wrong in the way that makes a student think the course is broken.
+ *
+ * Each bank below exercises exactly the themes and the grammar the client's
+ * Mes 3 document assigns to those five days — nothing invented, nothing from a
+ * different month:
+ *   S9  (J41-45) infancia · familia · país   — PC avoir/être, expr. avec avoir,
+ *                                              adverbes en -MENT, PC + négation
+ *   S10 (J46-50) país · estudios · trabajo   — pronom Y, imparfait, connecteurs
+ *                                              chronologiques, pronom EN, il y avait
+ *   S11 (J51-55) viajes · sueños · objetivos — futur proche, qui/que,
+ *                                              depuis/pendant/il y a, FAIRE, futur simple
+ *   S12 (J56-60) objetivos · emociones · una experiencia importante —
+ *                discours indirect, se sentir/ressentir, connecteurs de cause,
+ *                si + présent → futur, synthèse narrative
+ */
+const WEEK9_VARIANTS: Variant[] = [
+  {
+    co: [
+      { audio: "Quand j'étais petit, j'ai passé toute mon enfance chez mes grands-parents, à la campagne. J'ai appris à nager dans la rivière et j'ai gardé ce souvenir pour toujours.", question: "¿Dónde pasó su infancia?", options: ["en casa de sus abuelos, en el campo", "en un internado en la ciudad", "en casa de un tío, junto al mar"], correct: 0 },
+      { audio: "Mon frère est né trois ans après moi. Ma sœur, elle, est partie vivre à l'étranger à vingt ans, et elle est revenue seulement l'année dernière.", question: "¿Qué hizo la hermana?", options: ["nació tres años después", "se fue a vivir al extranjero y volvió el año pasado", "nunca salió del país"], correct: 1 },
+      { audio: "Dans mon pays, il n'y avait pas de neige. Je n'ai jamais vu l'hiver avant de venir ici, et je n'ai pas aimé le froid la première année.", question: "¿Qué dice sobre el invierno?", options: ["le encantó desde el principio", "en su país nevaba mucho", "no había nieve y el primer año no le gustó el frío"], correct: 2 },
+    ],
+    ce: {
+      text: "SOUVENIRS D'ENFANCE — J'ai eu une enfance très simple. Nous n'avions pas beaucoup d'argent, mais j'ai toujours eu de la chance : ma mère parlait doucement, mon père travaillait sérieusement, et le dimanche toute la famille est venue manger à la maison. J'avais peur du noir et j'avais souvent besoin de la lumière du couloir. Je n'ai pas oublié cette maison.",
+      items: [
+        { question: "¿Cómo hablaba su madre?", options: ["suavemente", "rápidamente", "fuertemente"], correct: 0 },
+        { question: "¿De qué tenía miedo?", options: ["de los perros", "de la oscuridad", "de la escuela"], correct: 1 },
+        { question: "¿Qué pasaba los domingos?", options: ["se quedaba solo", "iba al campo", "toda la familia venía a comer"], correct: 2 },
+      ],
+    },
+    pe: [
+      { prompt: "Escribe 5 frases sobre tu infancia en passé composé — 3 con AVOIR (« j'ai joué… ») y 2 con ÊTRE (« je suis allé(e)… »). Cuidado con el acuerdo del participio con être." },
+      { prompt: "Escribe 3 frases con expresiones con AVOIR sobre cuando eras niño/a: avoir peur de, avoir besoin de, avoir envie de. Después pásalas a negativo con ne… pas / ne… jamais." },
+    ],
+    po: [
+      { prompt: "Lectura en voz alta (diagnóstico de pronunciación). Lee tal cual:", expected: "J'ai passé toute mon enfance à jouer dehors. Mon frère est né trois ans après moi. Je n'ai jamais oublié cette maison." },
+      { prompt: "RETO DE LA SEMANA (45-60 seg): cuenta un recuerdo real de tu infancia con tu familia, en tu país. Usa passé composé (avoir Y être), al menos una expresión con avoir y un adverbio en -MENT." },
+    ],
+  },
+];
+
+const WEEK10_VARIANTS: Variant[] = [
+  {
+    co: [
+      { audio: "Mon pays me manque. J'y retourne chaque été, et j'y retrouve mes cousins. Là-bas, la fête du village dure trois jours : tout le monde y participe.", question: "¿Qué dice del pueblo?", options: ["ya no vuelve nunca", "vuelve cada verano y todos participan en la fiesta", "la fiesta dura un solo día"], correct: 1 },
+      { audio: "Quand j'étudiais, je me levais à six heures. Il y avait toujours du bruit dans la salle et le professeur parlait très vite. C'était difficile, mais j'aimais ça.", question: "¿Cómo era la clase?", options: ["silenciosa y lenta", "ruidosa, y el profesor hablaba muy rápido", "vacía por la mañana"], correct: 1 },
+      { audio: "Des collègues ? J'en avais une dizaine. Du travail, il y en avait beaucoup, surtout le vendredi. C'était fatigant, mais l'ambiance était bonne.", question: "¿Cuántos compañeros tenía?", options: ["una decena", "solo dos", "ninguno"], correct: 0 },
+    ],
+    ce: {
+      text: "MON PARCOURS — D'abord, j'ai étudié la comptabilité pendant trois ans. Ensuite, j'ai travaillé dans une petite entreprise : il y avait douze personnes et c'était très familial. Puis j'ai changé de ville. Enfin, aujourd'hui, je cherche un travail ici. Des diplômes, j'en ai deux. Ce pays, j'y vis depuis deux ans.",
+      items: [
+        { question: "¿Qué hizo primero?", options: ["cambiar de ciudad", "estudiar contabilidad", "buscar trabajo aquí"], correct: 1 },
+        { question: "¿Cómo era la empresa?", options: ["muy grande e impersonal", "pequeña y muy familiar", "una fábrica con cien personas"], correct: 1 },
+        { question: "¿Cuántos diplomas tiene?", options: ["dos", "tres", "ninguno"], correct: 0 },
+      ],
+    },
+    pe: [
+      { prompt: "Reescribe sin repetir el complemento: « Je pense souvent à mon pays » → con Y. « J'ai deux diplômes » → con EN. Añade 2 frases propias, una con Y y otra con EN." },
+      { prompt: "Cuenta tu trayectoria de estudios o de trabajo en 5 frases usando conectores cronológicos: d'abord, ensuite, puis, après, enfin. Describe el ambiente con « il y avait… » y « c'était… »." },
+    ],
+    po: [
+      { prompt: "Lectura en voz alta (diagnóstico de pronunciación). Lee tal cual:", expected: "J'y retourne chaque été. Quand j'étudiais, il y avait beaucoup de bruit et c'était difficile. Du travail ? J'en avais beaucoup." },
+      { prompt: "RETO DE LA SEMANA (45-60 seg): describe tu etapa de estudios o tu trabajo anterior. Usa el imparfait para el ambiente (« il y avait… », « c'était… ») y ordena con d'abord / ensuite / enfin." },
+    ],
+  },
+];
+
+const WEEK11_VARIANTS: Variant[] = [
+  {
+    co: [
+      { audio: "L'été prochain, je vais partir en France. Je vais visiter Lyon et je vais rester chez une amie qui habite là-bas depuis dix ans.", question: "¿Dónde se va a alojar?", options: ["en un hotel del centro", "en casa de una amiga que vive allí", "en casa de su hermano"], correct: 1 },
+      { audio: "Le pays que je préfère, c'est le Portugal. C'est un endroit qui me calme. J'y suis allé il y a deux ans et je suis resté pendant trois semaines.", question: "¿Cuándo fue a Portugal?", options: ["hace dos años, durante tres semanas", "desde hace tres semanas", "va a ir dentro de dos años"], correct: 0 },
+      { audio: "Mon rêve ? Ouvrir mon propre restaurant. J'y pense depuis longtemps. Ça me fait peur, mais ça me fait aussi très plaisir d'imaginer ce projet.", question: "¿Qué siente con su sueño?", options: ["solo miedo", "ya no le interesa", "miedo, pero también mucha ilusión"], correct: 2 },
+    ],
+    ce: {
+      text: "MES OBJECTIFS — Dans cinq ans, je parlerai français couramment. Je ferai des études ici et je trouverai un travail qui me plaira vraiment. Le pays que j'ai choisi n'est pas facile, mais c'est un pays qui donne des chances. Je vis ici depuis deux ans et je n'ai pas encore fini. Je réussirai.",
+      items: [
+        { question: "¿Qué hará dentro de cinco años?", options: ["hablará francés con fluidez", "volverá a su país", "dejará de estudiar"], correct: 0 },
+        { question: "¿Cómo describe el país?", options: ["fácil y cómodo", "difícil, pero que da oportunidades", "un país sin trabajo"], correct: 1 },
+        { question: "¿Cuánto tiempo lleva viviendo allí?", options: ["hace dos años que se fue", "durante cinco años", "desde hace dos años"], correct: 2 },
+      ],
+    },
+    pe: [
+      { prompt: "Escribe 3 planes de viaje en futur proche (aller + infinitif) y después reescríbelos en futur simple. Ejemplo: « Je vais visiter Paris » → « Je visiterai Paris »." },
+      { prompt: "Une las frases con QUI o QUE: « C'est une ville. Elle me plaît. » / « C'est un rêve. Je le garde depuis longtemps. » Después escribe 2 frases con depuis, pendant e il y a." },
+    ],
+    po: [
+      { prompt: "Lectura en voz alta (diagnóstico de pronunciación). Lee tal cual:", expected: "L'été prochain, je vais partir en France. C'est un endroit qui me calme et que j'aime beaucoup. J'y pense depuis longtemps." },
+      { prompt: "RETO DE LA SEMANA (45-60 seg): cuenta un sueño y un objetivo concreto. Empieza con futur proche (lo inmediato), sigue con futur simple (lo lejano) y sitúa todo con depuis / pendant / il y a." },
+    ],
+  },
+];
+
+const WEEK12_VARIANTS: Variant[] = [
+  {
+    co: [
+      { audio: "Ma sœur m'a dit qu'elle était fière de moi. Elle m'a demandé si j'allais continuer, et je lui ai répondu que je n'abandonnerais pas.", question: "¿Qué le preguntó su hermana?", options: ["si iba a continuar", "si estaba cansado", "si quería volver"], correct: 0 },
+      { audio: "Je me sens beaucoup mieux depuis que j'ai commencé. Avant, j'avais l'air fatiguée tout le temps. Maintenant, je ressens de la fierté grâce à ce travail.", question: "¿Cómo se siente ahora?", options: ["cansada todo el tiempo", "mucho mejor, y siente orgullo", "igual que antes"], correct: 1 },
+      { audio: "Si je réussis cet examen, je changerai de vie. C'est pourquoi je travaille tous les soirs. Je suis nerveuse à cause du temps, mais je continuerai.", question: "¿Por qué está nerviosa?", options: ["por el dinero", "por su familia", "por el tiempo"], correct: 2 },
+    ],
+    ce: {
+      text: "UNE EXPÉRIENCE IMPORTANTE — Le jour où je suis arrivée, j'ai pleuré. Je ne connaissais personne et je me sentais seule à cause de la langue. Mon voisin m'a dit que ça passerait. Il avait raison. Aujourd'hui je me sens chez moi, grâce aux gens que j'ai rencontrés. Si je regarde en arrière, je verrai tout le chemin. C'est pourquoi je continue.",
+      items: [
+        { question: "¿Por qué se sentía sola?", options: ["por el idioma", "por el trabajo", "por el clima"], correct: 0 },
+        { question: "¿Qué le dijo el vecino?", options: ["que se fuera", "que eso pasaría", "que no la entendía"], correct: 1 },
+        { question: "¿Gracias a qué se siente en casa hoy?", options: ["gracias al dinero", "gracias al tiempo libre", "gracias a la gente que conoció"], correct: 2 },
+      ],
+    },
+    pe: [
+      { prompt: "Pasa a discurso indirecto: « Je suis fier de toi » (il a dit que…), « Tu vas continuer ? » (il m'a demandé si…), « Ne t'inquiète pas » (il m'a dit de…)." },
+      { prompt: "Escribe 4 frases sobre cómo te sientes y POR QUÉ, encadenando causa y consecuencia: parce que, car, grâce à, à cause de, donc, c'est pourquoi. Usa se sentir, ressentir y avoir l'air." },
+    ],
+    po: [
+      { prompt: "Lectura en voz alta (diagnóstico de pronunciación). Lee tal cual:", expected: "Elle m'a dit qu'elle était fière de moi. Je me sens mieux grâce à ce travail. Si je réussis, je changerai de vie." },
+      { prompt: "RETO FINAL JE M'EXPRIME (60-90 seg): narra UNA experiencia importante de tu vida de principio a fin — qué pasó (pasado), cómo te sientes hoy y por qué (emoción + causa), y qué harás si sale bien (si + présent → futur). Sin cambiar al español." },
+    ],
+  },
+];
+
 const VARIANTS_BY_WEEK: Record<number, Variant[]> = {
   1: VARIANTS,
   3: WEEK3_VARIANTS,
@@ -301,6 +425,10 @@ const VARIANTS_BY_WEEK: Record<number, Variant[]> = {
   6: WEEK6_VARIANTS,
   7: WEEK7_VARIANTS,
   8: WEEK8_VARIANTS,
+  9: WEEK9_VARIANTS,
+  10: WEEK10_VARIANTS,
+  11: WEEK11_VARIANTS,
+  12: WEEK12_VARIANTS,
 };
 
 function variantsForWeek(weekNumber: number): Variant[] {

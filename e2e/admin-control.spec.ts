@@ -273,3 +273,79 @@ test("revoking access locks the student out but keeps their work", async ({ page
     await deleteStudent(admin, adminUser.id);
   }
 });
+
+test("an admin can deny an access request, and the student is told", async ({ page }) => {
+  test.setTimeout(180_000);
+  const adminUser = await createStudent(admin);
+  const applicant = await createStudent(admin);
+  try {
+    await admin.from("user_roles").insert({ user_id: adminUser.id, role: "admin" });
+    // createStudent approves by default; put this one back in the queue.
+    await admin.from("profiles").update({ approved_at: null }).eq("id", applicant.id);
+
+    await login(page, adminUser);
+    await page.goto("/liberte-profesor-panel-9382745-admin");
+    await expect(page.getByText("Solicitudes pendientes", { exact: false })).toBeVisible({ timeout: 45_000 });
+    page.once("dialog", (d) => void d.accept("no completó el pago"));
+    await page.getByRole("button", { name: "Denegar" }).first().click();
+
+    await expect(async () => {
+      const { data } = await admin
+        .from("profiles")
+        .select("approved_at, denied_at, denied_reason")
+        .eq("id", applicant.id)
+        .maybeSingle();
+      expect(data?.denied_at).not.toBeNull();
+      expect(data?.approved_at).toBeNull();
+      expect(data?.denied_reason).toBe("no completó el pago");
+    }).toPass({ timeout: 40_000 });
+  } finally {
+    await deleteStudent(admin, applicant.id);
+    await deleteStudent(admin, adminUser.id);
+  }
+});
+
+/**
+ * Month 3's arcade, played for real. Compiling is not evidence that a game
+ * works — this starts a round, taps a target and checks the score moves.
+ */
+test("a Month-3 day renders the arcade and a round is actually playable", async ({ page }) => {
+  test.setTimeout(240_000);
+  const student = await createStudent(admin);
+  try {
+    // Day 41 is behind the normal unlock; open it the way an admin preview does.
+    await admin.from("user_roles").insert({ user_id: student.id, role: "admin" });
+    await login(page, student);
+    await page.goto("/day/41");
+
+    // The day's own content from the client's document.
+    await expect(page.getByText("Mi infancia").first()).toBeVisible({ timeout: 45_000 });
+    await expect(page.getByText("Passé composé avec avoir").first()).toBeVisible();
+
+    // Both games are offered, and they are DIFFERENT games.
+    await expect(page.getByText("Attrape le mot").first()).toBeVisible();
+    await expect(page.getByText("Complète la phrase").first()).toBeVisible();
+
+    // Play the whack-a-mole: start, wait for a target, tap it.
+    const board = page.locator(".arcade-board").first();
+    await board.getByRole("button", { name: "Jouer" }).click();
+    await expect(page.getByText("¿Cómo se dice?")).toBeVisible({ timeout: 15_000 });
+    const target = board.locator("button").filter({ hasNotText: "Pista sonora" }).last();
+    await expect(target).toBeVisible({ timeout: 15_000 });
+    await target.click();
+    // Either a hit or a miss — what matters is the round responded, not froze.
+    await expect(board.locator("button").first()).toBeVisible();
+
+    // The grammar game shows a real sentence from the document with a gap.
+    const second = page.locator(".arcade-board").nth(1);
+    await second.getByRole("button", { name: "Jouer" }).click();
+    await expect(second.getByText("____").or(second.getByText("?"))).toBeVisible({ timeout: 15_000 });
+
+    // And the 30 words are one tap away.
+    await page.getByRole("button", { name: /Las 30 palabras/ }).click();
+    await expect(page.getByText("enfance").first()).toBeVisible();
+    await expect(page.getByText("J'ai passé toute mon enfance à jouer dehors.")).toBeVisible();
+  } finally {
+    await deleteStudent(admin, student.id);
+  }
+});

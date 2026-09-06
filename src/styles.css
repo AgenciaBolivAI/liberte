@@ -247,3 +247,26 @@ html[data-reveal-ready] [data-reveal].lp-in {
     transition: none;
   }
 }
+
+/* --- Month-3 arcade -------------------------------------------------------
+   A tap game needs the browser to stop helping. Without these, a student
+   tapping fast triggers pull-to-refresh, the 300 ms double-tap-zoom delay, and
+   iOS text-selection of the French word she is trying to hit. None of these
+   properties existed anywhere in the app before the arcade. */
+.arcade-board {
+  touch-action: manipulation;
+  overscroll-behavior: contain;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+@keyframes arcade-pop {
+  0% { transform: scale(0.6); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* The pop is decoration; the round still plays without it. */
+@media (prefers-reduced-motion: reduce) {
+  .arcade-board [style*="arcade-pop"] { animation: none !important; }
+}

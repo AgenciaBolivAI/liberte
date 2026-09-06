@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
-import { Check, Loader2, UserCheck } from "lucide-react";
+import { Check, Loader2, UserCheck, X } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { approveStudent, getPendingStudents, type PendingStudent } from "@/lib/admin.functions";
+import { approveStudent, denyStudent, getPendingStudents, type PendingStudent } from "@/lib/admin.functions";
 
 export function ApprovalQueue() {
   const [pending, setPending] = useState<PendingStudent[] | null>(null);
@@ -37,6 +37,27 @@ export function ApprovalQueue() {
     }
   }
 
+  async function handleDeny(s: PendingStudent) {
+    // Asked for out loud, because "no" is a decision the person is owed: an
+    // unanswered request sat in this queue forever while they waited on the
+    // pending screen. Reversible — approving later clears the denial.
+    const reason = window.prompt(
+      `Denegar el acceso a ${s.full_name || s.email}. Motivo (opcional, queda registrado):`,
+      "",
+    );
+    if (reason === null) return; // cancelled
+    setBusy(s.id);
+    try {
+      await denyStudent({ data: { userId: s.id, reason } });
+      toast.success(`Solicitud de ${s.full_name || s.email} denegada.`);
+      await reload();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "No se pudo denegar");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   if (!pending || pending.length === 0) return null;
 
   return (
@@ -59,6 +80,16 @@ export function ApprovalQueue() {
                 {formatDistanceToNow(new Date(s.created_at), { addSuffix: true, locale: es })}
               </p>
             </div>
+            <div className="flex flex-wrap items-center gap-2">
+            <Button
+              onClick={() => void handleDeny(s)}
+              disabled={busy === s.id}
+              variant="outline"
+              className="rounded-full border-red-300 font-bold text-red-600 hover:bg-red-50"
+            >
+              <X className="mr-1 h-4 w-4" />
+              Denegar
+            </Button>
             <Button
               onClick={() => void handleApprove(s)}
               disabled={busy === s.id}
@@ -71,6 +102,7 @@ export function ApprovalQueue() {
               )}
               Aprobar acceso
             </Button>
+            </div>
           </li>
         ))}
       </ul>

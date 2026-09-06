@@ -17,7 +17,7 @@ import { effectiveOverride, furthestUnlockedDay, isSceneUnlocked } from "@/lib/u
 import { useContentOverrides } from "@/lib/content-access";
 import { useAdminPreview } from "@/lib/admin-preview";
 import { AdminPreviewBanner } from "@/components/AdminPreviewBanner";
-import { TUTOR_DAY_TOPICS, TUTOR_SCENARIOS } from "@/lib/tutorContext";
+import { TUTOR_DAY_TOPICS, TUTOR_MAX_DAY, TUTOR_SCENARIOS } from "@/lib/tutorContext";
 import { tutorDayGroups } from "@/data/program";
 import {
   getTutorState,
@@ -63,6 +63,24 @@ function ConversationPage() {
   const [bubbles, setBubbles] = useState<Bubble[] | null>(null);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
+  /**
+   * The SAME flag, in a ref.
+   *
+   * The voice loop re-arms itself from inside handleSend's `try`
+   * (`listenRef.current()`), while `setSending(false)` only runs in the
+   * `finally` afterwards. `listenRef.current` is reassigned on every render, so
+   * the next turn ran through a closure that had captured `sending === true`
+   * and returned silently at the guard below — no error, no toast, no log. The
+   * student got exactly ONE spoken exchange and then a spinner that never
+   * resolved, because voicePhase stayed "thinking" and the manual tap is
+   * disabled unless it is "listening". That is the reported "it stops after a
+   * couple messages". A ref is read at call time, so it cannot go stale.
+   */
+  const sendingRef = useRef(false);
+  const setSendingBoth = (v: boolean) => {
+    sendingRef.current = v;
+    setSending(v);
+  };
   const [transcribing, setTranscribing] = useState(false);
   const [remaining, setRemaining] = useState<number | null>(null);
   const [objectivesDone, setObjectivesDone] = useState<number[]>([]);
@@ -158,13 +176,13 @@ function ConversationPage() {
   async function handleSend(textOverride?: string, opts?: { voice?: boolean }) {
     if (readOnly) return; // impersonating — read-only preview
     const text = (textOverride ?? input).trim();
-    if (!text || sending) return;
+    if (!text || sendingRef.current) return;
     // Pin the scene: `furthestDay` can still change as progress queries resolve,
     // which would otherwise switch scenes mid-conversation and discard history.
     if (dayId === null) setDayId(activeDay);
     setInput("");
     setShowSuggestion(false);
-    setSending(true);
+    setSendingBoth(true);
     const useVoice = opts?.voice ?? false;
     if (useVoice) setVoicePhase("thinking");
     setBubbles((b) => [...(b ?? [openerBubble(activeDay)]), { role: "user", content: text }]);
@@ -198,7 +216,9 @@ function ConversationPage() {
         setVoicePhase("speaking");
         if (out.audio) await playBase64Mp3(out.audio);
         else speakFr(out.reply); // TTS failed — fall back to the browser voice
-        // Loop: hand the turn straight back to the student.
+        // Clear BEFORE handing the turn back: re-arming while the flag is
+        // still set is what stalled the loop.
+        setSendingBoth(false);
         if (voiceOnRef.current) listenRef.current();
       }
     } catch (e) {
@@ -206,10 +226,11 @@ function ConversationPage() {
       setBubbles((b) => (b ?? []).slice(0, -1));
       // In voice mode keep the conversation alive: hand the turn back rather
       // than dropping the student on a dead spinner.
+      setSendingBoth(false);
       if (voiceOnRef.current) listenRef.current();
       else setInput(text);
     } finally {
-      setSending(false);
+      setSendingBoth(false);
     }
   }
 
@@ -386,7 +407,7 @@ function ConversationPage() {
               </div>
               {allDone && (
                 <span className="rounded-full bg-success/10 px-3 py-1 text-xs font-bold text-success">
-                  🎉 Scène terminée !
+                  🎉 Objectifs atteints — continue !
                 </span>
               )}
             </header>
@@ -594,7 +615,7 @@ function ConversationPage() {
                 onChange={(e) => void handleReset(Number(e.target.value))}
                 className="mt-2 w-full rounded-xl border border-border bg-white px-3 py-2.5 text-base text-navy sm:text-sm"
               >
-                {tutorDayGroups(40).map((group) => (
+                {tutorDayGroups(TUTOR_MAX_DAY).map((group) => (
                   <optgroup key={group.label} label={group.label}>
                     {group.days.map((d) => {
                       const locked = !isDayUnlocked(d);
@@ -607,7 +628,7 @@ function ConversationPage() {
                   </optgroup>
                 ))}
               </select>
-              {activeDay < 40 && !isDayUnlocked(activeDay + 1) && (
+              {activeDay < TUTOR_MAX_DAY && !isDayUnlocked(activeDay + 1) && (
                 <p className="mt-2 text-[11px] text-navy/55">
                   🔒 Termina el Día {activeDay} para desbloquear la siguiente escena.
                 </p>
