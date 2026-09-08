@@ -32,6 +32,9 @@ export function AuthPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [forgotMode, setForgotMode] = useState(false);
+  // Set when sign-in failed ONLY because the e-mail was never confirmed. Holds
+  // the address, so the "renvoyer" button needs no second form.
+  const [needsConfirm, setNeedsConfirm] = useState<string | null>(null);
 
   useEffect(() => {
     // Someone with an active session doesn't need the login form.
@@ -61,11 +64,47 @@ export function AuthPage() {
         password: parsed.data.password,
       });
       if (error) {
+        // NEVER collapse every failure into "wrong password" again.
+        //
+        // An account whose e-mail is still unconfirmed is rejected with the
+        // CORRECT password — verified against the live project: same password,
+        // NONE while unconfirmed, GRANTED the moment the e-mail is confirmed.
+        // Telling that student "mot de passe incorrect" sent her to reset her
+        // password, and the recovery link happens to confirm the e-mail — so
+        // resetting the password was the only thing that ever worked. Six of
+        // our students got in that way and four never got in at all.
+        if (error.code === "email_not_confirmed") {
+          setNeedsConfirm(parsed.data.email);
+          toast.error("Ton compte existe, mais l'e-mail n'est pas encore confirmé.");
+          return;
+        }
         toast.error("E-mail ou mot de passe incorrects.");
         return;
       }
+      setNeedsConfirm(null);
       toast.success("Bon retour !");
       navigate({ to: "/liberte-plataforma-834798234728482934254-student" });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  /** Send the confirmation e-mail again — the way OUT of the lock-out that
+   *  isn't "reset your password". */
+  async function handleResendConfirm() {
+    if (!needsConfirm) return;
+    setLoading(true);
+    try {
+      const { error } = await supabase.auth.resend({
+        type: "signup",
+        email: needsConfirm,
+        options: { emailRedirectTo: `${window.location.origin}/` },
+      });
+      if (error) {
+        toast.error("On n'a pas pu renvoyer l'e-mail. Réessaie dans une minute.");
+        return;
+      }
+      toast.success("E-mail de confirmation renvoyé. Vérifie ta boîte (et les spams).");
     } finally {
       setLoading(false);
     }
@@ -203,6 +242,28 @@ export function AuthPage() {
                 </button>
               </div>
             </div>
+            )}
+
+            {/* The way out of the lock-out. Without this the only escape a
+                student ever found was resetting a password that was correct
+                all along. */}
+            {needsConfirm && !forgotMode && (
+              <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+                <p className="font-semibold">Ton mot de passe est bon.</p>
+                <p className="mt-1">
+                  Il te reste à confirmer ton e-mail : on t’a envoyé un lien à{" "}
+                  <span className="font-semibold">{needsConfirm}</span>. Regarde aussi
+                  les spams.
+                </p>
+                <button
+                  type="button"
+                  onClick={handleResendConfirm}
+                  disabled={loading}
+                  className="mt-2 font-semibold underline underline-offset-2 disabled:opacity-50"
+                >
+                  Renvoyer l’e-mail de confirmation
+                </button>
+              </div>
             )}
 
             <Button

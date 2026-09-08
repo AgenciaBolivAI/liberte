@@ -2993,6 +2993,84 @@ g("12x. Month 3 is a real month everywhere, not a clamp to day 40");
   cleanupServerLibs();
 }
 
+g("12y. An unconfirmed e-mail must never look like a wrong password");
+{
+  // The bug the client reported as "students can't log in, only by resetting
+  // the password". Measured on the live project on 2026-09-08: 0 of 43 users
+  // were auto-confirmed, the average gap between signing up and being able to
+  // log in was 8.5 HOURS, six students got in only via a password reset (the
+  // recovery link confirms the e-mail as a side effect) and four approved
+  // students never got in at all.
+  //
+  // Note what the rest of this suite does at line ~231: it creates its student
+  // with `email_confirm: true`. That is exactly why 967 passing tests never saw
+  // this — the suite skipped the gate that was locking real students out. So
+  // this group creates an UNCONFIRMED one and drives the real path.
+  const cEmail = `test-unconfirmed-${Date.now()}@liberte-test.local`;
+  const cPass = "TestPass!2026";
+  let cUid = null;
+  const { data: made, error: mkErr } = await admin.auth.admin.createUser({
+    email: cEmail, password: cPass, email_confirm: false,
+  });
+  ok("can create an unconfirmed account", !mkErr && Boolean(made?.user?.id), mkErr?.message);
+  cUid = made?.user?.id ?? null;
+
+  if (cUid) {
+    const { data: s1, error: e1 } = await anon.auth.signInWithPassword({
+      email: cEmail, password: cPass,
+    });
+    // This is the whole bug in two asserts: the password is RIGHT and sign-in
+    // still fails — so any UI that reports "wrong password" here is lying.
+    ok("the CORRECT password is refused while the e-mail is unconfirmed",
+       !s1?.session && Boolean(e1), "if this passes, confirmation is off — good, but update this group");
+    ok("...and the reason is distinguishable from a bad password",
+       e1?.code === "email_not_confirmed",
+       `error.code was ${JSON.stringify(e1?.code)} — the UI cannot branch on this`);
+
+    await admin.auth.admin.updateUserById(cUid, { email_confirm: true });
+    const { data: s2, error: e2 } = await anon.auth.signInWithPassword({
+      email: cEmail, password: cPass,
+    });
+    ok("the SAME password works the moment the e-mail is confirmed",
+       Boolean(s2?.session?.access_token), e2?.message);
+
+    const { error: delErr } = await admin.auth.admin.deleteUser(cUid);
+    ok("unconfirmed probe account removed", !delErr, delErr?.message);
+  }
+
+  // The UI must act on that distinction.
+  const ap = readFileSync("src/components/AuthPage.tsx", "utf8");
+  ok("login branches on email_not_confirmed instead of blaming the password",
+     ap.includes('error.code === "email_not_confirmed"'),
+     "every failure collapsing into one toast is what sent students to reset a correct password");
+  ok("...and the unconfirmed branch returns BEFORE the wrong-password toast",
+     ap.indexOf('error.code === "email_not_confirmed"') <
+     ap.indexOf('toast.error("E-mail ou mot de passe incorrects.")'));
+  ok("login offers to resend the confirmation e-mail",
+     /supabase\.auth\.resend\(/.test(ap) && ap.includes('type: "signup"'),
+     "without this the only escape is resetting a password that was never wrong");
+
+  // Signup must not celebrate and navigate when no session came back.
+  const su = readFileSync("src/routes/liberte-frances-98273425-plataforma-834823.tsx", "utf8");
+  ok("signup checks for a session before sending her to the platform",
+     /if \(!signUpData\.session\)/.test(su),
+     "navigating with no session bounced her to the login form with no explanation");
+  ok("signup tells her to confirm her e-mail",
+     su.includes("confirma tu correo") && /setAwaitingConfirm\(/.test(su));
+  ok("the no-session branch runs BEFORE the success navigate",
+     su.indexOf("if (!signUpData.session)") <
+     su.indexOf('navigate({ to: "/liberte-plataforma-834798234728482934254-student" })'));
+
+  // Nobody should be sitting locked out right now.
+  const { data: allUsers } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+  const stuck = (allUsers?.users ?? []).filter(
+    (u) => !u.email_confirmed_at && !u.email?.includes("liberte-test.local"),
+  );
+  ok("no real student is currently locked out by an unconfirmed e-mail",
+     stuck.length === 0,
+     stuck.map((u) => u.email).join(", "));
+}
+
 /* ---------------- build output ---------------- */
 g("12. Build output");
 {

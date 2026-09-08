@@ -68,6 +68,8 @@ function BienvenueLiberte() {
   const [password, setPassword] = useState("");
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
+  // Account created but no session: the e-mail still has to be confirmed.
+  const [awaitingConfirm, setAwaitingConfirm] = useState<string | null>(null);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -90,7 +92,7 @@ function BienvenueLiberte() {
         return;
       }
 
-      const { error } = await supabase.auth.signUp({
+      const { data: signUpData, error } = await supabase.auth.signUp({
         email: parsed.data.email,
         password: parsed.data.password,
         options: {
@@ -111,6 +113,17 @@ function BienvenueLiberte() {
         } else {
           toast.error(error.message);
         }
+        return;
+      }
+
+      // When the project requires e-mail confirmation, signUp creates the
+      // account but returns NO session. Sending her to the platform anyway
+      // bounced her straight back to the login form, where the correct
+      // password was reported as wrong — she had no way to know an unclicked
+      // e-mail was the whole problem. Say so instead of celebrating.
+      if (!signUpData.session) {
+        setAwaitingConfirm(parsed.data.email);
+        toast.success("¡Cuenta creada! 📩 Te enviamos un correo para confirmar tu e-mail.");
         return;
       }
 
@@ -182,6 +195,24 @@ function BienvenueLiberte() {
             Comienza tu viaje al mundo del francés. Crea tu cuenta y entra directo a la plataforma.
           </p>
 
+
+          {/* The step she used to be left guessing about. Shown in place of
+              nothing at all — before this, signup navigated her to a page that
+              immediately bounced her back to the login form. */}
+          {awaitingConfirm && (
+            <div className="mt-6 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+              <p className="font-semibold">Falta un paso: confirma tu correo 📩</p>
+              <p className="mt-1">
+                Enviamos un enlace a <span className="font-semibold">{awaitingConfirm}</span>.
+                Ábrelo y ya podrás entrar con la contraseña que acabas de crear.
+                Si no lo ves, revisa la carpeta de spam.
+              </p>
+              <p className="mt-2">
+                Hasta que lo abras, iniciar sesión te dará error aunque la
+                contraseña sea correcta.
+              </p>
+            </div>
+          )}
 
           <form onSubmit={handleSubmit} className="mt-6 space-y-4">
             <div className="space-y-1.5">
