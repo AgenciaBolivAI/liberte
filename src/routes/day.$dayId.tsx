@@ -1250,10 +1250,10 @@ function DayPage() {
               onAward={award}
               onComplete={() => complete(lesson)}
               isLessonDone={!!done[lesson]}
-              nextDayId={Number(activeDay) < 10 ? String(Number(activeDay) + 1) : null}
+              nextDayId={Number(activeDay) < LESSON_DAYS ? String(Number(activeDay) + 1) : null}
               onGoNextDay={() => {
                 const next = Number(activeDay) + 1;
-                if (next <= 10) navigate({ to: "/day/$dayId", params: { dayId: String(next) } });
+                if (next <= LESSON_DAYS) navigate({ to: "/day/$dayId", params: { dayId: String(next) } });
               }}
               onPrev={() => {
                 const i = order.indexOf(lesson);
@@ -1546,7 +1546,7 @@ function LessonView({
               teacher published an edited version (builtInDay false ⇒ richDay is
               the published row). Same design either way. Day 1's bespoke "cafe"
               step maps to the generic intro. */}
-          {!builtInDay && Number(dayId) <= 40 && richData && (
+          {!builtInDay && Number(dayId) <= LESSON_DAYS && richData && (
             <>
               {(lesson === "intro" || lesson === "cafe") && <IntroLessonG data={richData} />}
               {lesson === "vocab" && <VocabLessonG data={richData} dayId={dayId} onAward={onAward} />}
@@ -1977,6 +1977,20 @@ function FlashGrid() {
 
 type MCItem = { question?: string; audio?: string; options: string[]; answer: number };
 
+/** A teacher can publish a day with some blocks still empty (blankRichDay ships
+ *  every array empty and ContentManager creates days 11-120 from it). Rendering
+ *  `texts[0].title` on that day threw and the ROUTE ERROR BOUNDARY ate the whole
+ *  page — "Cette page n a pas pu se charger" for a day that merely has no
+ *  reading yet. Say so instead of crashing. */
+function EmptyLesson({ what }: { what: string }) {
+  return (
+    <div className="rounded-2xl border border-dashed border-border bg-card/60 p-6 text-center">
+      <p className="text-sm font-semibold text-navy">Cette partie arrive bientôt</p>
+      <p className="mt-1 text-xs text-muted-foreground">{what} n est pas encore publié pour ce jour.</p>
+    </div>
+  );
+}
+
 function MCQuestion({
   item, index, total, onDone, showAudio,
 }: {
@@ -1985,6 +1999,7 @@ function MCQuestion({
 }) {
   const [picked, setPicked] = useState<number | null>(null);
   useEffect(() => { setPicked(null); }, [index]);
+  const options = item?.options ?? [];
 
   const choose = (i: number) => {
     if (picked !== null) return;
@@ -2012,7 +2027,7 @@ function MCQuestion({
       )}
 
       <div className="mt-4 grid gap-2">
-        {item.options.map((o, i) => {
+        {options.map((o, i) => {
           const isPicked = picked === i;
           const isRight = picked !== null && i === item.answer;
           const isWrong = isPicked && i !== item.answer;
@@ -2078,7 +2093,9 @@ function ReadingComprehension({
   // same natural server voice the tutor uses, with the shared play/pause state
   // so a second tap stops it. Reading comprehension in a foreign language is
   // far easier when you can hear the text while you follow it.
-  const passage = `${t.title}. ${t.text}`;
+  // Built defensively: this feeds a useEffect below, so it cannot early-return
+  // above it without breaking hook order.
+  const passage = t ? `${t.title}. ${t.text}` : "";
   const [playing, setPlaying] = useState(false);
   useEffect(() => onSpeakChange(() => setPlaying(isSpeaking(passage))), [passage]);
   // Never let one passage keep talking over the next one, or over the results.
@@ -2086,6 +2103,7 @@ function ReadingComprehension({
 
   if (done)
     return <ResultCard title="Lecture réussie !" score={`${score} / ${totalQ}`} message="Étoile débloquée." />;
+  if (!t || !t.questions?.length) return <EmptyLesson what="La lecture" />;
 
   return (
     <div className="space-y-4">
@@ -2217,8 +2235,13 @@ function WritingGame({ items, onAward, dayId = 0, section = "vocab" }: {
       playTone(c.resultado === "incorrecto" ? "no" : "ok");
       if (c.resultado !== "incorrecto") setScore((s) => s + 1);
     } catch {
+      // NOTHING was saved: the answer is only ever persisted by the server call
+      // that just failed. Saying "ta réponse est enregistrée" and playing the
+      // SUCCESS tone made her tap Suivant and lose the answer for good — it
+      // never reached activity_results, so it never reached her weekly report
+      // or "Mes points à travailler" either. Tell the truth and offer a retry.
       setPending(true);
-      playTone("ok");
+      playTone("no");
     } finally {
       setBusy(false);
     }
@@ -2233,6 +2256,7 @@ function WritingGame({ items, onAward, dayId = 0, section = "vocab" }: {
   };
 
   if (done) return <ResultCard title="Écriture polie !" score={`${score} / ${items.length}`} message="Étoile gagnée." />;
+  if (!cur) return <EmptyLesson what="L exercice d écriture" />;
 
   return (
     <div className="space-y-4 rounded-2xl border border-border bg-card p-5 shadow-soft">
@@ -2240,20 +2264,21 @@ function WritingGame({ items, onAward, dayId = 0, section = "vocab" }: {
       <p className="font-display text-base font-bold text-navy">{cur.prompt}</p>
       <Input value={val} onChange={(e) => setVal(e.target.value)} placeholder="Écris ici…" className="text-base" disabled={busy || !!correction} />
       <div className="flex items-center justify-end gap-2">
-        {!correction && !pending && (
+        {!correction && (
           <Button onClick={submit} disabled={busy || !val.trim()} className="bg-gradient-blue text-white">
-            {busy ? "Corrigiendo… ✨" : (<>Vérifier <ArrowRight className="ml-1 h-4 w-4" /></>)}
+            {busy ? "Corrigiendo… ✨" : pending ? "Réessayer" : (<>Vérifier <ArrowRight className="ml-1 h-4 w-4" /></>)}
           </Button>
         )}
         {(correction || pending) && (
-          <Button onClick={next} className="bg-gradient-blue text-white">
+          <Button onClick={next} variant={pending ? "outline" : undefined} className={pending ? "" : "bg-gradient-blue text-white"}>
             {i + 1 < items.length ? "Suivant" : "Terminer"} <ArrowRight className="ml-1 h-4 w-4" />
           </Button>
         )}
       </div>
       {pending && (
-        <div className="rounded-xl border border-blue/30 bg-blue/10 p-3 text-sm text-navy">
-          Ta réponse est enregistrée, la correction arrive dans un instant.
+        <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+          On n’a pas pu corriger ta réponse — vérifie ta connexion et appuie sur
+          « Réessayer ». Si tu passes au suivant, cette réponse ne sera pas corrigée.
         </div>
       )}
       {correction && <FeedbackCard c={correction} />}
@@ -2427,9 +2452,11 @@ function SpeakingGame({ items, onAward, dayId = 0, section = "vocab" }: {
       playTone(c.resultado === "incorrecto" ? "no" : "ok");
       if (c.resultado !== "incorrecto") setScore((s) => s + 1);
     } catch {
+      // Same lie as WritingGame had: nothing was saved, and the recording is
+      // gone the moment she taps "Question suivante".
       setPending(true);
       setStatus("");
-      playTone("ok");
+      playTone("no");
     } finally {
       setBusy(false);
     }
@@ -2441,6 +2468,7 @@ function SpeakingGame({ items, onAward, dayId = 0, section = "vocab" }: {
   };
 
   if (done) return <ResultCard title="Bien parlé !" score={`${score} / ${items.length}`} message="Étoile gagnée." />;
+  if (!cur) return <EmptyLesson what="L exercice oral" />;
 
   return (
     <div className="space-y-4 rounded-2xl border border-border bg-card p-5 shadow-soft">
@@ -2493,8 +2521,9 @@ function SpeakingGame({ items, onAward, dayId = 0, section = "vocab" }: {
         )}
       </div>
       {pending && (
-        <div className="rounded-xl border border-blue/30 bg-blue/10 p-3 text-sm text-navy">
-          Ta réponse est enregistrée, la correction arrive dans un instant.
+        <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+          On n’a pas pu corriger ta réponse — vérifie ta connexion et
+          réenregistre-toi. Si tu passes à la suivante, elle ne sera pas corrigée.
         </div>
       )}
       {correction && <FeedbackCard c={correction} />}

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Download, FileText, Loader2, ChevronDown, ChevronRight } from "lucide-react";
 import { getStudentAnalytics } from "@/lib/coach.functions";
-import { generateWeeklyPdf, type WeeklyReportData } from "@/lib/weekPdf";
+import type { WeeklyReportData } from "@/lib/weekPdf";
 import { toast } from "sonner";
 
 /**
@@ -71,8 +71,9 @@ export function StudentWeeklyReports({ userId }: { userId: string }) {
     };
   }
 
-  function download(w: Week) {
+  async function download(w: Week) {
     try {
+      const { generateWeeklyPdf } = await import("@/lib/weekPdf");
       const name = (data?.profile?.full_name || "alumno").replace(/\s+/g, "-").toLowerCase();
       generateWeeklyPdf(buildPdfData(w)).save(`liberte-informe-semana${w.week}-${name}.pdf`);
     } catch {

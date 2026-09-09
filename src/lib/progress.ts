@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
+import { computeStreak } from "@/lib/streak";
 
 export const TOTAL_DAYS = 120; // 24 weeks × 5 days
 export const TOTAL_WEEKS = 24;
@@ -70,6 +71,29 @@ export function useStars(targetUserId?: string | null) {
  * sesión en otra computadora y no reconoce el avance". Both surfaces now
  * reconcile against the server whenever the student returns to them.
  */
+/**
+ * Every mounted useDayCompletions, told at once that a day was just completed.
+ *
+ * Several components hold their OWN instance of the hook (the day page and the
+ * "Marquer le jour comme terminé" card, for two), and each kept private state.
+ * Marking a day in one showed "+2 ⭐" while the other still believed the day was
+ * unfinished — so the next day kept its padlock and /day/N+1 said "encore
+ * verrouillé" until the student switched tabs or reloaded.
+ */
+const completionListeners = new Set<() => void>();
+
+function notifyDayCompletions() {
+  for (const l of completionListeners) l();
+}
+
+function useRefreshOnCompletion(refresh: () => void | Promise<void>) {
+  useEffect(() => {
+    const run = () => { void refresh(); };
+    completionListeners.add(run);
+    return () => { completionListeners.delete(run); };
+  }, [refresh]);
+}
+
 function useRefreshOnReturn(refresh: () => void | Promise<void>) {
   useEffect(() => {
     const run = () => {
@@ -160,6 +184,7 @@ export function useDayCompletions(targetUserId?: string | null) {
   }, [refresh]);
 
   useRefreshOnReturn(refresh);
+  useRefreshOnCompletion(refresh);
 
   // A day counts as done if the student marked it complete OR submitted its
   // défi — the same OR-rule the unlock logic uses (see src/lib/unlock.ts). The
@@ -182,44 +207,16 @@ export function useDayCompletions(targetUserId?: string | null) {
   return { rows, days, defiDays, enrolledAt, weeksCompleted, percent, streak, loading, refresh };
 }
 
-/** Local calendar day (YYYY-MM-DD) — must match the local midnight used below,
- *  otherwise students east/west of UTC get wrong streaks. */
-function localDayKey(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
+// localDayKey / fromDayKey / computeStreak now live in src/lib/streak.ts —
+// pure and dependency-free so the test suite can EXECUTE them (this file drags
+// in the server entry via admin.functions.ts and cannot be bundled alone).
 
-function computeStreak(dates: string[]): number {
-  const valid = dates.filter((d) => d && !Number.isNaN(new Date(d).getTime()));
-  if (valid.length === 0) return 0;
-  const uniq = Array.from(
-    new Set(valid.map((d) => localDayKey(new Date(d)))),
-  ).sort();
-  let streak = 1;
-  let best = 1;
-  for (let i = 1; i < uniq.length; i++) {
-    const prev = new Date(uniq[i - 1]).getTime();
-    const cur = new Date(uniq[i]).getTime();
-    if ((cur - prev) / 86_400_000 === 1) {
-      streak += 1;
-      best = Math.max(best, streak);
-    } else {
-      streak = 1;
-    }
-  }
-  // If the most recent completion is not today or yesterday, current streak = 0
-  const last = new Date(uniq[uniq.length - 1]).getTime();
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const diffDays = (today.getTime() - last) / 86_400_000;
-  return diffDays <= 1 ? streak : 0;
-}
 
 export async function markDayCompleted(userId: string, dayId: number, weekNumber = 1) {
   const { error } = await supabase
     .from("day_completions")
     .insert({ user_id: userId, day_id: dayId, week_number: weekNumber });
   if (error && !/duplicate|unique/i.test(error.message)) throw error;
+  // Tell every other mounted reader, or the day stays locked on their copy.
+  notifyDayCompletions();
 }

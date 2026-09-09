@@ -1,6 +1,13 @@
 import { StrictMode, startTransition } from "react";
 import { hydrateRoot } from "react-dom/client";
 import { StartClient } from "@tanstack/react-start/client";
+import { captureRecoveryFromUrl } from "@/lib/recovery";
+
+// FIRST STATEMENT ON PURPOSE. A password-recovery link lands on the site root
+// carrying `#access_token=…&type=recovery`, and supabase-js strips that hash
+// the instant the client is constructed. This is the only moment the token is
+// still visible, so read it before anything else can import the client.
+captureRecoveryFromUrl();
 
 // Custom client entry (auto-detected by the TanStack Start plugin — unlike
 // src/server.ts, which is explicitly configured in vite.config.ts, the client

@@ -34,11 +34,14 @@ export function PhraseGame({
   topic,
   grammar,
   vocabulary,
+  onFinish,
 }: {
   dayId: number;
   topic: string;
   grammar: string;
   vocabulary: Month3Word[];
+  /** Fired once a round has actually been played to the end. */
+  onFinish?: () => void;
 }) {
   const theme = themeFor(topic);
   const [rounds, setRounds] = useState<PhraseRound[]>([]);
@@ -54,7 +57,10 @@ export function PhraseGame({
   const loop = useGameLoop({
     durationMs: ROUND_MS,
     onTick: () => {},
-    onEnd: () => setPicked(null),
+    onEnd: () => {
+      setPicked(null);
+      onFinish?.();
+    },
   });
 
   const start = useCallback(() => {

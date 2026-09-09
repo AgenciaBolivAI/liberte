@@ -1,5 +1,10 @@
-import { useState } from "react";
-import { Gamepad2, ListChecks } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { CheckCircle2, Gamepad2, ListChecks } from "lucide-react";
+import { toast } from "sonner";
+import { useAuth } from "@/lib/auth-context";
+import { useAdminPreview } from "@/lib/admin-preview";
+import { markDayCompleted, useDayCompletions } from "@/lib/progress";
+import { weekOfDay } from "@/lib/unlock";
 import { TopNav } from "@/components/TopNav";
 import { AdminPreviewBanner } from "@/components/AdminPreviewBanner";
 import parisBg from "@/assets/paris-map-bg.jpg";
@@ -23,6 +28,66 @@ export function Month3Page({ dayId }: { dayId: string }) {
   const [tab, setTab] = useState<"jeux" | "mots">("jeux");
 
   if (!day) return null;
+  return <Month3Day day={day} tab={tab} setTab={setTab} />;
+}
+
+/** Split out so the hooks below never sit after the `!day` early return. */
+function Month3Day({
+  day,
+  tab,
+  setTab,
+}: {
+  day: NonNullable<ReturnType<typeof month3Day>>;
+  tab: "jeux" | "mots";
+  setTab: (t: "jeux" | "mots") => void;
+}) {
+  const { user } = useAuth();
+  const { readOnly } = useAdminPreview();
+  const { rows, refresh } = useDayCompletions();
+  const dayNum = day.platformDay;
+  const alreadyDone = rows.some((r) => r.day_id === dayNum);
+
+  // Days 41-60 used to record NOTHING. The games ran, the student played, and
+  // "Jours complétés" stayed at 40/120 forever — so the tutor's next scene, the
+  // week-9 challenge and the next day all stayed locked behind a day she had
+  // actually finished. Playing a full round of BOTH games is the day's work, so
+  // that is what completes it.
+  const [played, setPlayed] = useState({ whack: false, phrase: false });
+  const bothPlayed = played.whack && played.phrase;
+  const savingRef = useRef(false);
+  const [saving, setSaving] = useState(false);
+
+  const markDone = useCallback(
+    async (silent: boolean) => {
+      if (readOnly) return; // impersonating: would write to the admin's own row
+      if (!user) {
+        if (!silent) toast.error("Connecte-toi pour enregistrer ta progression");
+        return;
+      }
+      if (savingRef.current || alreadyDone) return;
+      savingRef.current = true;
+      setSaving(true);
+      try {
+        await markDayCompleted(user.id, dayNum, weekOfDay(dayNum));
+        await refresh().catch(() => { /* list refresh is cosmetic */ });
+        toast.success("Jour terminé ! +2 ⭐");
+      } catch {
+        // Never silent: a swallowed failure here is exactly how a day stops
+        // counting with no signal to the student.
+        toast.error(
+          "Ton jour n'a pas pu être enregistré. Vérifie ta connexion et réessaie avec le bouton.",
+        );
+      } finally {
+        savingRef.current = false;
+        setSaving(false);
+      }
+    },
+    [readOnly, user, alreadyDone, dayNum, refresh],
+  );
+
+  useEffect(() => {
+    if (bothPlayed && !alreadyDone) void markDone(true);
+  }, [bothPlayed, alreadyDone, markDone]);
 
   return (
     <div
@@ -63,13 +128,42 @@ export function Month3Page({ dayId }: { dayId: string }) {
               dayId={day.platformDay}
               topic={day.theme}
               vocabulary={day.vocabulary}
+              onFinish={() => setPlayed((p) => (p.whack ? p : { ...p, whack: true }))}
             />
             <PhraseGame
               dayId={day.platformDay}
               topic={day.theme}
               grammar={day.grammar}
               vocabulary={day.vocabulary}
+              onFinish={() => setPlayed((p) => (p.phrase ? p : { ...p, phrase: true }))}
             />
+
+            {/* The manual escape hatch, same role as DayCompleteBlock on days
+                1-40: if the automatic write fails (offline, RLS) the student
+                still has a way to make the day count. */}
+            <div className="rounded-3xl border-2 border-blue/60 bg-gradient-to-br from-ice to-white p-5 text-center shadow-card">
+              {alreadyDone ? (
+                <p className="inline-flex items-center gap-2 font-display text-base font-extrabold text-navy">
+                  <CheckCircle2 className="h-5 w-5 text-green-600" /> Jour {dayNum} terminé
+                </p>
+              ) : (
+                <>
+                  <p className="font-display text-base font-extrabold text-navy">
+                    {bothPlayed
+                      ? "Tu as joué aux deux jeux — on enregistre ton jour."
+                      : "Joue une partie aux deux jeux pour terminer le jour."}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => void markDone(false)}
+                    disabled={saving}
+                    className="mt-3 rounded-full bg-gradient-blue px-8 py-2.5 font-display text-sm font-extrabold text-white shadow-card active:scale-95 disabled:opacity-60"
+                  >
+                    {saving ? "…" : "Marquer le jour comme terminé"}
+                  </button>
+                </>
+              )}
+            </div>
           </div>
         ) : (
           <div className="rounded-3xl border border-border bg-card p-4 shadow-card">

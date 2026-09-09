@@ -16,6 +16,8 @@ export const evaluateWeek2Writing = createServerFn({ method: "POST" })
     return { situation: d.situation === 2 ? 2 : 1, text: String(d.text).slice(0, 4000) };
   })
   .handler(async ({ data, context }) => {
+    // Paid OpenAI call: an unapproved or DENIED account must never reach it.
+    await requireApprovedStudent(context);
     // Week-2 challenge is week-2 content: honour an admin lock on week 2.
     await assertWeekNotLocked(context, 2);
     const criteria =
@@ -81,6 +83,8 @@ export const chatWeek2Roleplay = createServerFn({ method: "POST" })
     };
   })
   .handler(async ({ data, context }) => {
+    // Paid OpenAI call: an unapproved or DENIED account must never reach it.
+    await requireApprovedStudent(context);
     await assertWeekNotLocked(context, 2);
     const system = `Eres un empleado amable del supermercado Carrefour en París que habla SOLO en francés claro (nivel A2-B1). El alumno está haciendo un roleplay del Défi Semana 2. Objetivos que debe cumplir:
 1) Saluda y pregunta dónde está la sección de lácteos (rayon produits laitiers)

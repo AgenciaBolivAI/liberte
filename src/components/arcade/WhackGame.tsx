@@ -49,11 +49,14 @@ export function WhackGame({
   topic,
   vocabulary,
   onAward,
+  onFinish,
 }: {
   dayId: number;
   topic: string;
   vocabulary: Month3Word[];
   onAward?: (n?: number) => void;
+  /** Fired once a round has actually been played to the end. */
+  onFinish?: () => void;
 }) {
   const theme = themeFor(topic);
   const [rounds, setRounds] = useState<Round[]>([]);
@@ -71,6 +74,10 @@ export function WhackGame({
   const queueRef = useRef<Round["targets"]>([]);
   const diffRef = useRef<Difficulty>("easy");
   const streakRef = useRef(0);
+  // The loop reads these; assigned during render like scoreRef below, so the
+  // rAF callback never closes over a stale board or a stale round.
+  const liveRef = useRef<Live[]>([]);
+  const roundTargetsRef = useRef<Round["targets"]>([]);
 
   const loop = useGameLoop({
     durationMs: ROUND_MS,
@@ -81,6 +88,15 @@ export function WhackGame({
       if (elapsed < nextSpawnRef.current) return;
       const life = LIFETIME_MS[diffRef.current];
       nextSpawnRef.current = elapsed + Math.max(650, life / 3);
+      // The round's four targets are spawned ONCE. If she hesitates and the
+      // correct one expires unclicked, the queue is empty, the board empties,
+      // and the round never advances — leaving her staring at a prompt with
+      // nothing to tap for the remaining ~65 seconds of the clock. Re-offer the
+      // round instead: hesitating is supposed to be free (a wrong TAP costs
+      // time, an expiry costs nothing), so it must not end the round either.
+      if (!queueRef.current.length && liveRef.current.every((t) => t.diesAt <= elapsed)) {
+        queueRef.current = [...roundTargetsRef.current];
+      }
       const next = queueRef.current.shift();
       if (!next) return;
       setLive((cur) => {
@@ -107,6 +123,7 @@ export function WhackGame({
         awarded.current = true;
         const s = starsFor(scoreRef.current);
         if (s > 0) onAward?.(1);
+        onFinish?.();
       }
     },
   });
@@ -115,11 +132,13 @@ export function WhackGame({
   // class of bug that stalled the voice tutor.
   const scoreRef = useRef(score);
   scoreRef.current = score;
+  liveRef.current = live;
 
   const loadRound = useCallback(
     (idx: number, all: Round[]) => {
       const r = all[idx % all.length];
       if (!r) return;
+      roundTargetsRef.current = r.targets;
       queueRef.current = [...r.targets];
       setLive([]);
     },

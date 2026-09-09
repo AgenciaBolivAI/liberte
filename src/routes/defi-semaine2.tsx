@@ -14,7 +14,7 @@ import {
   getMyWeek2Result,
 } from "@/lib/defiSemaine2.functions";
 import { getWeekChallengeAccess, type WeekAccess } from "@/lib/week.functions";
-import { generateWeek2Pdf } from "@/lib/week2Pdf";
+
 import { TopNav } from "@/components/TopNav";
 
 export const Route = createFileRoute("/defi-semaine2")({
@@ -867,7 +867,8 @@ function DefiSemaine2Page() {
     await persistResult();
   };
 
-  const downloadPdf = () => {
+  const downloadPdf = async () => {
+    const { generateWeek2Pdf } = await import("@/lib/week2Pdf");
     const doc = generateWeek2Pdf({
       studentName,
       date: new Date().toLocaleDateString("es-BO", {

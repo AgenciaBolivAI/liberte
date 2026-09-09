@@ -25,11 +25,15 @@ export async function requireApprovedStudent(context: ApprovalCtx): Promise<void
       .maybeSingle();
     if (error) return; // pre-migration (column missing) → fail open
     if (data && data.approved_at == null) {
-      const { data: isAdmin } = await context.supabase.rpc("has_role", {
-        _user_id: context.userId,
-        _role: "admin",
-      });
-      if (!isAdmin) {
+      // COACH counts as staff too, not just admin. A coach hired last week has
+      // no approved_at of their own, and checking admin alone locked real
+      // coaches out of everything — the same mistake week.functions.ts already
+      // had to undo ("Checking only `admin` locked real coaches out").
+      const [{ data: isAdmin }, { data: isCoach }] = await Promise.all([
+        context.supabase.rpc("has_role", { _user_id: context.userId, _role: "admin" }),
+        context.supabase.rpc("has_role", { _user_id: context.userId, _role: "coach" }),
+      ]);
+      if (!isAdmin && !isCoach) {
         throw new Error("Tu cuenta aún no está aprobada. El equipo activará tu acceso pronto.");
       }
     }

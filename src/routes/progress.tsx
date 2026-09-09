@@ -10,7 +10,7 @@ import { MyAIReportCard } from "@/components/StudentReportCard";
 import { MyWeakPoints } from "@/components/MyWeakPoints";
 import { useAuth } from "@/lib/auth-context";
 import { getMyWeeklyEvaluations, getWeeklyEvaluationsFor } from "@/lib/week.functions";
-import { generateWeeklyPdf, type WeeklyReportData } from "@/lib/weekPdf";
+import type { WeeklyReportData } from "@/lib/weekPdf";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/progress")({
@@ -196,7 +196,7 @@ function MyReports({ viewAsUserId }: { viewAsUserId?: string | null }) {
     };
   }, [viewAsUserId]);
 
-  function downloadPdf(row: EvalRow) {
+  async function downloadPdf(row: EvalRow) {
     try {
       const r = (row.ai_report ?? {}) as {
         verdict_title?: string;
@@ -243,6 +243,7 @@ function MyReports({ viewAsUserId }: { viewAsUserId?: string | null }) {
           message: String(r.verdict_message ?? ""),
         },
       };
+      const { generateWeeklyPdf } = await import("@/lib/weekPdf");
       generateWeeklyPdf(report).save(`Liberte_Rapport_Semaine${row.week_number}.pdf`);
     } catch {
       toast.error("Impossible de générer le PDF de cette semaine");

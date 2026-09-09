@@ -1,6 +1,8 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
+import { markRecovery } from "@/lib/recovery";
+import { withTimeout } from "@/lib/with-timeout";
 
 export type ProfileFields = {
   full_name: string | null;
@@ -61,6 +63,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [profile, setProfile] = useState<ProfileFields | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isCoach, setIsCoach] = useState(false);
   const [approved, setApproved] = useState(true);
   const [denied, setDenied] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -100,14 +103,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setAvatarUrl(await signAvatar(path));
   }
 
+  // Both staff roles in ONE read. Loading only "admin" meant a coach with no
+  // approved_at of their own was shown "Compte en cours de vérification" on
+  // every page, /coach included.
   async function loadAdmin(uid: string) {
     const { data } = await supabase
       .from("user_roles")
       .select("role")
       .eq("user_id", uid)
-      .eq("role", "admin")
-      .maybeSingle();
-    setIsAdmin(Boolean(data));
+      .in("role", ["admin", "coach"]);
+    const roles = (data ?? []).map((r) => r.role);
+    setIsAdmin(roles.includes("admin"));
+    setIsCoach(roles.includes("coach"));
   }
 
   // Separate query on purpose: if the approval migration hasn't been applied
@@ -119,10 +126,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .select("approved_at, denied_at")
         .eq("id", uid)
         .maybeSingle();
-      if (error) {
-        setApproved(true);
-        return;
-      }
+      // On a READ error keep whatever we already knew. Forcing `true` here
+      // meant a Supabase blip re-opened the dashboard for a denied account.
+      // (Still fail-open on the very first read: locking a paying student out
+      // over a network hiccup is the worse failure of the two.)
+      if (error) return;
       setApproved(data ? data.approved_at != null : true);
       setDenied(Boolean(data?.denied_at));
     } catch {
@@ -149,6 +157,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setAvatarUrl(null);
       setProfile(null);
       setIsAdmin(false);
+      setIsCoach(false);
       setApproved(true);
     }
   }
@@ -164,6 +173,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // AuthGate) a full unmount of the page the student was working on.
       // A failed refresh could also emit a transient null session, which used to
       // clear `user` and bounce the student to the login screen mid-lesson.
+
+      // Second recovery detector. src/client.tsx reads the token out of the URL
+      // before supabase-js can strip it; this fires even when that race is
+      // lost, so between the two the flag always gets set. It MUST run before
+      // the early returns below — a recovery landing on an already-signed-in
+      // tab takes the `sameUser` path and would otherwise be dropped.
+      if (event === "PASSWORD_RECOVERY") markRecovery();
+
       const nextUser = s?.user ?? null;
 
       setSession((prev) => (prev?.access_token === s?.access_token ? prev : s));
@@ -185,6 +202,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setAvatarUrl(null);
           setProfile(null);
           setIsAdmin(false);
+          setIsCoach(false);
           setApproved(true);
         }
         return;
@@ -200,7 +218,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loadApproval(nextUser.id);
       }, 0);
     });
-    refresh().finally(() => setLoading(false));
+    // getSession() awaits a token refresh when the stored token is near expiry,
+    // and auth-js puts no deadline on that fetch: a mobile connection that
+    // accepts the socket but never answers left `loading` true forever, i.e. a
+    // navy spinner over the whole app — landing and login included — with no
+    // message. Whatever happens, stop blocking the UI after 8s; the library
+    // keeps retrying in the background and onAuthStateChange settles the truth.
+    withTimeout(refresh(), 8000, "La sesión").catch(() => {}).finally(() => setLoading(false));
     return () => sub.subscription.unsubscribe();
   }, []);
 
@@ -218,14 +242,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       avatarPath,
       profile,
       isAdmin,
-      approved: approved || isAdmin,
-      denied: denied && !isAdmin,
+      approved: approved || isAdmin || isCoach,
+      denied: denied && !isAdmin && !isCoach,
       refresh,
       refreshProfile,
       refreshAvatar,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [loading, user, session, fullName, avatarUrl, avatarPath, profile, isAdmin, approved, denied],
+    [loading, user, session, fullName, avatarUrl, avatarPath, profile, isAdmin, isCoach, approved, denied],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

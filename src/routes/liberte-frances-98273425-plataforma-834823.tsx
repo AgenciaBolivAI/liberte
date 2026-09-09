@@ -96,7 +96,10 @@ function BienvenueLiberte() {
         email: parsed.data.email,
         password: parsed.data.password,
         options: {
-          emailRedirectTo: `${window.location.origin}/`,
+          // Land INSIDE the app, not on the marketing page: confirming used
+          // to dump her on a landing that still said "Iniciar sesión", so she
+          // assumed it had failed and registered again.
+          emailRedirectTo: `${window.location.origin}/liberte-plataforma-834798234728482934254-student`,
           data: {
             full_name: parsed.data.full_name,
             nationality: parsed.data.nationality,
@@ -113,6 +116,19 @@ function BienvenueLiberte() {
         } else {
           toast.error(error.message);
         }
+        return;
+      }
+
+      // ALREADY REGISTERED. With Confirm-email on, Supabase does not return an
+      // error for a duplicate signup: it returns an obfuscated user with an
+      // EMPTY identities array and sends no e-mail at all (documented in
+      // @supabase/auth-js, and confirmed against this project: error none,
+      // session NONE, identities []). The `registered` branch above therefore
+      // never fires, and she was told "¡Cuenta creada! 📩" while waiting for a
+      // mail that would never arrive — then failed to log in, because the
+      // password she just typed is not the one on the account.
+      if (signUpData.user && signUpData.user.identities?.length === 0) {
+        toast.error("Este correo ya tiene cuenta. Inicia sesión o usa «¿Olvidaste tu contraseña?».");
         return;
       }
 

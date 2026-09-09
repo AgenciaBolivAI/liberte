@@ -9,11 +9,21 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import liberteLogoFull from "@/assets/liberte-logo-full.png.asset.json";
+import { clearRecovery, markRecovery } from "@/lib/recovery";
 
 export const Route = createFileRoute("/reset-password")({
   head: () => ({ meta: [{ title: "Réinitialiser le mot de passe — Liberté" }] }),
   component: ResetPasswordPage,
 });
+
+/** Releases recovery mode when the link turned out to be dead, so the visitor
+ *  can actually leave this page instead of being bounced back to it. */
+function ReleaseRecovery() {
+  useEffect(() => {
+    clearRecovery();
+  }, []);
+  return null;
+}
 
 const passwordSchema = z
   .string()
@@ -31,7 +41,12 @@ function ResetPasswordPage() {
   useEffect(() => {
     // The recovery link signs the user in via the URL hash; the session may
     // arrive a moment after mount, so listen instead of checking only once.
+    //
+    // Reaching this page is itself proof we are mid-recovery: mark it, so that
+    // a reload (or a stray navigation) cannot drop her back into the platform
+    // with her password still unchanged.
     let alive = true;
+    markRecovery();
     supabase.auth.getSession().then(({ data }) => {
       if (!alive) return;
       if (data.session) setHasSession(true);
@@ -68,6 +83,9 @@ function ResetPasswordPage() {
         toast.error("Impossible de mettre à jour le mot de passe. Demande un nouveau lien et réessaie.");
         return;
       }
+      // Password actually changed — recovery is over. Clear BEFORE navigating,
+      // or AuthGate pulls her straight back onto this form.
+      clearRecovery();
       toast.success("Mot de passe mis à jour !");
       navigate({ to: "/liberte-plataforma-834798234728482934254-student", replace: true });
     } finally {
@@ -97,6 +115,11 @@ function ResetPasswordPage() {
             <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
           </div>
         )}
+
+        {/* Dead link → we MUST release recovery mode. Leaving the flag set with
+            no session traps her: AuthGate would send her back to this page
+            every time she tried to reach the login screen. */}
+        {!checking && !hasSession && <ReleaseRecovery />}
 
         {!checking && !hasSession && (
           <div className="mt-4 space-y-4">

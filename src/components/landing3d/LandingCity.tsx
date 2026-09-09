@@ -37,15 +37,26 @@ type Mode = "boot" | "real" | "procedural" | "static";
  * the procedural city, and pre-pulling the tiles renderer would waste data.
  */
 if (typeof window !== "undefined" && !import.meta.env.SSR) {
-  try {
-    const tier = detectTier();
-    if (tier !== "static") {
+  // …but NOT during hydration. Kicking a ~250 KB br chunk off at module
+  // evaluation put it in direct competition with the JS the page needs to
+  // become interactive at all. Wait for the browser to be idle (or for load,
+  // whichever comes first): the city still starts streaming long before the
+  // visitor scrolls to it, and first interaction stops paying for it.
+  const warm = () => {
+    try {
+      const tier = detectTier();
+      if (tier === "static") return;
       if (realTilesKey() && tier !== "mobile") void import("./RealCityCanvas").catch(() => {});
       else void import("./CityCanvas").catch(() => {});
+    } catch {
+      /* never let a warm-up stop the page from rendering */
     }
-  } catch {
-    /* never let a warm-up stop the page from rendering */
-  }
+  };
+  const ric = (window as unknown as {
+    requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number;
+  }).requestIdleCallback;
+  if (ric) ric(warm, { timeout: 3000 });
+  else window.addEventListener("load", () => window.setTimeout(warm, 300), { once: true });
 }
 
 export function LandingCity() {

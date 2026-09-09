@@ -11,9 +11,10 @@ import { useAuth } from "@/lib/auth-context";
 import { supabase } from "@/integrations/supabase/client";
 import { persist } from "@/lib/persist";
 import { evaluateWeek, getWeekChallengeAccess, transcribeAudio, markWeeklyPdfGenerated, getMyWeeklyEvaluation, type WeekAccess } from "@/lib/week.functions";
-import { generateWeeklyPdf, type WeeklyReportData } from "@/lib/weekPdf";
+import type { WeeklyReportData } from "@/lib/weekPdf";
 import { aiText, aiTextList, aiStrengths, aiErrors, aiPronunciation } from "@/lib/ai-text";
-import { speakFr, stopFr } from "@/lib/speak";
+import { isSpeaking, speakFr, stopFr } from "@/lib/speak";
+import { withTimeout } from "@/lib/with-timeout";
 import { TopNav } from "@/components/TopNav";
 
 export const Route = createFileRoute("/semaine/$weekId")({
@@ -689,13 +690,17 @@ function WeekTest({ weekNumber, studentName, previous }: { weekNumber: number; s
         if (!blob) throw new Error(`Falta grabar la tarea oral ${i + 1}`);
         setBusyMsg(`Transcribiendo audio ${i + 1} de ${V.po.length}…`);
         const b64 = await blobToBase64(blob);
-        const r = await transcribeAudio({ data: { audioBase64: b64, mimeType: blob.type || "audio/webm" } });
+        const r = await withTimeout(
+          transcribeAudio({ data: { audioBase64: b64, mimeType: blob.type || "audio/webm" } }),
+          60_000,
+          "La transcripción",
+        );
         transcripts.push(r.text);
       }
       setPoTranscripts(transcripts);
       setBusyMsg("Evaluando tu semana con la profesora IA…");
       setBlock("eval");
-      const res = await evaluateWeek({
+      const res = await withTimeout(evaluateWeek({
         data: {
           weekNumber,
           co: {
@@ -709,7 +714,7 @@ function WeekTest({ weekNumber, studentName, previous }: { weekNumber: number; s
           pe: V.pe.map((p, i) => ({ prompt: p.prompt, response: peAnswers[i] })),
           po: V.po.map((p, i) => ({ prompt: p.prompt, expected: p.expected ?? "", transcript: transcripts[i] })),
         },
-      });
+      }), 120_000, "La evaluación");
       setEvalRes(res);
       setBlock("result");
       // The evaluation is saved server-side; drop the in-progress snapshot.
@@ -843,6 +848,14 @@ function BlockCO({ items, answers, setAnswers, onNext }: { items: CoItem[]; answ
   const canPlay = (i: number) => plays[i] < 2;
   const doPlay = (i: number) => {
     if (!canPlay(i)) return;
+    // speakFr is a TOGGLE: tapping again while this clip is active STOPS it.
+    // Counting that as a listen meant a student on a slow phone who tapped
+    // twice (nothing had started yet) cancelled the audio AND burned both
+    // listens, then had to answer a graded question having heard nothing.
+    if (isSpeaking(items[i].audio)) {
+      stopFr();
+      return;
+    }
     speakFr(items[i].audio);
     setPlays((p) => p.map((v, k) => (k === i ? v + 1 : v)));
   };
@@ -1012,6 +1025,24 @@ function SpeakingItem({ index, prompt, expected, blob, onBlob }: {
   };
   const stop = () => recRef.current?.stop();
 
+  // Navigating away mid-recording (the "Retour" link, the dashboard link) left
+  // the MediaRecorder running and the browser mic indicator on for the rest of
+  // the session: the only track cleanup lived in onstop, which never fired.
+  useEffect(
+    () => () => {
+      const r = recRef.current;
+      if (!r) return;
+      try {
+        if (r.state !== "inactive") r.stop();
+      } catch {
+        /* already torn down */
+      }
+      r.stream?.getTracks().forEach((t) => t.stop());
+      recRef.current = null;
+    },
+    [],
+  );
+
   return (
     <div className="rounded-2xl border border-border bg-white p-5 shadow-soft">
       <p className="text-xs font-bold tracking-widest text-navy/60 uppercase">Tarea oral {index + 1}</p>
@@ -1068,6 +1099,8 @@ function ResultView({ data, studentName, weekNumber }: {
   const download = async () => {
     setDownloading(true);
     try {
+      // jsPDF (127 KB gz) loads only when the button is actually pressed.
+      const { generateWeeklyPdf } = await import("@/lib/weekPdf");
       const doc = generateWeeklyPdf({
         studentName,
         weekNumber,

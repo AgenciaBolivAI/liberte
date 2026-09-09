@@ -37,7 +37,7 @@ import {
 } from "@/components/ui/chart";
 import { Button } from "@/components/ui/button";
 import { getAdminAnalytics, type AdminAnalytics as Analytics, type Delta, type Range } from "@/lib/admin.functions";
-import { generateAnalyticsPdf } from "@/lib/analyticsPdf";
+
 
 // Deepened brand hues, palette-validated on the white card surface
 // (lightness band, chroma, CVD separation, 3:1 contrast — all pass).
@@ -164,8 +164,9 @@ export function AdminAnalytics() {
             size="sm"
             variant="outline"
             disabled={!data}
-            onClick={() => {
+            onClick={async () => {
               if (!data) return;
+              const { generateAnalyticsPdf } = await import("@/lib/analyticsPdf");
               generateAnalyticsPdf(data).save(
                 `liberte-analitica-${range}-${new Date().toISOString().slice(0, 10)}.pdf`,
               );

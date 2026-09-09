@@ -5,7 +5,12 @@
 // A "done day" means the student either marked the day complete
 // (day_completions) or submitted its défi (defi_results).
 
-export const LESSON_DAYS = 40;
+// 60, not 40: Month 3 (days 41-60) shipped with its vocabulary, its two games
+// and its weekly challenges. While this said 40 every progression surface
+// stopped dead at day 40 — furthestUnlockedDay never went past it, the
+// dashboard showed weeks 9-12 as "bientôt", and a student who finished day 40
+// was told "Continuer · Jour 40" forever.
+export const LESSON_DAYS = 60;
 
 /** Weeks that have real lesson content, derived from LESSON_DAYS (5 days/week).
  *  Single source of truth so the student dashboard, the admin "content access"

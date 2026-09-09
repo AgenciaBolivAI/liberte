@@ -161,7 +161,10 @@ export const transcribeAudio = createServerFn({ method: "POST" })
     if (!d?.audioBase64) throw new Error("audioBase64 required");
     return { audioBase64: d.audioBase64, mimeType: d.mimeType || "audio/webm" };
   })
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
+    // Paid STT minutes: gate them like every other AI call (defi.functions.ts
+    // already learned this — transcribeStage was "completely ungated" too).
+    await requireApprovedStudent(context);
     // `reason` lets the UI say "we heard you, but not in French" instead of
     // "we didn't hear you" — and, above all, never grade a discarded answer.
     return await transcribeFrDetailed(data.audioBase64, data.mimeType);

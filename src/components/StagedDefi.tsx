@@ -16,6 +16,7 @@ import confetti from "canvas-confetti";
 import { Button } from "@/components/ui/button";
 import { speakFr } from "@/lib/speak";
 import { evaluateDefi, transcribeStage } from "@/lib/defi.functions";
+import { withTimeout } from "@/lib/with-timeout";
 import { useAdminPreview } from "@/lib/admin-preview";
 
 type Step = { serveur: string; hint: string; example: string };
@@ -205,15 +206,17 @@ export function StagedDefi(props: StagedDefiProps) {
         const s = stages[i];
         if (!s.blob) throw new Error(`Falta la etapa ${i + 1}`);
         const b64 = await blobToBase64(s.blob);
-        const res = await transcribeStage({
-          data: { audioBase64: b64, mimeType: s.blob.type || "audio/webm" },
-        });
+        const res = await withTimeout(
+          transcribeStage({ data: { audioBase64: b64, mimeType: s.blob.type || "audio/webm" } }),
+          60_000,
+          "La transcription",
+        );
         transcripts.push(res.text);
         updateStage(i, { transcript: res.text });
       }
 
       setProgressMsg("Évaluation de ton défi avec la professeure IA…");
-      const evalRes = await evaluateDefi({
+      const evalRes = await withTimeout(evaluateDefi({
         data: {
           dayId,
           title,
@@ -224,7 +227,7 @@ export function StagedDefi(props: StagedDefiProps) {
             transcript: transcripts[i] ?? "",
           })),
         },
-      });
+      }), 120_000, "L évaluation");
 
       setResult(evalRes);
       onAward(5);

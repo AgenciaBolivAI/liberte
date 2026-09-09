@@ -48,8 +48,9 @@ export const getPendingStudents = createServerFn({ method: "GET" })
       // why an admin who did not want to let someone in had no way to clear it.
       .is("denied_at", null)
       .order("created_at", { ascending: false });
-    // Pre-migration (column missing) → empty queue instead of a crash.
-    if (error) return [] as PendingStudent[];
+    // A read failure is NOT "nobody is waiting": returning [] here rendered an
+    // empty queue and the admin left students on the pending screen. Surface it.
+    if (error) throw new Error(`No se pudo cargar la cola de aprobaciones: ${error.message}`);
     return (data ?? []) as PendingStudent[];
   });
 
@@ -381,7 +382,7 @@ export const getAdminAnalytics = createServerFn({ method: "POST" })
       await Promise.all([
         supabaseAdmin
           .from("profiles")
-          .select("id, full_name, email, created_at, approved_at")
+          .select("id, full_name, email, created_at, approved_at, denied_at")
           .limit(100_000),
         supabaseAdmin
         .from("leads")
@@ -500,8 +501,14 @@ export const getAdminAnalytics = createServerFn({ method: "POST" })
         .reduce((s, r) => s + r.message_count, 0),
     };
 
+    // Must match getPendingStudents exactly: a DENIED request is answered, not
+    // waiting. Counting it made the tile say "2 pendientes" above a queue that
+    // (correctly) showed nothing.
     const pendingApprovals = profileRows.filter(
-      (p) => "approved_at" in p && p.approved_at === null,
+      (p) =>
+        "approved_at" in p &&
+        p.approved_at === null &&
+        (p as { denied_at?: string | null }).denied_at == null,
     ).length;
 
     const profileEmails = new Set(

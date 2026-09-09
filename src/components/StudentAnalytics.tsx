@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { AlertTriangle, Clock, Download, Loader2, Pencil, Star, TrendingUp } from "lucide-react";
 import { getStudentAnalytics, overrideScore, type WeekAnalytics } from "@/lib/coach.functions";
-import { generateWeeklyPdf, type WeeklyReportData } from "@/lib/weekPdf";
+import type { WeeklyReportData } from "@/lib/weekPdf";
 import { toast } from "sonner";
 
 /**
@@ -117,7 +117,7 @@ export function StudentAnalytics({ userId, weeks = 8 }: { userId: string; weeks?
 
   /** Optional export: the dashboard is the primary surface, but a coach can still
    *  hand a student (or a parent) a printable summary of any evaluated week. */
-  function exportWeek(w: WeekAnalytics) {
+  async function exportWeek(w: WeekAnalytics) {
     try {
       const s = w.testScores ?? {};
       // Week 2 stores a different shape (quiz/vocab/writing/roleplay as raw
@@ -168,6 +168,7 @@ export function StudentAnalytics({ userId, weeks = 8 }: { userId: string; weeks?
             : score >= 6 ? { title: "TRÈS BIEN", message: "Buen avance; refuerza los puntos señalados." }
             : { title: "COURAGE", message: "Repasa los días de la semana y vuelve a intentarlo." },
       };
+      const { generateWeeklyPdf } = await import("@/lib/weekPdf");
       generateWeeklyPdf(report).save(
         `liberte-semana-${w.week}-${(profile?.full_name || "alumno").replace(/\s+/g, "-").toLowerCase()}.pdf`,
       );

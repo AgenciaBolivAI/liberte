@@ -106,11 +106,13 @@ for (const d of [1, 2, 5, 6, 9, 10]) {
 }
 eq("furthest day, fresh student", mod.furthestUnlockedDay(S()), 1);
 eq("furthest day, days 1-4 done", mod.furthestUnlockedDay(S(1, 2, 3, 4)), 5);
-// Weeks 3-8 are now real content (LESSON_DAYS=40): finishing day 10 points at day 11,
-// finishing day 20 continues into month 2 (day 21), and the furthest day caps at 40.
+// Weeks 3-12 are real content (LESSON_DAYS=60 since Month 3 shipped days 41-60):
+// finishing day 10 points at day 11, day 20 continues into month 2 (day 21), and
+// the furthest day caps at the END of month 3, not at the old month-2 ceiling.
 eq("furthest day, days 1-10 done -> 11", mod.furthestUnlockedDay(S(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)), 11);
 eq("furthest day, days 1-20 done -> 21 (weeks 5-8 continue)", mod.furthestUnlockedDay(S(...Array.from({ length: 20 }, (_, i) => i + 1))), 21);
-eq("furthest day caps at 40 (weeks 1-8)", mod.furthestUnlockedDay(S(...Array.from({ length: 40 }, (_, i) => i + 1))), 40);
+eq("furthest day continues past month 2 into month 3", mod.furthestUnlockedDay(S(...Array.from({ length: 40 }, (_, i) => i + 1))), 41);
+eq("furthest day caps at 60 (weeks 1-12)", mod.furthestUnlockedDay(S(...Array.from({ length: 60 }, (_, i) => i + 1))), 60);
 
 // Admin content_access overrides — most specific wins, and locks beat the window.
 const ovr = (scope, target_type, target_id, access) => ({ scope, target_type, target_id, access });
@@ -889,8 +891,9 @@ g("12c. Weeks 3-4 · days 11-20 render through the REAL lesson player");
      day.includes("Object.entries(WEEK34_META)") && day.includes("LESSONS_BY_DAY[id]") && day.includes("WEEK_TITLE_BY_DAY[id]"));
   ok("generic wrappers reuse the day-1-10 games",
      ["IntroLessonG", "VocabLessonG", "ClesLessonG", "DefiLessonG"].every((w) => day.includes(`function ${w}`)));
-  ok("LessonView dispatches data-driven days (11-40 always; 1-10 when published) to the generic wrappers",
-     day.includes("!builtInDay && Number(dayId) <= 40 && richData"));
+  ok("LessonView dispatches data-driven days (11+ always; 1-10 when published) to the generic wrappers",
+     day.includes("!builtInDay && Number(dayId) <= LESSON_DAYS && richData"),
+     "a literal 40 here rendered a teacher-published day 41+ with empty lesson bodies");
   ok("router sends registered days (1-20) to DayPage",
      day.includes("if (dayId in LESSONS_BY_DAY) return <DayPage") && day.includes("<AuthoredDayView"));
   ok("gym video wired for weeks 3-8", day.includes("(WEEK34[dayId] ?? MONTH2[dayId])?.gym"));
@@ -912,7 +915,7 @@ g("12c. Weeks 3-4 · days 11-20 render through the REAL lesson player");
      days34.every((d) => W34[d].defiSteps.length >= 1 && W34[d].defiCriteria.length >= 1));
 
   // Unlock: weeks 3-4 are real content days now, still sequentially gated.
-  eq("LESSON_DAYS covers weeks 1-8", mod.LESSON_DAYS, 40);
+  eq("LESSON_DAYS covers weeks 1-12 (month 3 shipped)", mod.LESSON_DAYS, 60);
   eq("weeks 3-4 stay sequentially gated (OPEN_THROUGH_DAY unchanged)", mod.OPEN_THROUGH_DAY, 10);
   ok("day 11 LOCKED until day 10 done", !mod.isDayUnlocked(11, S()));
   ok("day 11 opens once day 10 done", mod.isDayUnlocked(11, S(10)));
@@ -932,7 +935,7 @@ g("12c. Weeks 3-4 · days 11-20 render through the REAL lesson player");
   // "Weeks with content" is a single source of truth (derived from LESSON_DAYS),
   // shared by the student dashboard AND the admin content-access panel, so the
   // "con contenido" badge can't drift (bug: it used to be hardcoded to weeks 1-2).
-  eq("WEEKS_WITH_CONTENT derives 8 from LESSON_DAYS", mod.WEEKS_WITH_CONTENT, 8);
+  eq("WEEKS_WITH_CONTENT derives 12 from LESSON_DAYS", mod.WEEKS_WITH_CONTENT, 12);
   const dashW = readFileSync("src/routes/liberte-plataforma-834798234728482934254-student.tsx", "utf8");
   ok("dashboard content-week count derives from the shared constant",
      dashW.includes("LAST_WEEK_WITH_CONTENT = WEEKS_WITH_CONTENT") && dashW.includes('3: "11"') && dashW.includes('4: "16"'));
@@ -2344,9 +2347,15 @@ g("12o. 3D night-flight landing: SSR safety, fallbacks, flight wiring");
   /* Read-aloud on the reading exercises (client request 2026-08-16). */
   {
     const dayPage = readFileSync("src/routes/day.$dayId.tsx", "utf8");
+    // Built defensively since a teacher can publish a day with no reading at
+    // all; `t` may be undefined and this string feeds a useEffect, so it cannot
+    // early-return above it.
     ok("reading passages can be listened to (title + body, one phrase)",
-       /const passage = `\$\{t\.title\}\. \$\{t\.text\}`/.test(dayPage) &&
+       /const passage = t \? `\$\{t\.title\}\. \$\{t\.text\}` : ""/.test(dayPage) &&
        dayPage.includes("speakFr(passage)"));
+    ok("an unpublished reading shows a message instead of blanking the day",
+       dayPage.includes('if (!t || !t.questions?.length) return <EmptyLesson'),
+       "texts[0].title on an empty array threw into the route error boundary");
     ok("the listen button toggles to Pause while it reads",
        dayPage.includes('aria-label={playing ? "Pause" : "Écouter le texte"}') &&
        dayPage.includes("onSpeakChange(() => setPlaying(isSpeaking(passage)))"));
@@ -3069,6 +3078,288 @@ g("12y. An unconfirmed e-mail must never look like a wrong password");
   ok("no real student is currently locked out by an unconfirmed e-mail",
      stuck.length === 0,
      stuck.map((u) => u.email).join(", "));
+}
+
+g("12z. The reset link must end with the password actually changed");
+{
+  // Client, verbatim: «te hace entrar "directo" a la plataforma, no permite se
+  // ponga una nueva contraseña … siempre hay que hacer el mismo proceso».
+  //
+  // Supabase DISCARDS our redirectTo (/reset-password is not in the project's
+  // Redirect-URL allowlist) and drops her on the Site URL root with the token
+  // in the fragment. detectSessionInUrl signs her in there, so she lands inside
+  // the platform, never sees the form, and her password is never changed.
+  const rec = await loadServerLib("src/lib/recovery.ts");
+
+  // Executed, not grepped — this is the parser that has to recognise the real
+  // landing URL.
+  ok("the real Supabase recovery fragment is recognised",
+     rec.recoveryFromUrl("#access_token=abc&expires_in=3600&refresh_token=xyz&token_type=bearer&type=recovery"));
+  ok("the PKCE shape is recognised too (a flow flip must not resurrect this)",
+     rec.recoveryFromUrl("", "?code=abc&type=recovery"));
+  ok("an ordinary signup confirmation is NOT treated as a recovery",
+     !rec.recoveryFromUrl("#access_token=abc&type=signup"));
+  ok("a plain landing is not treated as a recovery",
+     !rec.recoveryFromUrl("") && !rec.recoveryFromUrl("#") && !rec.recoveryFromUrl("#foo=bar"));
+
+  // Against the LIVE project: whatever Supabase decides to do with redirectTo,
+  // the landing must still be something we can detect. This keeps passing if
+  // the allowlist is ever fixed — it asserts the invariant, not the bug.
+  const rEmail = `test-recovery-${Date.now()}@liberte-test.local`;
+  const { data: rMade } = await admin.auth.admin.createUser({
+    email: rEmail, password: "TestPass!2026", email_confirm: true,
+  });
+  if (rMade?.user?.id) {
+    const { data: linkData } = await admin.auth.admin.generateLink({
+      type: "recovery", email: rEmail,
+      options: { redirectTo: "https://libertebeta-alpha.vercel.app/reset-password" },
+    });
+    const action = linkData?.properties?.action_link;
+    ok("Supabase issues a recovery link", Boolean(action));
+    if (action) {
+      const res = await fetch(action, { redirect: "manual" });
+      const loc = res.headers.get("location") ?? "";
+      const frag = loc.includes("#") ? loc.slice(loc.indexOf("#")) : "";
+      ok("the landing carries a recovery token we can detect",
+         rec.recoveryFromUrl(frag),
+         `landing was ${loc.slice(0, 120)}`);
+      if (!loc.startsWith("https://libertebeta-alpha.vercel.app/reset-password")) {
+        console.log(`    ↳ note: Supabase still overrides redirectTo → ${loc.split("#")[0]}`);
+      }
+    }
+    await admin.auth.admin.deleteUser(rMade.user.id);
+  }
+
+  // The token is only visible for one instant: supabase-js strips the hash the
+  // moment the client is constructed.
+  const cli = readFileSync("src/client.tsx", "utf8");
+  ok("the URL is read BEFORE anything can construct the supabase client",
+     cli.includes("captureRecoveryFromUrl()") &&
+     cli.indexOf("captureRecoveryFromUrl()") < cli.indexOf("hydrateRoot("),
+     "read it after hydration and the token is already gone");
+
+  // Second, independent detector.
+  const ac = readFileSync("src/lib/auth-context.tsx", "utf8");
+  ok("PASSWORD_RECOVERY also marks recovery (in case the URL race is lost)",
+     /event === "PASSWORD_RECOVERY"\) markRecovery\(\)/.test(ac));
+  ok("...before the early returns that would drop it",
+     ac.indexOf('event === "PASSWORD_RECOVERY"') < ac.indexOf("if (sameUser) return;"));
+
+  const gate = readFileSync("src/components/AuthGate.tsx", "utf8");
+  ok("the gate pulls a recovering visitor onto the reset form",
+     gate.includes("RESET_PATH") && /navigate\(\{ to: RESET_PATH, replace: true \}\)/.test(gate));
+  ok("...and decides from the live flag, not a stale render value",
+     /if \(!isRecovering\(\)\) return;/.test(gate),
+     "trusting the state variable bounced her back onto the form she was leaving");
+  ok("a recovering visitor is never bounced to the login page instead",
+     /if \(recovering\) return;[\s\S]{0,200}?log-in/.test(gate));
+
+  const apg = readFileSync("src/components/AuthPage.tsx", "utf8");
+  ok("the login page does not fling a recovering visitor into the platform",
+     /if \(isRecovering\(\)\) return;/.test(apg));
+
+  const rp = readFileSync("src/routes/reset-password.tsx", "utf8");
+  ok("recovery is cleared once the password is really updated",
+     rp.indexOf("clearRecovery();") < rp.indexOf('toast.success("Mot de passe mis à jour'),
+     "clearing after the navigate lets the gate drag her back to the form");
+  ok("a dead link releases recovery instead of trapping her",
+     rp.includes("<ReleaseRecovery />") && /function ReleaseRecovery/.test(rp));
+  ok("landing on the form marks recovery, so a reload cannot escape it",
+     rp.includes("markRecovery();"));
+
+  ok("there is an e2e that opens a REAL recovery link",
+     existsSync("e2e/password-recovery.spec.ts") &&
+     readFileSync("e2e/password-recovery.spec.ts", "utf8").includes("generateLink"),
+     "only a browser can prove this: the bug lives between Supabase, supabase-js and our guards");
+  cleanupServerLibs();
+}
+
+g("12aa. Approval is enforced in the DATABASE, not just in the UI");
+{
+  // AuthGate rendering PendingApproval is a UI gate. Four content tables were
+  // readable by ANY authenticated account — approved, unapproved or denied —
+  // straight through PostgREST with a JWT from localStorage.
+  const pgMod = await import("pg");
+  const pg = pgMod.default ?? pgMod;
+  const c = new pg.Client({
+    host: "db.tpqoszkffdmxdyskdnyi.supabase.co", user: "postgres",
+    password: env.SUPABASE_DB_PASSWORD || "Samadhi111.77078883",
+    database: "postgres", port: 5432, ssl: { rejectUnauthorized: false },
+  });
+  try {
+    await c.connect();
+    const fn = await c.query(
+      `select prosecdef from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+       where n.nspname='public' and proname='is_approved'`);
+    ok("public.is_approved exists and is SECURITY DEFINER",
+       fn.rows[0]?.prosecdef === true,
+       "the policy cannot read profiles.approved_at without it");
+
+    const pol = await c.query(
+      `select tablename, cmd, coalesce(qual, with_check) as expr from pg_policies
+       where schemaname='public'
+         and ((tablename in ('calendar_events','recorded_classes','plus_resources','authored_days') and cmd='SELECT')
+           or (tablename='messages' and cmd='INSERT'))`);
+    for (const t of ["calendar_events", "recorded_classes", "plus_resources", "authored_days", "messages"]) {
+      const row = pol.rows.find((r) => r.tablename === t);
+      ok(`${t} requires approval`, /is_approved\(/.test(row?.expr ?? ""),
+         `policy is: ${row?.expr ?? "MISSING"}`);
+    }
+    ok("no content table is left wide open",
+       !pol.rows.some((r) => (r.expr ?? "").trim() === "true"),
+       pol.rows.filter((r) => (r.expr ?? "").trim() === "true").map((r) => r.tablename).join(", "));
+
+    // Staff are approved BY DEFINITION: a coach hired last week has no
+    // approved_at, and gating them on it locked them out of the calendar.
+    const staff = await c.query(
+      `select count(*) as n from public.user_roles r
+       where r.role in ('coach','admin') and not public.is_approved(r.user_id)`);
+    ok("every coach and admin passes the gate", Number(staff.rows[0].n) === 0,
+       `${staff.rows[0].n} staff would be locked out`);
+    const ghost = await c.query(`select public.is_approved(null::uuid) as n`);
+    ok("an unknown caller fails CLOSED", ghost.rows[0].n === false);
+  } finally {
+    await c.end().catch(() => {});
+  }
+
+  // Paid AI/STT handlers must all be gated. defi.functions.ts already learned
+  // this once ("Was completely ungated").
+  for (const [file, fns] of [
+    ["src/lib/week.functions.ts", ["transcribeAudio"]],
+    ["src/lib/defiSemaine2.functions.ts", ["evaluateWeek2Writing", "chatWeek2Roleplay"]],
+  ]) {
+    const src = readFileSync(file, "utf8");
+    for (const fn of fns) {
+      const body = src.slice(src.indexOf(`export const ${fn}`), src.indexOf(`export const ${fn}`) + 1400);
+      ok(`${fn} requires an approved student`, body.includes("requireApprovedStudent(context)"),
+         "an unapproved account could spend OpenAI/STT credit straight from the console");
+    }
+  }
+  const appr = readFileSync("src/lib/approval.ts", "utf8");
+  ok("the server gate treats COACH as staff, not just admin",
+     appr.includes('_role: "coach"') && appr.includes("!isAdmin && !isCoach"));
+  const actx = readFileSync("src/lib/auth-context.tsx", "utf8");
+  ok("the client gate treats COACH as staff too",
+     actx.includes("approved: approved || isAdmin || isCoach"));
+}
+
+g("12ab. The rest of the audit findings, locked");
+{
+  // EXECUTED against a pinned "now", because the bug was a LOCAL-vs-UTC
+  // midnight mix-up: it only appeared west of UTC — i.e. for essentially this
+  // entire school (Bolivia, Venezuela, UTC-4/-5).
+  const streak = await loadServerLib("src/lib/streak.ts");
+  const local = (y, m, d, hh = 20) => new Date(y, m - 1, d, hh, 0, 0);
+  const iso = (y, m, d, hh = 20) => local(y, m, d, hh).toISOString();
+  const NOW = local(2026, 9, 9, 9); // a Wednesday morning, local time
+
+  eq("no completions → no streak", streak.computeStreak([], NOW), 0);
+  eq("finished TODAY → 1", streak.computeStreak([iso(2026, 9, 9)], NOW), 1);
+  eq("finished YESTERDAY still counts (this read 0 in UTC-4)",
+     streak.computeStreak([iso(2026, 9, 8)], NOW), 1);
+  eq("three days in a row", streak.computeStreak([iso(2026, 9, 7), iso(2026, 9, 8), iso(2026, 9, 9)], NOW), 3);
+  eq("a gap breaks the chain", streak.computeStreak([iso(2026, 9, 5), iso(2026, 9, 8), iso(2026, 9, 9)], NOW), 2);
+  eq("stale activity → 0", streak.computeStreak([iso(2026, 9, 1)], NOW), 0);
+  eq("two completions on ONE day count once",
+     streak.computeStreak([iso(2026, 9, 9, 8), iso(2026, 9, 9, 21)], NOW), 1);
+  // The regression itself: a late-evening local completion is the NEXT day in
+  // UTC, which is exactly how the old code lost the day.
+  eq("a 23:00 local completion belongs to the LOCAL day",
+     streak.computeStreak([iso(2026, 9, 8, 23), iso(2026, 9, 9, 10)], NOW), 2);
+
+  const p = readFileSync("src/lib/progress.ts", "utf8");
+  ok("day keys are parsed as LOCAL midnight, never through new Date(\"YYYY-MM-DD\")",
+     readFileSync("src/lib/streak.ts", "utf8").includes("function fromDayKey") && !/new Date\(uniq\[/.test(p),
+     'new Date("2026-09-08") is UTC midnight — in UTC-4 yesterday measured 1.17 days and the streak read 0');
+  ok("a completed day tells every mounted reader",
+     p.includes("notifyDayCompletions()") && p.includes("useRefreshOnCompletion"),
+     "two hook instances kept private state, so the next day stayed locked until a reload");
+
+  // Month 3 must be a real month: reachable, completable, and countable.
+  const m3 = readFileSync("src/components/arcade/Month3Page.tsx", "utf8");
+  ok("a Month-3 day can actually be completed",
+     m3.includes("markDayCompleted(user.id, dayNum, weekOfDay(dayNum))"),
+     "days 41-60 recorded nothing: 'Jours complétés' stayed at 40 forever");
+  ok("...automatically once BOTH games have been played",
+     m3.includes("bothPlayed") && m3.includes("onFinish"));
+  ok("...and manually if that write fails", m3.includes("Marquer le jour comme terminé"));
+  ok("impersonating an admin never writes to their own row", m3.includes("if (readOnly) return;"));
+  for (const f of ["WhackGame", "PhraseGame"]) {
+    ok(`${f} reports a finished round`,
+       readFileSync(`src/components/arcade/${f}.tsx`, "utf8").includes("onFinish?.()"));
+  }
+  const wg = readFileSync("src/components/arcade/WhackGame.tsx", "utf8");
+  ok("an expired answer is re-offered instead of stranding an empty board",
+     wg.includes("queueRef.current = [...roundTargetsRef.current]"),
+     "the round's 4 targets spawned once: hesitate and you stared at nothing for 65s");
+
+  // Never claim work was saved when it was not.
+  const day = readFileSync("src/routes/day.$dayId.tsx", "utf8");
+  ok("a failed correction never claims the answer was saved",
+     !day.includes("Ta réponse est enregistrée"),
+     "it also played the SUCCESS tone, so she tapped Suivant and lost the answer");
+  ok("...and offers a real retry", day.includes("Réessayer"));
+  ok("empty teacher content shows a message instead of blanking the day",
+     day.includes("function EmptyLesson") &&
+     (day.match(/<EmptyLesson/g) ?? []).length >= 3,
+     "texts[0].title on an unpublished block threw into the route error boundary");
+
+  // Uploads a student waits on must all have a client deadline.
+  for (const f of ["src/routes/semaine.$weekId.tsx", "src/components/StagedDefi.tsx"]) {
+    ok(`${f.split("/").pop()} deadlines its uploads`,
+       readFileSync(f, "utf8").includes("withTimeout("),
+       "a dropped mobile connection never rejects fetch — the spinner ran forever");
+  }
+  const sem = readFileSync("src/routes/semaine.$weekId.tsx", "utf8");
+  ok("a second tap stops the audio instead of burning a listen",
+     sem.includes("if (isSpeaking(items[i].audio)) {"),
+     "speakFr is a toggle: double-tapping cancelled the clip AND spent both listens");
+  ok("the microphone is released when she leaves mid-recording",
+     /r\.stream\?\.getTracks\(\)\.forEach/.test(sem),
+     "track cleanup lived only in onstop, which never fired on unmount");
+
+  // Login must not blame the password for things that are not the password.
+  const ap = readFileSync("src/components/AuthPage.tsx", "utf8");
+  for (const [code, why] of [
+    ["AuthRetryableFetchError", "a dropped connection"],
+    ["over_request_rate_limit", "a 429 from retrying"],
+    ["user_banned", "a suspended account"],
+  ]) {
+    ok(`login distinguishes ${why}`, ap.includes(code));
+  }
+  const su = readFileSync("src/routes/liberte-frances-98273425-plataforma-834823.tsx", "utf8");
+  ok("signing up with an existing e-mail says so",
+     su.includes("signUpData.user.identities?.length === 0"),
+     "Supabase returns NO error for a duplicate: she was told to check a mail that never comes");
+  ok("confirmation links land inside the app, not on the marketing page",
+     su.includes("emailRedirectTo: `${window.location.origin}/liberte-plataforma"));
+
+  // Admin panel: the tile and the list under it must agree.
+  const af2 = readFileSync("src/lib/admin.functions.ts", "utf8");
+  ok("the pending-approvals KPI excludes denied requests",
+     /denied_at.*== null/.test(af2.slice(af2.indexOf("const pendingApprovals"), af2.indexOf("const pendingApprovals") + 400)),
+     'the tile said "2 pendientes" over a queue that correctly showed none');
+  ok("a failed approval-queue read is surfaced, not rendered as 'nobody waiting'",
+     af2.includes("No se pudo cargar la cola de aprobaciones"));
+
+  // Session restore must never hold the whole app open-ended.
+  const actx2 = readFileSync("src/lib/auth-context.tsx", "utf8");
+  ok("session restore has a deadline",
+     /withTimeout\(refresh\(\), 8000/.test(actx2),
+     "auth-js puts no timeout on the refresh fetch; a stalled one froze every page on a spinner");
+
+  // Performance: the PDF stack must not ride along on student routes.
+  for (const f of ["src/routes/progress.tsx", "src/routes/semaine.$weekId.tsx",
+                   "src/components/StudentWeeklyReports.tsx", "src/components/StudentAnalytics.tsx"]) {
+    const src = readFileSync(f, "utf8");
+    ok(`${f.split("/").pop()} loads jsPDF only on click`,
+       !/^import \{[^}]*generateWeeklyPdf/m.test(src) && src.includes('await import("@/lib/weekPdf")'),
+       "399 KB raw / 127 KB gz sat in the static closure of five routes for a download button");
+  }
+  const lc = readFileSync("src/components/landing3d/LandingCity.tsx", "utf8");
+  ok("the 3D city warm-up waits for idle instead of racing hydration",
+     lc.includes("requestIdleCallback"),
+     "~250 KB br competed with the JS needed to make the page interactive");
 }
 
 /* ---------------- build output ---------------- */

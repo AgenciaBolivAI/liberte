@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import signupImage from "@/assets/bon-voyage-signup.png.asset.json";
 import mobileBanner from "@/assets/bon-voyage-mobile-banner.png.asset.json";
 import liberteLogoFull from "@/assets/liberte-logo-full.png.asset.json";
+import { isRecovering } from "@/lib/recovery";
 
 const signInSchema = z.object({
   email: z.string().trim().email("E-mail invalide"),
@@ -45,6 +46,11 @@ export function AuthPage() {
     // was allowed to paint immediately, the single check ran before Supabase had
     // restored the session from storage, saw null, and never looked again — so a
     // signed-in visitor sat on the login form forever.
+    //
+    // …unless she is mid password-recovery. The recovery link hands her a real
+    // session, so this would fire and drop her into the platform WITHOUT ever
+    // letting her set the new password — the exact loop the client reported.
+    if (isRecovering()) return;
     if (sessionUser) {
       navigate({ to: "/liberte-plataforma-834798234728482934254-student", replace: true });
     }
@@ -78,6 +84,23 @@ export function AuthPage() {
           toast.error("Ton compte existe, mais l'e-mail n'est pas encore confirmé.");
           return;
         }
+        // The other three ways sign-in fails WITHOUT the password being wrong.
+        // Codes verified against the installed @supabase/auth-js 2.110.7: a
+        // dropped connection becomes AuthRetryableFetchError with status 0, and
+        // retrying it is what earns the 429 — at which point telling her "wrong
+        // password" is what sends her to reset a password that was correct.
+        if (error.name === "AuthRetryableFetchError" || error.status === 0) {
+          toast.error("Pas de connexion. Vérifie ton réseau et réessaie.");
+          return;
+        }
+        if (error.code === "over_request_rate_limit") {
+          toast.error("Trop de tentatives. Attends une minute et réessaie.");
+          return;
+        }
+        if (error.code === "user_banned") {
+          toast.error("Ce compte est suspendu. Écris à l'équipe Liberté.");
+          return;
+        }
         toast.error("E-mail ou mot de passe incorrects.");
         return;
       }
@@ -98,7 +121,7 @@ export function AuthPage() {
       const { error } = await supabase.auth.resend({
         type: "signup",
         email: needsConfirm,
-        options: { emailRedirectTo: `${window.location.origin}/` },
+        options: { emailRedirectTo: `${window.location.origin}/liberte-plataforma-834798234728482934254-student` },
       });
       if (error) {
         toast.error("On n'a pas pu renvoyer l'e-mail. Réessaie dans une minute.");
