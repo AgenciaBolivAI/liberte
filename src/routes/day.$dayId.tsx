@@ -29,6 +29,7 @@ import { LiberteSpeak } from "@/components/LiberteSpeak";
 import { StagedDefi } from "@/components/StagedDefi";
 import { getCompletedDays } from "@/lib/week.functions";
 import { markDayCompleted, useDayCompletions } from "@/lib/progress";
+import { isUsableRecording } from "@/lib/audio";
 import {
   effectiveOverride,
   isDayUnlocked as isDayUnlockedRule,
@@ -2347,6 +2348,15 @@ function useRecorder() {
       rec.onstop = () => {
         const type = rec.mimeType || "audio/webm";
         const b = new Blob(chunksRef.current, { type });
+        // An empty take must NOT become a submittable answer: the send button
+        // enables on `blob`, so accepting a 0-byte one let her submit silence
+        // and get the raw server text `audioBase64 required` back.
+        if (!isUsableRecording(b)) {
+          setBlob(null);
+          setUrl(null);
+          toast.error("On n’a rien enregistré (micro coupé ou prise trop courte). Réessaie.");
+          return;
+        }
         setBlob(b);
         setMimeType(type);
         setUrl(URL.createObjectURL(b));

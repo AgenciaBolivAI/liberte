@@ -3,6 +3,22 @@
 
 import { useEffect, useRef, useState } from "react";
 
+/**
+ * Did this recording actually capture audio?
+ *
+ * A MediaRecorder that received no data still produces a Blob — an EMPTY one.
+ * Three hand-rolled recorders used to accept it and mark the take "Guardada ✓",
+ * so a student saw "10 / 10 etapas guardadas", pressed "Envoyer mon défi", and
+ * got the server-side validator text `audioBase64 required` in English, because
+ * btoa("") is "". Ten takes, no way to tell which one was empty.
+ *
+ * useRecorder (below) already resolved null on an empty blob; this is the same
+ * rule, exported so every recorder in the app shares it.
+ */
+export function isUsableRecording(blob: Blob | null | undefined): blob is Blob {
+  return Boolean(blob) && (blob as Blob).size > 0;
+}
+
 export async function blobToBase64(blob: Blob): Promise<string> {
   const buf = await blob.arrayBuffer();
   const bytes = new Uint8Array(buf);

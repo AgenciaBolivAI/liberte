@@ -18,6 +18,7 @@ import { speakFr } from "@/lib/speak";
 import { evaluateDefi, transcribeStage } from "@/lib/defi.functions";
 import { withTimeout } from "@/lib/with-timeout";
 import { useAdminPreview } from "@/lib/admin-preview";
+import { isUsableRecording } from "@/lib/audio";
 
 type Step = { serveur: string; hint: string; example: string };
 type StageState = {
@@ -150,8 +151,23 @@ export function StagedDefi(props: StagedDefiProps) {
       };
       rec.onstop = () => {
         const b = new Blob(chunksRef.current, { type: rec.mimeType || "audio/webm" });
-        const url = URL.createObjectURL(b);
         const idx = activeIdxRef.current;
+        // An empty take is NOT a saved take. Marking it saved is what produced
+        // "10 / 10 etapas guardadas" followed by a raw `audioBase64 required`
+        // at submit time, with no clue which stage was the broken one.
+        if (!isUsableRecording(b)) {
+          setStages((prev) =>
+            prev.map((s, k) =>
+              k === idx ? { ...s, blob: null, url: null, recording: false, saved: false } : s,
+            ),
+          );
+          setErrorMsg(
+            `L’étape ${idx + 1} n’a rien enregistré (micro coupé ou prise trop courte). Réessaie.`,
+          );
+          recRef.current = null;
+          return;
+        }
+        const url = URL.createObjectURL(b);
         setStages((prev) =>
           prev.map((s, k) =>
             k === idx
@@ -204,13 +220,25 @@ export function StagedDefi(props: StagedDefiProps) {
       for (let i = 0; i < stages.length; i++) {
         setProgressMsg(`Transcribiendo etapa ${i + 1} de ${stages.length}…`);
         const s = stages[i];
-        if (!s.blob) throw new Error(`Falta la etapa ${i + 1}`);
+        if (!isUsableRecording(s.blob)) {
+          throw new Error(
+            `L’étape ${i + 1} est vide. Réenregistre-la avant d’envoyer ton défi.`,
+          );
+        }
         const b64 = await blobToBase64(s.blob);
         const res = await withTimeout(
           transcribeStage({ data: { audioBase64: b64, mimeType: s.blob.type || "audio/webm" } }),
           60_000,
           "La transcription",
         );
+        if (!res.text?.trim()) {
+          // The server heard silence, or heard a language that is not French.
+          throw new Error(
+            res.reason === "not-french"
+              ? `L’étape ${i + 1} n’a pas été comprise en français. Réenregistre-la en français.`
+              : `On n’a rien entendu dans l’étape ${i + 1}. Réenregistre-la et réessaie.`,
+          );
+        }
         transcripts.push(res.text);
         updateStage(i, { transcript: res.text });
       }

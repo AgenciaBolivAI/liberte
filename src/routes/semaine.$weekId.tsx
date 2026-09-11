@@ -15,6 +15,7 @@ import type { WeeklyReportData } from "@/lib/weekPdf";
 import { aiText, aiTextList, aiStrengths, aiErrors, aiPronunciation } from "@/lib/ai-text";
 import { isSpeaking, speakFr, stopFr } from "@/lib/speak";
 import { withTimeout } from "@/lib/with-timeout";
+import { isUsableRecording } from "@/lib/audio";
 import { TopNav } from "@/components/TopNav";
 
 export const Route = createFileRoute("/semaine/$weekId")({
@@ -1010,6 +1011,16 @@ function SpeakingItem({ index, prompt, expected, blob, onBlob }: {
       r.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
       r.onstop = () => {
         const b = new Blob(chunksRef.current, { type: r.mimeType || "audio/webm" });
+        // Same rule as everywhere else: an empty take is not a take. Handing it
+        // up made the weekly test submittable with silence, which then failed
+        // server-side with developer text instead of a French message.
+        if (!isUsableRecording(b)) {
+          toast.error("On n’a rien enregistré. Vérifie ton micro et réessaie.");
+          stream.getTracks().forEach((t) => t.stop());
+          setRec(false);
+          recRef.current = null;
+          return;
+        }
         onBlob(b);
         stream.getTracks().forEach((t) => t.stop());
         setRec(false);

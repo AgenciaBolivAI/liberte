@@ -3379,6 +3379,101 @@ g("12. Build output");
 }
 
 /* ---------------- cleanup ---------------- */
+g("12ad. An empty recording is never a saved recording");
+{
+  // Reported from production: "10 / 10 etapas guardadas" above a button that
+  // answered `audioBase64 required` — the server validator's own text, in
+  // English. A MediaRecorder that captured nothing still yields a Blob, an
+  // EMPTY one; three hand-rolled recorders accepted it, marked the take
+  // "Guardada ✓", and btoa("") is "".
+  const au = await loadServerLib("src/lib/audio.ts");
+  ok("a 0-byte take is rejected", au.isUsableRecording(new Blob([])) === false);
+  ok("a missing take is rejected",
+     au.isUsableRecording(null) === false && au.isUsableRecording(undefined) === false);
+  ok("a real take is accepted", au.isUsableRecording(new Blob([new Uint8Array(2048)])) === true);
+  ok("btoa of an empty take is the empty string that the server rejects",
+     Buffer.from(new Uint8Array(0)).toString("base64") === "");
+
+  // Every recorder in the app must apply it. useRecorder always did
+  // (`blob.size > 0 ? blob : null`); the hand-rolled ones did not.
+  for (const f of [
+    "src/components/StagedDefi.tsx",
+    "src/routes/day.$dayId.tsx",
+    "src/routes/semaine.$weekId.tsx",
+  ]) {
+    const src = readFileSync(f, "utf8");
+    ok(`${f.split("/").pop()} refuses an empty take`,
+       src.includes("isUsableRecording("),
+       "this recorder marks a 0-byte blob as a saved answer");
+  }
+  const sd = readFileSync("src/components/StagedDefi.tsx", "utf8");
+  ok("the défi names WHICH stage is empty, instead of failing on all ten",
+     /L’étape \$\{i \+ 1\} est vide/.test(sd));
+  ok("a stage that transcribes to nothing is not sent for grading",
+     sd.includes("if (!res.text?.trim())"),
+     "an empty transcript was pushed and graded as if she had said nothing");
+
+  // The validator string is student-facing copy, not a developer note.
+  for (const f of ["src/lib/defi.functions.ts", "src/lib/week.functions.ts"]) {
+    const src = readFileSync(f, "utf8");
+    const line = src.split("\n").find((l) => l.includes("if (!d?.audioBase64) throw"));
+    ok(`${f.split("/").pop()} answers a student, not a developer`,
+       Boolean(line) && !line.includes('"audioBase64 required"'),
+       `still throws: ${line?.trim()}`);
+  }
+  cleanupServerLibs();
+}
+
+g("12ac. E-mail templates");
+{
+  // A typo inside {{ .ConfirmationURL }} is a DEAD LINK in every reset e-mail
+  // the platform sends, and nothing else in the system would notice.
+  const SUPA = {
+    "01-confirm-signup.html": ["{{ .ConfirmationURL }}"],
+    "02-reset-password.html": ["{{ .ConfirmationURL }}"],
+    "03-magic-link.html": ["{{ .ConfirmationURL }}"],
+    "04-invite-user.html": ["{{ .ConfirmationURL }}"],
+    "05-change-email.html": ["{{ .ConfirmationURL }}", "{{ .Email }}", "{{ .NewEmail }}"],
+    "06-reauthentication.html": ["{{ .Token }}"],
+  };
+  const TX = {
+    "welcome.html": ["{{FIRST_NAME}}", "{{LOGIN_URL}}"],
+    "application-approved.html": ["{{FIRST_NAME}}", "{{LOGIN_URL}}"],
+    "application-denied.html": ["{{FIRST_NAME}}"],
+    "new-lead-notification.html": ["{{FULL_NAME}}", "{{EMAIL}}", "{{MESSAGE}}"],
+  };
+  const mails = [];
+  for (const [dir, set] of [["supabase", SUPA], ["transactional", TX]]) {
+    for (const [file, vars] of Object.entries(set)) {
+      const p = `templates/${dir}/${file}`;
+      if (!existsSync(p)) { ok(`${file} exists`, false, "missing"); continue; }
+      const html = readFileSync(p, "utf8");
+      mails.push([file, html]);
+      ok(`${file} keeps its variables intact`,
+         vars.every((v) => html.includes(v)),
+         `missing: ${vars.filter((v) => !html.includes(v)).join(", ")}`);
+    }
+  }
+  ok("all 10 templates are present", mails.length === 10, `found ${mails.length}`);
+  for (const [file, html] of mails) {
+    // Gmail clips past ~102 KB and hides the rest behind "View entire message",
+    // which would bury the button.
+    ok(`${file} stays well under Gmail's clip limit`,
+       Buffer.byteLength(html, "utf8") < 60_000,
+       `${(Buffer.byteLength(html, "utf8") / 1024).toFixed(0)} KB`);
+    ok(`${file} carries the BolivAI footer`, html.includes("https://bolivai.com"));
+    ok(`${file} has a preheader`, html.includes("mso-hide:all"));
+  }
+  // Must be the small logo that actually resolves, never the 1.5 MB banner.
+  const logoAsset = "f6993728-fdc2-4e0a-9560-eba445c69606/liberte-logo-full.png";
+  ok("every template uses the 34 KB logo, not the 1.5 MB banner",
+     mails.every(([, h]) => h.includes(logoAsset) && !h.includes("bon-voyage-email-banner")));
+  ok("templates are generated from one skeleton", existsSync("templates/build.mjs"));
+  ok("the folder documents where each template is pasted",
+     existsSync("templates/README.md") &&
+     readFileSync("templates/README.md", "utf8").includes("Authentication → Emails"));
+}
+
 g("13. Cleanup");
 if (uid) {
   const { error } = await admin.auth.admin.deleteUser(uid);

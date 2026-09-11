@@ -158,7 +158,10 @@ export const transcribeStage = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) => {
     const d = input as { audioBase64?: string; mimeType?: string };
-    if (!d?.audioBase64) throw new Error("audioBase64 required");
+    // Student-facing: this string reached a student as-is on the défi screen
+    // ("audioBase64 required", in English, under a button that said all 10
+    // stages were saved). Validator messages are UI copy here, not dev notes.
+    if (!d?.audioBase64) throw new Error("Ton enregistrement est vide. Réenregistre-toi et réessaie.");
     return { audioBase64: d.audioBase64, mimeType: d.mimeType || "audio/webm" };
   })
   .handler(async ({ data, context }) => {
